@@ -1,0 +1,98 @@
+{
+  "Dragonborn": {
+    "size": "Medium",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Draconic Ancestry", "desc": "Choose a dragon type. Determines damage type for Breath Weapon and Damage Resistance."},
+      {"name": "Breath Weapon", "desc": "Replace one Attack with 15-ft Cone or 30-ft Line. DC 8 + Con + PB. 1d10 damage scaling 5/11/17 to 4d10."},
+      {"name": "Damage Resistance", "desc": "Resistance to ancestry damage type."},
+      {"name": "Darkvision", "desc": "60 ft."},
+      {"name": "Draconic Flight", "desc": "Lvl 5+: fly speed = walking speed for 1 minute, 1/long rest."}
+    ]
+  },
+  "Dwarf": {
+    "size": "Medium",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Darkvision", "desc": "120 ft."},
+      {"name": "Dwarven Resilience", "desc": "Advantage on saves vs Poisoned; Resistance to poison damage."},
+      {"name": "Dwarven Toughness", "desc": "+1 HP per character level."},
+      {"name": "Stonecunning", "desc": "Sense origin of stonework as a Bonus Action; gain Tremorsense 60 ft for 10 min, PB/long rest."}
+    ]
+  },
+  "Elf": {
+    "size": "Medium",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Darkvision", "desc": "60 ft."},
+      {"name": "Elven Lineage", "desc": "Choose Drow / High Elf / Wood Elf — each has subtraits and spells."},
+      {"name": "Fey Ancestry", "desc": "Advantage on saves vs Charmed."},
+      {"name": "Keen Senses", "desc": "Perception proficiency."},
+      {"name": "Trance", "desc": "4-hour meditation = mental benefit of long rest."}
+    ]
+  },
+  "Gnome": {
+    "size": "Small",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Darkvision", "desc": "60 ft."},
+      {"name": "Gnomish Cunning", "desc": "Advantage on Int, Wis, Cha saves."},
+      {"name": "Gnomish Lineage", "desc": "Choose Forest Gnome (Minor Illusion + speak with small beasts) or Rock Gnome (Mending + Prestidigitation + tinker devices)."}
+    ]
+  },
+  "Goliath": {
+    "size": "Medium",
+    "speed": 35,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Giant Ancestry", "desc": "Choose Cloud, Fire, Frost, Hill, Stone, or Storm Giant — grants per-rest bonus."},
+      {"name": "Large Form", "desc": "Lvl 5+: become Large for 10 min, 1/long rest."},
+      {"name": "Powerful Build", "desc": "Treat as one size larger for carrying capacity, push, drag, lift."}
+    ]
+  },
+  "Halfling": {
+    "size": "Small",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Brave", "desc": "Advantage on saves vs Frightened."},
+      {"name": "Halfling Nimbleness", "desc": "Move through space of larger creatures."},
+      {"name": "Luck", "desc": "Reroll natural 1s on D20 Tests."},
+      {"name": "Naturally Stealthy", "desc": "Can attempt to Hide while obscured by Medium+ creature."}
+    ]
+  },
+  "Human": {
+    "size": "Medium",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Resourceful", "desc": "Heroic Inspiration after each long rest."},
+      {"name": "Skillful", "desc": "One skill proficiency of choice."},
+      {"name": "Versatile", "desc": "One Origin feat of choice."}
+    ]
+  },
+  "Orc": {
+    "size": "Medium",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Adrenaline Rush", "desc": "Dash as Bonus Action; gain temp HP = PB. PB/long rest."},
+      {"name": "Darkvision", "desc": "120 ft."},
+      {"name": "Relentless Endurance", "desc": "Drop to 1 HP instead of 0 once per long rest."}
+    ]
+  },
+  "Tiefling": {
+    "size": "Medium",
+    "speed": 30,
+    "creature_type": "Humanoid",
+    "traits": [
+      {"name": "Darkvision", "desc": "60 ft."},
+      {"name": "Fiendish Legacy", "desc": "Choose Abyssal / Chthonic / Infernal — each grants Resistance + a cantrip + leveled spells at 3 and 5."},
+      {"name": "Otherworldly Presence", "desc": "Learn Thaumaturgy cantrip."}
+    ]
+  }
+}
