@@ -56,6 +56,30 @@ export type SkillName =
   | "Performance" | "Persuasion" | "Religion" | "Sleight of Hand"
   | "Stealth" | "Survival";
 
+export interface Roll {
+  /** D&D Beyond campaign id this roll belongs to (parsed from the page URL). */
+  campaign_dnd_id: number | null;
+  character_name: string;
+  /** Roll name as shown on D&D Beyond: "Dagger", "Fire Bolt", "NATURE", etc. */
+  action: string;
+  /** Roll kind from D&D Beyond: "to hit" | "damage" | "roll" | "check" | "save". */
+  action_type: string;
+  /** "TO: ..." target if present. */
+  target: string | null;
+  /** Formula breakdown shown in the entry, e.g. "9 + 7". */
+  formula: string | null;
+  /** Total displayed in the entry. */
+  total: number | null;
+  /** Dice notation shown in the entry, e.g. "1d20+7". */
+  dice: string | null;
+  /** Free-form note rendered alongside the entry, e.g. "Rolled with Flourishing". */
+  note: string | null;
+  /** Timestamp the entry shows ("M/D/YYYY h:mm AM/PM"). */
+  observed_at: string;
+  /** Stable per-entry key derived from text content so duplicates are dropped. */
+  key: string;
+}
+
 export interface CharacterSheetSnapshot {
   observed_at: string;
   source_url: string;

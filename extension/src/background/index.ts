@@ -38,9 +38,12 @@ interface LatestSnapshots {
   campaign_list?: unknown;
   campaign_detail?: Record<number, unknown>;
   character_sheet?: Record<number, unknown>;
+  rolls?: Record<number, unknown[]>; // keyed by dnd campaign id, newest-last; capped at 200
   last_surface?: unknown;
   updated_at?: string;
 }
+
+const ROLL_CAP_PER_CAMPAIGN = 200;
 
 const readLatest = async (): Promise<LatestSnapshots> => {
   const out = await chrome.storage.session.get(LATEST_KEY);
@@ -90,6 +93,39 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
         const id = (message.payload as { char_id: number }).char_id;
         map[id] = message.payload;
         return { ...l, character_sheet: map };
+      });
+      break;
+    case "rolls-batch":
+      void writeLatest((l) => {
+        const rolls = { ...(l.rolls ?? {}) };
+        // Group incoming entries by campaign id. Roll.campaign_dnd_id may
+        // be null if we couldn't parse it from the URL; bucket those into
+        // a separate "0" slot so they aren't lost.
+        const byCampaign = new Map<number, unknown[]>();
+        for (const r of message.payload) {
+          const cid = (r as { campaign_dnd_id: number | null }).campaign_dnd_id ?? 0;
+          if (!byCampaign.has(cid)) byCampaign.set(cid, []);
+          byCampaign.get(cid)!.push(r);
+        }
+        for (const [cid, incoming] of byCampaign) {
+          const existing = (rolls[cid] as unknown[] | undefined) ?? [];
+          // Dedupe by key (already deduped on the content-script side, but
+          // the user may have multiple tabs).
+          const seen = new Set(
+            existing.map((r) => (r as { key: string }).key)
+          );
+          const merged = [...existing];
+          for (const r of incoming) {
+            const key = (r as { key: string }).key;
+            if (!seen.has(key)) {
+              merged.push(r);
+              seen.add(key);
+            }
+          }
+          // Keep the last N to bound storage.
+          rolls[cid] = merged.slice(-ROLL_CAP_PER_CAMPAIGN);
+        }
+        return { ...l, rolls };
       });
       break;
     case "ping":

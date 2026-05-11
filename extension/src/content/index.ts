@@ -11,6 +11,7 @@ import type { ExtensionMessage } from "../types/messages";
 import { scrapeCampaignList } from "./campaign-list";
 import { scrapeCampaignDetail } from "./campaign-detail";
 import { scrapeCharacterSheet } from "./character-sheet";
+import { installGameLogObserver, stopGameLogObserver } from "./game-log";
 
 const send = (msg: ExtensionMessage): void => {
   // Fire-and-forget; the background worker may not always be alive.
@@ -28,6 +29,7 @@ const handle = async (surface: Surface): Promise<void> => {
 
   switch (surface.kind) {
     case "campaign-list": {
+      stopGameLogObserver();
       const snap = await scrapeCampaignList();
       if (snap) send({ kind: "campaign-list", payload: snap });
       break;
@@ -35,15 +37,18 @@ const handle = async (surface: Surface): Promise<void> => {
     case "campaign-detail": {
       const snap = await scrapeCampaignDetail(surface.campaignId);
       if (snap) send({ kind: "campaign-detail", payload: snap });
+      // The Game Log drawer only mounts on the campaign-detail surface.
+      installGameLogObserver();
       break;
     }
     case "character-sheet": {
+      stopGameLogObserver();
       const snap = await scrapeCharacterSheet(surface.charId);
       if (snap) send({ kind: "character-sheet", payload: snap });
       break;
     }
     case "unknown":
-      // No-op — we just observe.
+      stopGameLogObserver();
       break;
   }
 };

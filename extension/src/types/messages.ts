@@ -3,13 +3,14 @@
  * and the side panel. All cross-context calls go through `sendMessage`.
  */
 
-import type { Surface, CampaignListSnapshot, CampaignDetailSnapshot, CharacterSheetSnapshot } from "./snapshots";
+import type { Surface, CampaignListSnapshot, CampaignDetailSnapshot, CharacterSheetSnapshot, Roll } from "./snapshots";
 
 export type ExtensionMessage =
   | { kind: "surface-changed"; surface: Surface }
   | { kind: "campaign-list"; payload: CampaignListSnapshot }
   | { kind: "campaign-detail"; payload: CampaignDetailSnapshot }
   | { kind: "character-sheet"; payload: CharacterSheetSnapshot }
+  | { kind: "rolls-batch"; payload: Roll[] }
   | { kind: "ping" };
 
 export type ExtensionResponse =

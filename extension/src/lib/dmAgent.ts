@@ -1,5 +1,5 @@
 import type { AgentCampaign } from "../types/agentCampaign";
-import type { CampaignDetailSnapshot } from "../types/snapshots";
+import type { CampaignDetailSnapshot, Roll } from "../types/snapshots";
 import { DM_SKILL_PRIMER } from "../data/dmSkillPrimer";
 import { stylePromptBlock, DEFAULT_STYLE } from "../data/campaignStyles";
 
@@ -18,7 +18,8 @@ import { stylePromptBlock, DEFAULT_STYLE } from "../data/campaignStyles";
 
 export const buildSystemPrompt = (
   campaign: AgentCampaign,
-  dndbeyondContext: CampaignDetailSnapshot | null
+  dndbeyondContext: CampaignDetailSnapshot | null,
+  recentRolls: Roll[] = []
 ): string => {
   const parts: string[] = [DM_SKILL_PRIMER];
 
@@ -55,6 +56,23 @@ export const buildSystemPrompt = (
         parts.push("\n### DM Notes (Public — D&D Beyond)\n" + stripped);
       }
     }
+  }
+
+  if (recentRolls.length > 0) {
+    // Trim to the last ~15 rolls so we don't blow context on a long session.
+    const tail = recentRolls.slice(-15);
+    const lines = tail.map((r) => {
+      const total = r.total != null ? ` = ${r.total}` : "";
+      const target = r.target ? ` (${r.target})` : "";
+      const formula = r.formula ? ` ${r.formula}` : r.dice ? ` ${r.dice}` : "";
+      return `- [${r.observed_at}] ${r.character_name} · ${r.action} · ${r.action_type}${formula}${total}${target}`;
+    });
+    parts.push(
+      "\n### Recent rolls (live from D&D Beyond game log)\n" +
+      "Use these to ground your narration. If the most recent attack/check was \n" +
+      "successful or failed, react to it specifically.\n" +
+      lines.join("\n")
+    );
   }
 
   return parts.join("\n");

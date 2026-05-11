@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentCampaign, AgentMessage } from "../types/agentCampaign";
-import type { CampaignDetailSnapshot, Surface } from "../types/snapshots";
+import type { CampaignDetailSnapshot, Roll, Surface } from "../types/snapshots";
 import { useAgentCampaigns } from "../state/useAgentCampaigns";
 import { useSettings } from "../state/useSettings";
 import { buildSystemPrompt } from "../lib/dmAgent";
@@ -36,6 +36,7 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
   const [outlineDraft, setOutlineDraft] = useState(campaign.outline);
   const [editingStyle, setEditingStyle] = useState(false);
   const [dndb, setDndb] = useState<CampaignDetailSnapshot | null>(null);
+  const [recentRolls, setRecentRolls] = useState<Roll[]>([]);
   const [activeSurface, setActiveSurface] = useState<Surface | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -46,13 +47,16 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
       chrome.storage.session.get(LATEST_KEY).then((out) => {
         const latest = (out[LATEST_KEY] ?? {}) as {
           campaign_detail?: Record<number, CampaignDetailSnapshot>;
+          rolls?: Record<number, Roll[]>;
           last_surface?: Surface;
         };
         setActiveSurface(latest.last_surface ?? null);
         if (campaign.dndbeyond_campaign_id != null) {
           setDndb(latest.campaign_detail?.[campaign.dndbeyond_campaign_id] ?? null);
+          setRecentRolls(latest.rolls?.[campaign.dndbeyond_campaign_id] ?? []);
         } else {
           setDndb(null);
+          setRecentRolls([]);
         }
       });
     };
@@ -133,7 +137,7 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
     let lastTextThisTurn = ""; // for cancellation banking
 
     try {
-      const system = buildSystemPrompt(campaign, dndb);
+      const system = buildSystemPrompt(campaign, dndb, recentRolls);
       const MAX_TOOL_ITERATIONS = 6;
 
       for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
@@ -308,7 +312,8 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
         <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
           {dndb && (
             <span className="dim" style={{ fontSize: 10 }}>
-              ✓ Reading {dndb.party.length} party + DM Notes from D&D Beyond
+              ✓ {dndb.party.length} party · DM Notes
+              {recentRolls.length > 0 && ` · ${recentRolls.length} live rolls`}
             </span>
           )}
           {canLinkActive && (
