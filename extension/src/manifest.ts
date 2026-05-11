@@ -7,7 +7,10 @@ export default defineManifest({
     "Reads your D&D Beyond campaign, party, and game log into the D&D 5e VTT DM-agent workspace.",
   version: "0.1.0",
   permissions: ["storage", "sidePanel", "activeTab"],
-  host_permissions: ["https://www.dndbeyond.com/*"],
+  host_permissions: [
+    "https://www.dndbeyond.com/*",
+    "https://api.anthropic.com/*",
+  ],
   background: {
     service_worker: "src/background/index.ts",
     type: "module",
