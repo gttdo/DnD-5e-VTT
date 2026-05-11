@@ -8,6 +8,7 @@
       :root {
         --bg-0: #0c0e12;
         --bg-1: #14181f;
+        --bg-2: #1c2230;
         --bg-3: #252c3a;
         --panel: rgba(28, 34, 48, 0.95);
         --panel-border: #3a4458;
@@ -16,6 +17,7 @@
         --text-dim: #a7adba;
         --text-muted: #6a7282;
         --accent: #c0392b;
+        --accent-2: #a0341f;
         --gold: #d4af37;
 
         --serif: Georgia, "Times New Roman", serif;
@@ -26,10 +28,138 @@
         font-size: 13px;
         color: var(--text);
         background: var(--bg-0);
+        -webkit-font-smoothing: antialiased;
       }
       * { box-sizing: border-box; }
       body { margin: 0; padding: 0; min-height: 100vh; }
       #root { min-height: 100vh; }
+
+      .row { display: flex; align-items: center; gap: 6px; }
+      .col { display: flex; flex-direction: column; gap: 6px; }
+      .grow { flex: 1; }
+      .muted { color: var(--text-muted); }
+      .dim { color: var(--text-dim); }
+      .gold { color: var(--gold); }
+      .mono { font-family: var(--mono); }
+      .center { text-align: center; }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .panel-title {
+        font-family: var(--serif);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      .panel-warn {
+        padding: 6px 8px;
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        color: var(--text);
+        font-size: 11px;
+        background: rgba(192, 57, 43, 0.08);
+      }
+      .panel-info {
+        padding: 6px 8px;
+        border: 1px solid var(--gold);
+        border-radius: 4px;
+        color: var(--text);
+        font-size: 11px;
+        background: rgba(212, 175, 55, 0.08);
+      }
+
+      button {
+        font: inherit;
+        font-size: 12px;
+        color: inherit;
+        background: var(--bg-3);
+        border: 1px solid var(--panel-border);
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition: background 0.12s, border-color 0.12s;
+      }
+      button:hover { background: var(--line); border-color: #4a5468; }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent-2);
+        color: white;
+      }
+      button.primary:hover { background: var(--accent-2); }
+      button.ghost { background: transparent; }
+      button.ghost:hover { background: rgba(255,255,255,0.05); }
+
+      input, select, textarea {
+        font: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: var(--bg-1);
+        border: 1px solid var(--panel-border);
+        border-radius: 4px;
+        padding: 5px 8px;
+        outline: none;
+        width: 100%;
+      }
+      input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+      .label {
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .tab {
+        padding: 6px 10px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        border: none;
+        background: transparent;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        border-radius: 0;
+      }
+      .tab:hover { color: var(--text); background: transparent; }
+      .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+      .rich p { margin: 0 0 8px; }
+      .rich h1, .rich h2, .rich h3, .rich h4 {
+        font-family: var(--serif);
+        margin: 8px 0 4px;
+        font-size: 13px;
+        color: var(--gold);
+      }
+      .rich a { color: var(--gold); }
+      .rich strong { color: var(--text); }
+      .rich em { color: var(--text-dim); }
+      .rich ul { margin: 4px 0; padding-left: 16px; }
+
+      details summary { padding: 4px 0; }
+      details[open] summary { color: var(--text); }
+
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--line); }
+      ::-webkit-scrollbar-track { background: transparent; }
     </style>
   </head>
   <body>

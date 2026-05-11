@@ -1,0 +1,30 @@
+{
+  "Acolyte": {
+    "ability_scores": ["Intelligence", "Wisdom", "Charisma"],
+    "feat": "Magic Initiate (Cleric)",
+    "skill_proficiencies": ["Insight", "Religion"],
+    "tool_proficiency": "Calligrapher's Supplies",
+    "equipment": "(A) Calligrapher's Supplies, prayer book, Holy Symbol, 10 sheets of parchment, robe, 8 GP — or (B) 50 GP"
+  },
+  "Criminal": {
+    "ability_scores": ["Dexterity", "Constitution", "Intelligence"],
+    "feat": "Alert",
+    "skill_proficiencies": ["Sleight of Hand", "Stealth"],
+    "tool_proficiency": "Thieves' Tools",
+    "equipment": "(A) 2 Daggers, Thieves' Tools, Crowbar, dark common clothes with hood, 16 GP — or (B) 50 GP"
+  },
+  "Sage": {
+    "ability_scores": ["Constitution", "Intelligence", "Wisdom"],
+    "feat": "Magic Initiate (Wizard)",
+    "skill_proficiencies": ["Arcana", "History"],
+    "tool_proficiency": "Calligrapher's Supplies",
+    "equipment": "(A) Quarterstaff, Calligrapher's Supplies, history book, 8 sheets of parchment, robe, 8 GP — or (B) 50 GP"
+  },
+  "Soldier": {
+    "ability_scores": ["Strength", "Dexterity", "Constitution"],
+    "feat": "Savage Attacker",
+    "skill_proficiencies": ["Athletics", "Intimidation"],
+    "tool_proficiency": "Choose one Gaming Set",
+    "equipment": "(A) Spear, Shortbow, 20 Arrows, Gaming Set, Healer's Kit, traveler's clothes, 14 GP — or (B) 50 GP"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "Alert": {
+    "category": "Origin",
+    "prerequisite": null,
+    "summary": "Add PB to Initiative. Swap Initiative with willing ally."
+  },
+  "Magic Initiate": {
+    "category": "Origin",
+    "prerequisite": null,
+    "summary": "Two cantrips + one level-1 spell from Cleric/Druid/Wizard list. Cast L1 spell once/long rest without slot.",
+    "repeatable": true
+  },
+  "Savage Attacker": {
+    "category": "Origin",
+    "prerequisite": null,
+    "summary": "Once per turn on a weapon hit, reroll the damage dice and use either total."
+  },
+  "Skilled": {
+    "category": "Origin",
+    "prerequisite": null,
+    "summary": "Gain proficiency in any combination of three skills or tools.",
+    "repeatable": true
+  },
+  "Ability Score Improvement": {
+    "category": "General",
+    "prerequisite": "Level 4+",
+    "summary": "+2 to one ability or +1 to two abilities (max 20).",
+    "repeatable": true
+  },
+  "Grappler": {
+    "category": "General",
+    "prerequisite": "Level 4+, Str or Dex 13+",
+    "summary": "+1 Str or Dex. Punch + Grab combo on Attack action. Advantage vs creatures you grapple."
+  },
+  "Archery": {
+    "category": "Fighting Style",
+    "prerequisite": "Fighting Style class feature",
+    "summary": "+2 attack rolls with Ranged weapons."
+  },
+  "Defense": {
+    "category": "Fighting Style",
+    "prerequisite": "Fighting Style class feature",
+    "summary": "+1 AC while wearing Light/Medium/Heavy armor."
+  },
+  "Great Weapon Fighting": {
+    "category": "Fighting Style",
+    "prerequisite": "Fighting Style class feature",
+    "summary": "Treat 1s and 2s on damage dice as 3s for two-handed melee weapons."
+  },
+  "Two-Weapon Fighting": {
+    "category": "Fighting Style",
+    "prerequisite": "Fighting Style class feature",
+    "summary": "Add ability mod to off-hand bonus attack damage."
+  },
+  "Boon of Combat Prowess": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to any ability (max 30). Once per turn turn a missed attack into a hit."
+  },
+  "Boon of Dimensional Travel": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to any ability (max 30). After Attack or Magic action, teleport up to 30 ft."
+  },
+  "Boon of Fate": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to any ability (max 30). Add or subtract 2d4 from a D20 Test within 60 ft."
+  },
+  "Boon of Irresistible Offense": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to Str or Dex (max 30). Your weapon attacks ignore Resistance."
+  },
+  "Boon of the Night Spirit": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to any ability (max 30). Stealth + Resistance benefits in dim light or darkness."
+  },
+  "Boon of Spell Recall": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to any ability (max 30). Recover an expended spell slot 1/long rest."
+  },
+  "Boon of Truesight": {
+    "category": "Epic Boon",
+    "prerequisite": "Level 19+",
+    "summary": "+1 to any ability (max 30). Truesight 60 ft."
+  }
+}

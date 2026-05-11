@@ -1,0 +1,111 @@
+{
+  "Blinded": {
+    "effects": [
+      "Can't See: automatically fail any ability check that requires sight",
+      "Attacks Affected: attack rolls against you have Advantage; your attack rolls have Disadvantage"
+    ]
+  },
+  "Charmed": {
+    "effects": [
+      "Can't Harm the Charmer: can't attack or target the charmer with damaging abilities",
+      "Social Advantage: the charmer has Advantage on social ability checks against you"
+    ]
+  },
+  "Deafened": {
+    "effects": [
+      "Can't Hear: automatically fail any ability check that requires hearing"
+    ]
+  },
+  "Exhaustion": {
+    "effects": [
+      "Cumulative: each instance gives 1 Exhaustion level; die at level 6",
+      "D20 Tests: roll is reduced by 2 × Exhaustion level",
+      "Speed: reduced by 5 ft × Exhaustion level",
+      "Removal: Long Rest removes 1 level"
+    ]
+  },
+  "Frightened": {
+    "effects": [
+      "Disadvantage on ability checks and attack rolls while source of fear is in line of sight",
+      "Can't willingly move closer to the source of fear"
+    ]
+  },
+  "Grappled": {
+    "effects": [
+      "Speed 0 and can't increase",
+      "Disadvantage on attack rolls against any target other than the grappler",
+      "Movable: grappler can drag or carry you (each foot of movement costs 1 extra)"
+    ]
+  },
+  "Incapacitated": {
+    "effects": [
+      "Can't take any Action, Bonus Action, or Reaction",
+      "Concentration is broken",
+      "Can't speak",
+      "Disadvantage on Initiative if Incapacitated when rolling"
+    ]
+  },
+  "Invisible": {
+    "effects": [
+      "Surprise: Advantage on Initiative if Invisible when rolling",
+      "Concealed: not affected by effects requiring sight",
+      "Heavily Obscured for hiding/effects requiring sight",
+      "Attacks Affected: attack rolls against you have Disadvantage; your attack rolls have Advantage"
+    ]
+  },
+  "Paralyzed": {
+    "effects": [
+      "Has Incapacitated condition",
+      "Speed 0 and can't increase",
+      "Auto-fail Str and Dex saves",
+      "Attacks against you have Advantage",
+      "Auto-Critical Hits: any hit within 5 ft is a Crit"
+    ]
+  },
+  "Petrified": {
+    "effects": [
+      "Transformed (with worn/carried items) to inanimate substance; weight ×10; aging stops",
+      "Has Incapacitated condition",
+      "Speed 0",
+      "Attacks against you have Advantage",
+      "Auto-fail Str and Dex saves",
+      "Resistance to all damage; immune to Poison and disease"
+    ]
+  },
+  "Poisoned": {
+    "effects": [
+      "Disadvantage on attack rolls and ability checks"
+    ]
+  },
+  "Prone": {
+    "effects": [
+      "Restricted Movement: only crawl, or spend half Speed to stand up",
+      "Disadvantage on your attack rolls",
+      "Attacks within 5 ft against you have Advantage; ranged attacks against you have Disadvantage"
+    ]
+  },
+  "Restrained": {
+    "effects": [
+      "Speed 0 and can't increase",
+      "Attacks against you have Advantage; your attack rolls have Disadvantage",
+      "Disadvantage on Dex saves"
+    ]
+  },
+  "Stunned": {
+    "effects": [
+      "Has Incapacitated condition",
+      "Auto-fail Str and Dex saves",
+      "Attacks against you have Advantage"
+    ]
+  },
+  "Unconscious": {
+    "effects": [
+      "Has Incapacitated and Prone conditions; drop what you're holding (remain Prone after)",
+      "Speed 0",
+      "Attacks against you have Advantage",
+      "Auto-fail Str and Dex saves",
+      "Auto-Critical Hits within 5 ft",
+      "Unaware of surroundings"
+    ]
+  }
+}
