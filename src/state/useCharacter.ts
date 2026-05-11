@@ -1,32 +1,86 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Character, Condition, InventoryItem, Attack, Feature } from "../types/character";
 import { sampleCharacter } from "../data/sampleCharacter";
-import { getCharacter, upsertCharacter } from "../lib/persistence";
-
-const STORAGE_EVENT = "dnd-5e-vtt:roster-changed";
+import { supabase, supabaseConfigured } from "../lib/supabase";
 
 export const useCharacter = (id: string | null) => {
-  const [character, setCharacter] = useState<Character>(() => {
-    if (id) {
-      const stored = getCharacter(id);
-      if (stored) return stored;
-    }
-    return sampleCharacter;
-  });
+  const [character, setCharacter] = useState<Character>(sampleCharacter);
+  const [loading, setLoading] = useState<boolean>(!!id);
+  const saveTimer = useRef<number | null>(null);
+  const lastSavedSerialized = useRef<string>("");
 
-  // Reload when the active ID changes.
+  // Load the character whenever the active id changes.
   useEffect(() => {
-    if (id) {
-      const stored = getCharacter(id);
-      if (stored) setCharacter(stored);
+    let cancelled = false;
+    if (!id) {
+      setLoading(false);
+      return;
     }
+    if (!supabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    supabase
+      .from("characters")
+      .select("data")
+      .eq("id", id)
+      .single()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (!error && data) {
+          const c = data.data as Character;
+          setCharacter(c);
+          lastSavedSerialized.current = JSON.stringify(c);
+        }
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  // Persist on every change.
+  // Debounced cloud-save on changes.
   useEffect(() => {
-    upsertCharacter(character);
-    window.dispatchEvent(new Event(STORAGE_EVENT));
-  }, [character]);
+    if (!id || !supabaseConfigured) return;
+    const serialized = JSON.stringify(character);
+    if (serialized === lastSavedSerialized.current) return;
+    if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(async () => {
+      const { error } = await supabase
+        .from("characters")
+        .update({ name: character.name, data: character })
+        .eq("id", id);
+      if (!error) {
+        lastSavedSerialized.current = serialized;
+      }
+    }, 600);
+    return () => {
+      if (saveTimer.current != null) window.clearTimeout(saveTimer.current);
+    };
+  }, [character, id]);
+
+  // Realtime: if this character is updated from another session, refresh.
+  useEffect(() => {
+    if (!id || !supabaseConfigured) return;
+    const channel = supabase
+      .channel(`character:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "characters", filter: `id=eq.${id}` },
+        (payload) => {
+          const incoming = JSON.stringify((payload.new as { data: Character }).data);
+          // Ignore echoes of our own writes.
+          if (incoming === lastSavedSerialized.current) return;
+          setCharacter((payload.new as { data: Character }).data);
+          lastSavedSerialized.current = incoming;
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id]);
 
   const update = useCallback((mut: (draft: Character) => Character) => {
     setCharacter((prev) => mut(structuredClone(prev)));
@@ -58,7 +112,7 @@ export const useCharacter = (id: string | null) => {
   const setTempHp = useCallback(
     (amount: number) =>
       update((d) => {
-        d.hp.temp = Math.max(d.hp.temp, amount); // temp HP doesn't stack — take the higher
+        d.hp.temp = Math.max(d.hp.temp, amount);
         return d;
       }),
     [update]
@@ -74,7 +128,6 @@ export const useCharacter = (id: string | null) => {
     [update]
   );
 
-  // ---------------- Rests ----------------
   const shortRest = useCallback(
     () =>
       update((d) => {
@@ -123,10 +176,12 @@ export const useCharacter = (id: string | null) => {
   );
 
   const setFeatureUses = useCallback(
-    (id: string, current: number) =>
+    (featureId: string, current: number) =>
       update((d) => {
         d.features = d.features.map((f) =>
-          f.id === id && f.uses ? { ...f, uses: { ...f.uses, current: Math.max(0, Math.min(f.uses.max, current)) } } : f
+          f.id === featureId && f.uses
+            ? { ...f, uses: { ...f.uses, current: Math.max(0, Math.min(f.uses.max, current)) } }
+            : f
         );
         return d;
       }),
@@ -143,18 +198,18 @@ export const useCharacter = (id: string | null) => {
   );
 
   const updateItem = useCallback(
-    (id: string, patch: Partial<InventoryItem>) =>
+    (itemId: string, patch: Partial<InventoryItem>) =>
       update((d) => {
-        d.inventory = d.inventory.map((i) => (i.id === id ? { ...i, ...patch } : i));
+        d.inventory = d.inventory.map((i) => (i.id === itemId ? { ...i, ...patch } : i));
         return d;
       }),
     [update]
   );
 
   const removeItem = useCallback(
-    (id: string) =>
+    (itemId: string) =>
       update((d) => {
-        d.inventory = d.inventory.filter((i) => i.id !== id);
+        d.inventory = d.inventory.filter((i) => i.id !== itemId);
         return d;
       }),
     [update]
@@ -170,18 +225,18 @@ export const useCharacter = (id: string | null) => {
   );
 
   const updateAttack = useCallback(
-    (id: string, patch: Partial<Attack>) =>
+    (atkId: string, patch: Partial<Attack>) =>
       update((d) => {
-        d.attacks = d.attacks.map((a) => (a.id === id ? { ...a, ...patch } : a));
+        d.attacks = d.attacks.map((a) => (a.id === atkId ? { ...a, ...patch } : a));
         return d;
       }),
     [update]
   );
 
   const removeAttack = useCallback(
-    (id: string) =>
+    (atkId: string) =>
       update((d) => {
-        d.attacks = d.attacks.filter((a) => a.id !== id);
+        d.attacks = d.attacks.filter((a) => a.id !== atkId);
         return d;
       }),
     [update]
@@ -197,9 +252,9 @@ export const useCharacter = (id: string | null) => {
   );
 
   const removeFeature = useCallback(
-    (id: string) =>
+    (featId: string) =>
       update((d) => {
-        d.features = d.features.filter((f) => f.id !== id);
+        d.features = d.features.filter((f) => f.id !== featId);
         return d;
       }),
     [update]
@@ -225,6 +280,7 @@ export const useCharacter = (id: string | null) => {
 
   return {
     character,
+    loading,
     update,
     heal,
     damage,
