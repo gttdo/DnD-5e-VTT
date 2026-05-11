@@ -154,7 +154,7 @@ export const buildCharacter = (
   if (bg.tool_proficiency) tools.add(bg.tool_proficiency);
 
   return {
-    id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: crypto.randomUUID(),
     name: state.name || "Unnamed Hero",
     portrait: state.portrait,
     species: state.species,

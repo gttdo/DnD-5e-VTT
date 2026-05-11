@@ -1,7 +1,7 @@
 import type { Character } from "../types/character";
 
 export const sampleCharacter: Character = {
-  id: "drashk-001",
+  id: "00000000-0000-4000-8000-000000000001",
   name: "Drashk",
   species: "Goliath",
   background: "Soldier",

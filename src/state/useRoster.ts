@@ -55,6 +55,7 @@ export const useRoster = () => {
 
   // One-time migration: push any localStorage characters into Supabase the
   // first time a user signs in. Keyed by user.id so it runs once per account.
+  // Non-UUID ids (from the pre-cloud builder) get remapped to fresh UUIDs.
   const migrateLocalRoster = useCallback(async () => {
     if (!user) return;
     const flag = `${MIGRATION_DONE_KEY}:${user.id}`;
@@ -64,16 +65,28 @@ export const useRoster = () => {
       localStorage.setItem(flag, "1");
       return;
     }
-    const rows = localChars.map((c) => ({
-      id: c.id,
-      owner_id: user.id,
-      name: c.name,
-      data: c,
-    }));
-    const { error } = await supabase.from("characters").upsert(rows, { onConflict: "id" });
-    if (!error) {
-      localStorage.setItem(flag, "1");
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const idRemap: Record<string, string> = {};
+    const rows = localChars.map((c) => {
+      const newId = UUID_RE.test(c.id) ? c.id : crypto.randomUUID();
+      if (newId !== c.id) idRemap[c.id] = newId;
+      const data: Character = { ...c, id: newId };
+      return { id: newId, owner_id: user.id, name: c.name, data };
+    });
+    const { error } = await supabase.from("characters").insert(rows);
+    if (error) {
+      console.error("[migration] failed to push local characters:", error);
+      return;
     }
+    // Migration succeeded: fix the active-id pointer if it was remapped
+    // and clear the local roster so we don't try again.
+    const oldActive = localStorage.getItem(ACTIVE_KEY);
+    if (oldActive && idRemap[oldActive]) {
+      localStorage.setItem(ACTIVE_KEY, idRemap[oldActive]);
+      setActiveIdState(idRemap[oldActive]);
+    }
+    localStorage.removeItem(LOCAL_ROSTER_KEY);
+    localStorage.setItem(flag, "1");
   }, [user]);
 
   useEffect(() => {
