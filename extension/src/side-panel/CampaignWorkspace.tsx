@@ -4,7 +4,7 @@ import type { CampaignDetailSnapshot, Surface } from "../types/snapshots";
 import { useAgentCampaigns } from "../state/useAgentCampaigns";
 import { useSettings } from "../state/useSettings";
 import { buildSystemPrompt } from "../lib/dmAgent";
-import { complete, type ChatMessage } from "../lib/anthropic";
+import { streamComplete, type ChatMessage } from "../lib/anthropic";
 import {
   FANTASY_FLAVORS,
   TONES,
@@ -29,6 +29,8 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState(campaign.outline);
   const [editingStyle, setEditingStyle] = useState(false);
@@ -101,6 +103,7 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
     }
     setError(null);
     setSending(true);
+    setStreamingText("");
 
     const userMsg: AgentMessage = {
       id: crypto.randomUUID(),
@@ -109,8 +112,8 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
       ts: Date.now(),
     };
 
-    // Build the message array we'll actually send (snapshot the current
-    // history + the new user message before persisting, to avoid races).
+    // Snapshot the message array we'll send before persisting the user msg
+    // (avoids races and gives us a stable history if the user spam-clicks).
     const history: ChatMessage[] = campaign.messages.map((m) => ({
       role: m.role,
       content: m.content,
@@ -120,30 +123,73 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
     await appendMessage(campaign.id, userMsg);
     setDraft("");
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let accumulated = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
+
     try {
       const system = buildSystemPrompt(campaign, dndb);
-      const result = await complete({
+      const stream = streamComplete({
         apiKey: settings.anthropic_api_key,
         model: settings.model,
         system,
         messages: history,
         maxTokens: 2048,
+        signal: controller.signal,
       });
 
-      const assistantMsg: AgentMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: result.content,
-        ts: Date.now(),
-        usage: { input: result.inputTokens, output: result.outputTokens },
-      };
-      await appendMessage(campaign.id, assistantMsg);
+      for await (const chunk of stream) {
+        if (chunk.delta) {
+          accumulated += chunk.delta;
+          setStreamingText(accumulated);
+        }
+        if (chunk.done) {
+          inputTokens = chunk.done.inputTokens;
+          outputTokens = chunk.done.outputTokens;
+        }
+      }
+
+      // Persist as a full message and clear the streaming buffer.
+      if (accumulated.trim().length > 0) {
+        const assistantMsg: AgentMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: accumulated,
+          ts: Date.now(),
+          usage: { input: inputTokens, output: outputTokens },
+        };
+        await appendMessage(campaign.id, assistantMsg);
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      // Cancellation isn't an error to surface — just bank what we got.
+      const aborted = (e as { name?: string })?.name === "AbortError";
+      if (aborted) {
+        if (accumulated.trim().length > 0) {
+          const assistantMsg: AgentMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: accumulated + "\n\n*[cut short by DM]*",
+            ts: Date.now(),
+            usage: { input: inputTokens, output: outputTokens },
+          };
+          await appendMessage(campaign.id, assistantMsg);
+        }
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+      }
     } finally {
+      abortRef.current = null;
+      setStreamingText("");
       setSending(false);
     }
+  };
+
+  const handleStop = () => {
+    abortRef.current?.abort();
   };
 
   const tokenUsage = useMemo(() => {
@@ -259,10 +305,13 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
         {campaign.messages.map((m) => (
           <MessageBubble key={m.id} message={m} />
         ))}
-        {sending && (
+        {sending && streamingText.length === 0 && (
           <div className="dim" style={{ fontSize: 11, fontStyle: "italic" }}>
             <span style={{ color: "var(--gold)" }}>DM</span> is thinking…
           </div>
+        )}
+        {sending && streamingText.length > 0 && (
+          <StreamingBubble text={streamingText} />
         )}
         {error && <div className="panel-warn" style={{ fontSize: 11 }}>{error}</div>}
       </div>
@@ -291,18 +340,49 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
               Set API key first
             </button>
           )}
-          <button
-            className="primary"
-            onClick={handleSend}
-            disabled={sending || !draft.trim() || !hasKey}
-          >
-            Send
-          </button>
+          {sending ? (
+            <button
+              className="primary"
+              onClick={handleStop}
+              style={{ background: "var(--accent)", borderColor: "var(--accent-2)" }}
+            >
+              ◼ Stop
+            </button>
+          ) : (
+            <button
+              className="primary"
+              onClick={handleSend}
+              disabled={!draft.trim() || !hasKey}
+            >
+              Send
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 };
+
+const StreamingBubble = ({ text }: { text: string }) => (
+  <div
+    style={{
+      alignSelf: "flex-start",
+      maxWidth: "92%",
+      padding: "8px 10px",
+      borderRadius: 8,
+      background: "rgba(212, 175, 55, 0.08)",
+      border: "1px solid rgba(212, 175, 55, 0.25)",
+      fontSize: 12,
+      whiteSpace: "pre-wrap",
+    }}
+  >
+    <div className="dim" style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 4 }}>
+      AI DM <span style={{ color: "var(--gold)" }}>· writing</span>
+    </div>
+    {text}
+    <span style={{ display: "inline-block", width: 6, height: 12, background: "var(--gold)", marginLeft: 2, verticalAlign: "text-bottom", animation: "blink 1s steps(2) infinite" }} />
+  </div>
+);
 
 const StyleSummary = ({ campaign, onEdit }: { campaign: AgentCampaign; onEdit: () => void }) => {
   const style = campaign.style ?? DEFAULT_STYLE;
