@@ -47,11 +47,23 @@ const readLatest = async (): Promise<LatestSnapshots> => {
   return (out[LATEST_KEY] as LatestSnapshots) ?? {};
 };
 
-const writeLatest = async (mut: (l: LatestSnapshots) => LatestSnapshots): Promise<void> => {
-  const cur = await readLatest();
-  const next = mut(cur);
-  next.updated_at = new Date().toISOString();
-  await chrome.storage.session.set({ [LATEST_KEY]: next });
+/**
+ * Serialize writes through a single in-flight Promise so concurrent
+ * `surface-changed` + `campaign-detail` messages can't clobber each
+ * other's fields. Without this, both read the same snapshot, both
+ * compute their delta, and the second `set` overwrites the first.
+ */
+let writeChain: Promise<void> = Promise.resolve();
+const writeLatest = (mut: (l: LatestSnapshots) => LatestSnapshots): Promise<void> => {
+  const next = writeChain.then(async () => {
+    const cur = await readLatest();
+    const out = mut(cur);
+    out.updated_at = new Date().toISOString();
+    await chrome.storage.session.set({ [LATEST_KEY]: out });
+  });
+  // Swallow errors in the chain so one bad write doesn't break the rest.
+  writeChain = next.catch((e) => console.warn("[dnd-ext] writeLatest:", e));
+  return next;
 };
 
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
