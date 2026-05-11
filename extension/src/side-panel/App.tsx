@@ -38,7 +38,7 @@ export const App = () => {
   return (
     <div style={{ padding: 16, minHeight: "100vh", display: "flex", flexDirection: "column", gap: 12 }}>
       <header>
-        <h1 style={{ fontFamily: "Cinzel, serif", color: "var(--gold)", fontSize: 18, margin: 0 }}>
+        <h1 style={{ fontFamily: "var(--serif)", color: "var(--gold)", fontSize: 18, margin: 0 }}>
           D&D 5e VTT
         </h1>
         <div style={{ color: "var(--text-dim)", fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase" }}>
@@ -105,7 +105,7 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   >
     <div
       style={{
-        fontFamily: "Cinzel, serif",
+        fontFamily: "var(--serif)",
         fontSize: 10,
         letterSpacing: "0.18em",
         textTransform: "uppercase",
@@ -134,7 +134,7 @@ const K = ({ children }: { children: React.ReactNode }) => (
 const V = ({ children, mono, small }: { children: React.ReactNode; mono?: boolean; small?: boolean }) => (
   <span
     style={{
-      fontFamily: mono ? '"JetBrains Mono", Consolas, monospace' : undefined,
+      fontFamily: mono ? "var(--mono)" : undefined,
       fontSize: small ? 11 : undefined,
       wordBreak: "break-all",
     }}
