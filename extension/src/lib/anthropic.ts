@@ -8,9 +8,20 @@
  * through a Supabase Edge Function so the key never leaves the server.
  */
 
+import type { ToolSchema } from "./agentTools";
+
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+
 export interface ChatMessage {
   role: "user" | "assistant";
-  content: string;
+  /**
+   * String content works for plain text turns.
+   * Block content is required when a turn contains tool_use or tool_result.
+   */
+  content: string | ContentBlock[];
 }
 
 export interface CompleteOptions {
@@ -20,6 +31,7 @@ export interface CompleteOptions {
   messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
+  tools?: ToolSchema[];
 }
 
 export interface CompleteResult {
@@ -90,17 +102,20 @@ export const complete = async (opts: CompleteOptions): Promise<CompleteResult> =
  */
 export interface StreamChunk {
   delta?: string;
+  toolUse?: { id: string; name: string; input: Record<string, unknown> };
   done?: {
     stopReason: string | null;
     inputTokens: number;
     outputTokens: number;
+    /** Full assistant content array (text + tool_use blocks, ordered). */
+    content: ContentBlock[];
   };
 }
 
 export async function* streamComplete(
   opts: CompleteOptions & { signal?: AbortSignal }
 ): AsyncGenerator<StreamChunk, void, void> {
-  const body = {
+  const body: Record<string, unknown> = {
     model: opts.model,
     max_tokens: opts.maxTokens ?? 2048,
     temperature: opts.temperature ?? 0.7,
@@ -108,6 +123,9 @@ export async function* streamComplete(
     messages: opts.messages,
     stream: true,
   };
+  if (opts.tools && opts.tools.length > 0) {
+    body.tools = opts.tools;
+  }
 
   const res = await fetch(ANTHROPIC_URL, {
     method: "POST",
@@ -133,6 +151,17 @@ export async function* streamComplete(
   let inputTokens = 0;
   let outputTokens = 0;
   let stopReason: string | null = null;
+
+  // Per-content-block state. Anthropic emits blocks in order via
+  // content_block_start / content_block_delta / content_block_stop.
+  // Text blocks stream their `text`; tool_use blocks stream their
+  // `input` field as a sequence of JSON string deltas that we
+  // concatenate, then parse on content_block_stop.
+  type BlockState =
+    | { kind: "text"; text: string }
+    | { kind: "tool_use"; id: string; name: string; partialJson: string };
+  const blocks: Record<number, BlockState> = {};
+  const finalContent: ContentBlock[] = [];
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -163,18 +192,59 @@ export async function* streamComplete(
           case "message_start":
             inputTokens = parsed.message?.usage?.input_tokens ?? 0;
             break;
-          case "content_block_delta":
-            if (parsed.delta?.type === "text_delta" && typeof parsed.delta.text === "string") {
-              yield { delta: parsed.delta.text };
+          case "content_block_start": {
+            const idx = parsed.index;
+            const cb = parsed.content_block;
+            if (cb?.type === "text") {
+              blocks[idx] = { kind: "text", text: cb.text ?? "" };
+            } else if (cb?.type === "tool_use") {
+              blocks[idx] = { kind: "tool_use", id: cb.id, name: cb.name, partialJson: "" };
             }
             break;
+          }
+          case "content_block_delta": {
+            const idx = parsed.index;
+            const block = blocks[idx];
+            if (!block) break;
+            if (parsed.delta?.type === "text_delta" && block.kind === "text") {
+              const t: string = parsed.delta.text ?? "";
+              block.text += t;
+              if (t) yield { delta: t };
+            } else if (parsed.delta?.type === "input_json_delta" && block.kind === "tool_use") {
+              block.partialJson += parsed.delta.partial_json ?? "";
+            }
+            break;
+          }
+          case "content_block_stop": {
+            const idx = parsed.index;
+            const block = blocks[idx];
+            if (!block) break;
+            if (block.kind === "text") {
+              finalContent.push({ type: "text", text: block.text });
+            } else {
+              let input: Record<string, unknown> = {};
+              try {
+                input = block.partialJson ? JSON.parse(block.partialJson) : {};
+              } catch {
+                input = { _raw: block.partialJson };
+              }
+              const toolBlock: ContentBlock = {
+                type: "tool_use",
+                id: block.id,
+                name: block.name,
+                input,
+              };
+              finalContent.push(toolBlock);
+              yield { toolUse: { id: block.id, name: block.name, input } };
+            }
+            break;
+          }
           case "message_delta":
             if (parsed.delta?.stop_reason) stopReason = parsed.delta.stop_reason;
             if (parsed.usage?.output_tokens != null) outputTokens = parsed.usage.output_tokens;
             break;
           case "message_stop":
-            // emit final done and return
-            yield { done: { stopReason, inputTokens, outputTokens } };
+            yield { done: { stopReason, inputTokens, outputTokens, content: finalContent } };
             return;
           case "error":
             throw new Error(`Anthropic stream error: ${parsed.error?.message ?? "unknown"}`);
@@ -182,7 +252,7 @@ export async function* streamComplete(
       }
     }
     // If we exited without message_stop, still emit a done.
-    yield { done: { stopReason, inputTokens, outputTokens } };
+    yield { done: { stopReason, inputTokens, outputTokens, content: finalContent } };
   } finally {
     try { reader.releaseLock(); } catch { /* ignore */ }
   }

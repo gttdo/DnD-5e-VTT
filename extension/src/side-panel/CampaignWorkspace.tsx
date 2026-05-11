@@ -4,7 +4,8 @@ import type { CampaignDetailSnapshot, Surface } from "../types/snapshots";
 import { useAgentCampaigns } from "../state/useAgentCampaigns";
 import { useSettings } from "../state/useSettings";
 import { buildSystemPrompt } from "../lib/dmAgent";
-import { streamComplete, type ChatMessage } from "../lib/anthropic";
+import { streamComplete, type ChatMessage, type ContentBlock } from "../lib/anthropic";
+import { TOOL_SCHEMAS, runTool } from "../lib/agentTools";
 import {
   FANTASY_FLAVORS,
   TONES,
@@ -112,13 +113,14 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
       ts: Date.now(),
     };
 
-    // Snapshot the message array we'll send before persisting the user msg
-    // (avoids races and gives us a stable history if the user spam-clicks).
-    const history: ChatMessage[] = campaign.messages.map((m) => ({
+    // Snapshot the conversation. Each pass through the tool loop appends
+    // to `workingHistory` so the next API call sees the assistant's
+    // previous tool_use + the user's tool_result blocks.
+    const workingHistory: ChatMessage[] = campaign.messages.map((m) => ({
       role: m.role,
       content: m.content,
     }));
-    history.push({ role: "user", content: userMsg.content });
+    workingHistory.push({ role: "user", content: userMsg.content });
 
     await appendMessage(campaign.id, userMsg);
     setDraft("");
@@ -126,56 +128,101 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
     const controller = new AbortController();
     abortRef.current = controller;
 
-    let accumulated = "";
-    let inputTokens = 0;
-    let outputTokens = 0;
+    let inputTokensTotal = 0;
+    let outputTokensTotal = 0;
+    let lastTextThisTurn = ""; // for cancellation banking
 
     try {
       const system = buildSystemPrompt(campaign, dndb);
-      const stream = streamComplete({
-        apiKey: settings.anthropic_api_key,
-        model: settings.model,
-        system,
-        messages: history,
-        maxTokens: 2048,
-        signal: controller.signal,
-      });
+      const MAX_TOOL_ITERATIONS = 6;
 
-      for await (const chunk of stream) {
-        if (chunk.delta) {
-          accumulated += chunk.delta;
-          setStreamingText(accumulated);
-        }
-        if (chunk.done) {
-          inputTokens = chunk.done.inputTokens;
-          outputTokens = chunk.done.outputTokens;
-        }
-      }
+      for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+        setStreamingText("");
+        let liveText = "";
+        let assistantContent: ContentBlock[] = [];
+        const pendingToolCalls: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
 
-      // Persist as a full message and clear the streaming buffer.
-      if (accumulated.trim().length > 0) {
-        const assistantMsg: AgentMessage = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: accumulated,
-          ts: Date.now(),
-          usage: { input: inputTokens, output: outputTokens },
-        };
-        await appendMessage(campaign.id, assistantMsg);
-      }
-    } catch (e) {
-      // Cancellation isn't an error to surface — just bank what we got.
-      const aborted = (e as { name?: string })?.name === "AbortError";
-      if (aborted) {
-        if (accumulated.trim().length > 0) {
-          const assistantMsg: AgentMessage = {
+        const stream = streamComplete({
+          apiKey: settings.anthropic_api_key,
+          model: settings.model,
+          system,
+          messages: workingHistory,
+          maxTokens: 2048,
+          tools: TOOL_SCHEMAS,
+          signal: controller.signal,
+        });
+
+        for await (const chunk of stream) {
+          if (chunk.delta) {
+            liveText += chunk.delta;
+            lastTextThisTurn = liveText;
+            setStreamingText(liveText);
+          }
+          if (chunk.toolUse) {
+            pendingToolCalls.push(chunk.toolUse);
+          }
+          if (chunk.done) {
+            assistantContent = chunk.done.content;
+            inputTokensTotal += chunk.done.inputTokens;
+            outputTokensTotal += chunk.done.outputTokens;
+          }
+        }
+
+        // Persist the assistant message. If we got block-structured
+        // content (any tool_use, or text alongside tool_use), keep the
+        // array shape so the next API call has matching tool_use ids.
+        const hasTools = assistantContent.some((b) => b.type === "tool_use");
+        const persistContent: string | ContentBlock[] = hasTools
+          ? assistantContent
+          : liveText;
+        if (
+          (typeof persistContent === "string" && persistContent.trim().length > 0) ||
+          (Array.isArray(persistContent) && persistContent.length > 0)
+        ) {
+          await appendMessage(campaign.id, {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: accumulated + "\n\n*[cut short by DM]*",
+            content: persistContent,
             ts: Date.now(),
-            usage: { input: inputTokens, output: outputTokens },
-          };
-          await appendMessage(campaign.id, assistantMsg);
+            usage: { input: inputTokensTotal, output: outputTokensTotal },
+          });
+        }
+        workingHistory.push({ role: "assistant", content: persistContent });
+
+        if (pendingToolCalls.length === 0) break;
+
+        // Run each tool, gather results, hand them back as a user msg.
+        const toolResults: ContentBlock[] = [];
+        for (const tc of pendingToolCalls) {
+          const r = await runTool({ name: tc.name, input: tc.input });
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: tc.id,
+            content: r.output,
+            is_error: r.is_error,
+          });
+        }
+        await appendMessage(campaign.id, {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: toolResults,
+          ts: Date.now(),
+        });
+        workingHistory.push({ role: "user", content: toolResults });
+        // loop continues — agent sees tool results and may either reply
+        // with text or call more tools
+      }
+    } catch (e) {
+      const aborted = (e as { name?: string })?.name === "AbortError";
+      if (aborted) {
+        if (lastTextThisTurn.trim().length > 0) {
+          await appendMessage(campaign.id, {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: lastTextThisTurn + "\n\n*[cut short by DM]*",
+            ts: Date.now(),
+            usage: { input: inputTokensTotal, output: outputTokensTotal },
+          });
         }
       } else {
         const msg = e instanceof Error ? e.message : String(e);
@@ -459,6 +506,26 @@ const StyleEditor = ({
 
 const MessageBubble = ({ message }: { message: AgentMessage }) => {
   const isUser = message.role === "user";
+
+  // User message whose content is purely tool_result blocks: render as
+  // compact tool-result rows rather than a giant user bubble. This is
+  // the "agent ran a tool" moment, not the human DM speaking.
+  if (
+    isUser &&
+    Array.isArray(message.content) &&
+    message.content.every((b) => b.type === "tool_result")
+  ) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {message.content.map((b, i) =>
+          b.type === "tool_result" ? (
+            <ToolResultRow key={i} content={b.content} isError={b.is_error} />
+          ) : null
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -475,7 +542,66 @@ const MessageBubble = ({ message }: { message: AgentMessage }) => {
       <div className="dim" style={{ fontSize: 9, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 4 }}>
         {isUser ? "DM" : "AI DM"}
       </div>
-      {message.content}
+      <MessageContent content={message.content} />
     </div>
   );
 };
+
+const MessageContent = ({ content }: { content: AgentMessage["content"] }) => {
+  if (typeof content === "string") return <>{content}</>;
+  if (!Array.isArray(content)) return null;
+  return (
+    <>
+      {content.map((b, i) => {
+        if (b.type === "text") return <span key={i}>{b.text}</span>;
+        if (b.type === "tool_use") return <ToolUseTag key={i} name={b.name} input={b.input} />;
+        if (b.type === "tool_result") {
+          return <ToolResultRow key={i} content={b.content} isError={b.is_error} />;
+        }
+        return null;
+      })}
+    </>
+  );
+};
+
+const ToolUseTag = ({ name, input }: { name: string; input: Record<string, unknown> }) => {
+  const arg = Object.entries(input)
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(", ");
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        margin: "4px 4px 4px 0",
+        padding: "2px 8px",
+        background: "rgba(96, 165, 250, 0.12)",
+        border: "1px solid rgba(96, 165, 250, 0.35)",
+        borderRadius: 999,
+        fontSize: 10,
+        fontFamily: "var(--mono)",
+        color: "var(--blue, #93c5fd)",
+      }}
+      title="Tool the agent decided to call"
+    >
+      🔧 {name}({arg})
+    </span>
+  );
+};
+
+const ToolResultRow = ({ content, isError }: { content: string; isError?: boolean }) => (
+  <div
+    style={{
+      alignSelf: "flex-start",
+      maxWidth: "92%",
+      padding: "4px 10px",
+      borderLeft: `2px solid ${isError ? "var(--accent)" : "rgba(96, 165, 250, 0.55)"}`,
+      background: "rgba(96, 165, 250, 0.05)",
+      fontSize: 11,
+      color: "var(--text-dim)",
+      whiteSpace: "pre-wrap",
+      fontFamily: "var(--mono)",
+    }}
+  >
+    {content}
+  </div>
+);

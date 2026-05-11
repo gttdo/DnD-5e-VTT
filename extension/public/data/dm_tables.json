@@ -1,0 +1,274 @@
+{
+  "_description": "DMG 2024 reference tables in machine-readable form.",
+  "_source": "DMG 2024",
+
+  "typical_dcs": {
+    "very_easy": 5,
+    "easy": 10,
+    "moderate": 15,
+    "hard": 20,
+    "very_hard": 25,
+    "nearly_impossible": 30
+  },
+
+  "improvising_damage": [
+    {"dice": "1d10",  "examples": "Burned by coals, hit by a falling bookcase, pricked by a poison needle"},
+    {"dice": "2d10",  "examples": "Struck by lightning, stumbling into a firepit"},
+    {"dice": "4d10",  "examples": "Hit by falling rubble in a collapsing tunnel, tumbling into a vat of acid"},
+    {"dice": "10d10", "examples": "Crushed by compacting walls, hit by whirling steel blades, wading through lava"},
+    {"dice": "18d10", "examples": "Submerged in lava, hit by a crashing flying fortress"},
+    {"dice": "24d10", "examples": "Tumbling into a vortex of fire on the Elemental Plane of Fire, crushed in moon-sized creature's jaws"}
+  ],
+
+  "damage_severity_by_level": {
+    "1-4":   {"nuisance": {"avg": 5,  "dice": "1d10"}, "deadly": {"avg": 11, "dice": "2d10"}},
+    "5-10":  {"nuisance": {"avg": 11, "dice": "2d10"}, "deadly": {"avg": 22, "dice": "4d10"}},
+    "11-16": {"nuisance": {"avg": 22, "dice": "4d10"}, "deadly": {"avg": 55, "dice": "10d10"}},
+    "17-20": {"nuisance": {"avg": 55, "dice": "10d10"}, "deadly": {"avg": 99, "dice": "18d10"}}
+  },
+
+  "spell_damage_by_level": {
+    "cantrip": {"one_target": "1d10",  "multiple": "1d6"},
+    "1":       {"one_target": "2d10",  "multiple": "2d6"},
+    "2":       {"one_target": "3d10",  "multiple": "3d6"},
+    "3":       {"one_target": "5d10",  "multiple": "6d6"},
+    "4":       {"one_target": "6d10",  "multiple": "7d6"},
+    "5":       {"one_target": "7d10",  "multiple": "8d6"},
+    "6":       {"one_target": "10d10", "multiple": "11d6"},
+    "7":       {"one_target": "11d10", "multiple": "12d6"},
+    "8":       {"one_target": "12d10", "multiple": "13d6"},
+    "9":       {"one_target": "15d10", "multiple": "16d6"}
+  },
+
+  "magic_item_rarities_and_values": {
+    "common":    {"value_gp": 100},
+    "uncommon":  {"value_gp": 400},
+    "rare":      {"value_gp": 4000},
+    "very_rare": {"value_gp": 40000},
+    "legendary": {"value_gp": 200000},
+    "artifact":  {"value_gp": null, "note": "Priceless"}
+  },
+
+  "magic_item_rarities_by_level": {
+    "_description": "Roll 1d100 to determine the rarity of a found magic item by party level. From DMG 2024 Ch. 7.",
+    "levels_1_4":   [{"roll": [1, 54],  "rarity": "common"}, {"roll": [55, 91],  "rarity": "uncommon"}, {"roll": [92, 100], "rarity": "rare"}],
+    "levels_5_10":  [{"roll": [1, 30],  "rarity": "common"}, {"roll": [31, 81],  "rarity": "uncommon"}, {"roll": [82, 98], "rarity": "rare"}, {"roll": [99, 100], "rarity": "very_rare"}],
+    "levels_11_16": [{"roll": [1, 11],  "rarity": "common"}, {"roll": [12, 34],  "rarity": "uncommon"}, {"roll": [35, 70], "rarity": "rare"}, {"roll": [71, 93],  "rarity": "very_rare"}, {"roll": [94, 100], "rarity": "legendary"}],
+    "levels_17_20": [{"roll": [1, 20],  "rarity": "rare"},   {"roll": [21, 64],  "rarity": "very_rare"}, {"roll": [65, 100], "rarity": "legendary"}]
+  },
+
+  "crafting": {
+    "common":    {"days": 5,   "cost_gp": 50},
+    "uncommon":  {"days": 10,  "cost_gp": 200},
+    "rare":      {"days": 50,  "cost_gp": 2000},
+    "very_rare": {"days": 125, "cost_gp": 20000},
+    "legendary": {"days": 250, "cost_gp": 100000}
+  },
+
+  "random_individual_treasure_by_cr": {
+    "0-4":   {"formula": "3d6 GP",          "avg": 10,  "currency": "GP"},
+    "5-10":  {"formula": "2d8 × 10 GP",     "avg": 90,  "currency": "GP"},
+    "11-16": {"formula": "2d10 × 10 PP",    "avg": 110, "currency": "PP"},
+    "17+":   {"formula": "2d8 × 100 PP",    "avg": 900, "currency": "PP"}
+  },
+
+  "random_treasure_hoard_by_cr": {
+    "0-4":   {"monetary": "2d4 × 100 GP",     "monetary_avg": 500,    "magic_items": "1d4 - 1"},
+    "5-10":  {"monetary": "8d10 × 100 GP",    "monetary_avg": 4400,   "magic_items": "1d3"},
+    "11-16": {"monetary": "8d8 × 1000 GP",    "monetary_avg": 36000,  "magic_items": "1d4"},
+    "17+":   {"monetary": "6d10 × 10000 GP",  "monetary_avg": 330000, "magic_items": "1d6"}
+  },
+
+  "travel_terrain": {
+    "arctic":    {"max_pace": "fast*", "encounter_distance": "6d6 × 10 ft", "foraging_dc": 20, "navigation_dc": 10, "search_dc": 10},
+    "coastal":   {"max_pace": "normal", "encounter_distance": "2d10 × 10 ft", "foraging_dc": 10, "navigation_dc": 5,  "search_dc": 15},
+    "desert":    {"max_pace": "normal", "encounter_distance": "6d6 × 10 ft", "foraging_dc": 20, "navigation_dc": 10, "search_dc": 10},
+    "forest":    {"max_pace": "normal", "encounter_distance": "2d8 × 10 ft", "foraging_dc": 10, "navigation_dc": 15, "search_dc": 15},
+    "grassland": {"max_pace": "fast",   "encounter_distance": "6d6 × 10 ft", "foraging_dc": 15, "navigation_dc": 5,  "search_dc": 15},
+    "hill":      {"max_pace": "normal", "encounter_distance": "2d10 × 10 ft", "foraging_dc": 15, "navigation_dc": 10, "search_dc": 15},
+    "mountain":  {"max_pace": "slow",   "encounter_distance": "4d10 × 10 ft", "foraging_dc": 20, "navigation_dc": 15, "search_dc": 20},
+    "swamp":     {"max_pace": "slow",   "encounter_distance": "2d8 × 10 ft", "foraging_dc": 10, "navigation_dc": 15, "search_dc": 20},
+    "underdark": {"max_pace": "normal", "encounter_distance": "2d6 × 10 ft", "foraging_dc": 20, "navigation_dc": 10, "search_dc": 20},
+    "urban":     {"max_pace": "normal", "encounter_distance": "2d6 × 10 ft", "foraging_dc": 20, "navigation_dc": 15, "search_dc": 15},
+    "waterborne":{"max_pace": "special",  "encounter_distance": "6d6 × 10 ft", "foraging_dc": 15, "navigation_dc": 10, "search_dc": 15}
+  },
+
+  "weather": {
+    "_description": "Roll 1d20 three times for temperature, wind, precipitation",
+    "temperature": [
+      {"roll": [1, 14],  "result": "Normal for the season"},
+      {"roll": [15, 17], "result": "1d4 × 10 °F colder"},
+      {"roll": [18, 20], "result": "1d4 × 10 °F hotter"}
+    ],
+    "wind": [
+      {"roll": [1, 12],  "result": "None"},
+      {"roll": [13, 17], "result": "Light"},
+      {"roll": [18, 20], "result": "Strong"}
+    ],
+    "precipitation": [
+      {"roll": [1, 12],  "result": "None"},
+      {"roll": [13, 17], "result": "Light rain or light snowfall"},
+      {"roll": [18, 20], "result": "Heavy rain or heavy snowfall"}
+    ]
+  },
+
+  "audible_distance": {
+    "quiet":   "2d6 × 5 ft",
+    "normal":  "2d6 × 10 ft",
+    "loud":    "2d6 × 50 ft"
+  },
+
+  "underwater_encounter_distance": {
+    "clear_bright": 60,
+    "clear_dim":    30,
+    "murky_dark":   10
+  },
+
+  "doors": {
+    "glass":  {"ac": 13, "hp": 4,  "dc_to_open": 10},
+    "wooden": {"ac": 15, "hp": 18, "dc_to_open": 15},
+    "stone":  {"ac": 17, "hp": 40, "dc_to_open": 20},
+    "metal":  {"ac": 19, "hp": 72, "dc_to_open": 25}
+  },
+
+  "lock_quality": {
+    "inferior": 10,
+    "good":     15,
+    "superior": 20
+  },
+
+  "lock_complexity": {
+    "simple":  "1 action",
+    "complex": "1 minute"
+  },
+
+  "settlements": {
+    "village": {"population": "up to 500",      "max_item_value_gp": 20},
+    "town":    {"population": "501–5,000",      "max_item_value_gp": 2000},
+    "city":    {"population": "5,001 and up",   "max_item_value_gp": 200000}
+  },
+
+  "trade_bars": [
+    {"bar": "2-lb silver", "value_gp": 10,  "dimensions": "5×2×½ in"},
+    {"bar": "5-lb silver", "value_gp": 25,  "dimensions": "6×2×1 in"},
+    {"bar": "5-lb gold",   "value_gp": 250, "dimensions": "5×2×¾ in"}
+  ],
+
+  "training_to_level": {
+    "2-4":   {"days": 10, "cost_gp": 20},
+    "5-10":  {"days": 20, "cost_gp": 40},
+    "11-16": {"days": 30, "cost_gp": 60},
+    "17-20": {"days": 40, "cost_gp": 80}
+  },
+
+  "monster_personality_1d8": [
+    "Cowardly; surrenders easily",
+    "Greedy; wants treasure",
+    "Boastful; makes a show of bravery but runs from danger",
+    "Disorderly; poorly trained and easily rattled",
+    "Fanatical; ready to die fighting",
+    "Brave; stands firm against danger",
+    "Jocular; taunts enemies",
+    "Orderly; difficult to rattle"
+  ],
+
+  "fear_dcs": {
+    "low":   {"dc": 10, "example": "A harmless yet terrifying apparition"},
+    "mid":   {"dc": 15, "example": "An illusory manifestation of the character's worst fears"},
+    "high":  {"dc": 20, "example": "A portal opens to a nightmarish realm"}
+  },
+
+  "mental_stress": {
+    "low":   {"dc": 10, "damage": "1d6",  "example": "Hallucinogenic substance distorts perception"},
+    "mid":   {"dc": 15, "damage": "3d6",  "example": "Fiendish idol tears at the mind"},
+    "high":  {"dc": 20, "damage": "9d6",  "example": "Magical trap flings character to the Far Realm"}
+  },
+
+  "facility_space": {
+    "cramped": 4,
+    "roomy":   16,
+    "vast":    36
+  },
+
+  "basic_facility_cost": {
+    "cramped": {"cost_gp": 500,  "days": 20},
+    "roomy":   {"cost_gp": 1000, "days": 45},
+    "vast":    {"cost_gp": 3000, "days": 125}
+  },
+
+  "basic_facility_enlarge": {
+    "cramped_to_roomy": {"cost_gp": 500,  "days": 25},
+    "roomy_to_vast":    {"cost_gp": 2000, "days": 80}
+  },
+
+  "special_facilities_by_level": {
+    "5":  2,
+    "9":  4,
+    "13": 5,
+    "17": 6
+  },
+
+  "bastion_events_1d100": [
+    {"roll": [1, 50],  "event": "All Is Well"},
+    {"roll": [51, 55], "event": "Attack"},
+    {"roll": [56, 58], "event": "Criminal Hireling"},
+    {"roll": [59, 63], "event": "Extraordinary Opportunity"},
+    {"roll": [64, 72], "event": "Friendly Visitors"},
+    {"roll": [73, 76], "event": "Guest"},
+    {"roll": [77, 79], "event": "Lost Hirelings"},
+    {"roll": [80, 83], "event": "Magical Discovery"},
+    {"roll": [84, 91], "event": "Refugees"},
+    {"roll": [92, 98], "event": "Request for Aid"},
+    {"roll": [99, 100],"event": "Treasure"}
+  ],
+
+  "all_is_well_1d8": [
+    "Accident reports are way down.",
+    "The leak in the roof has been fixed.",
+    "No vermin infestations to report.",
+    "You-Know-Who lost their spectacles again.",
+    "One of your hirelings adopted a stray dog.",
+    "You received a lovely letter from a friend.",
+    "Some practical joker has been putting rotten eggs in people's boots.",
+    "Someone thought they saw a ghost."
+  ],
+
+  "happenstance_hooks_1d6": [
+    "The characters find a letter describing the adventure situation.",
+    "The characters are on an unrelated quest that leads them into the adventure situation.",
+    "The adventure situation disrupts a festival or ceremony the characters are attending.",
+    "A magical mishap places the characters in the adventure situation.",
+    "While traveling, the characters' caravan or ship is forced into the adventure situation.",
+    "The characters encounter a supernatural coincidence that pulls them in."
+  ],
+
+  "treasure_themes": {
+    "arcana":     {"description": "Gemstones plus magic items of an eldritch or esoteric nature", "classes": ["sorcerer", "warlock", "wizard"]},
+    "armaments":  {"description": "Coins or trade bars plus magic items useful in battle",        "classes": ["barbarian", "fighter", "paladin", "ranger"]},
+    "implements": {"description": "Coins, trade bars, or trade goods plus subtle utility magic items", "classes": ["bard", "monk", "rogue"]},
+    "relics":     {"description": "Coins or art objects plus magic items tied to faith",           "classes": ["cleric", "druid"]}
+  },
+
+  "tiers_of_play": {
+    "1": {"levels": "1-4",   "name": "Local heroes",       "description": "Saving towns, exploring dungeons"},
+    "2": {"levels": "5-10",  "name": "Regional heroes",    "description": "Facing region-wide threats"},
+    "3": {"levels": "11-16", "name": "Realm-level heroes", "description": "Kingdoms in danger"},
+    "4": {"levels": "17-20", "name": "Multiversal heroes", "description": "Planar threats, gods, mythic foes"}
+  },
+
+  "fantasy_flavors": [
+    "heroic", "sword and sorcery", "epic", "mythic", "dark", "intrigue", "mystery", "swashbuckling", "war"
+  ],
+
+  "session_zero_topics": [
+    "Hard limits (topics to avoid entirely)",
+    "Soft limits (topics requiring care)",
+    "Retraction policy (can players take back actions?)",
+    "House rules",
+    "Pacing (how often to meet, session length)",
+    "Character creation guidance",
+    "Party composition / bonds",
+    "Patron, faction, or shared goal",
+    "Tone and fantasy flavor"
+  ]
+}

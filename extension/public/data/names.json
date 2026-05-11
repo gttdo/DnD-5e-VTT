@@ -1,0 +1,60 @@
+{
+  "_description": "NPC names from DMG 2024 Ch. 3 name tables. Six themes: standard, esoteric, mundane, strong, sinister, whimsical.",
+  "_source": "DMG 2024 Ch. 3 - Nonplayer Characters",
+  "themes": {
+    "standard": {
+      "given": ["Alaric", "Brina", "Cedric", "Dora", "Edmund", "Fenna", "Garth", "Hilde", "Ivor", "Joanna", "Karric", "Liesel"],
+      "surname": ["Brightwood", "Coldcastle", "Dunharrow", "Elderdusk", "Fairhaven", "Grimward", "Hollowmere", "Ironvale", "Kingsford", "Larkhill", "Mistwallow", "Northgate"]
+    },
+    "esoteric": {
+      "given": ["Aelorai", "Belvarric", "Calistria", "Dymara", "Elathiel", "Faelivrin", "Gwynara", "Holvas", "Ithirel", "Jorivan", "Khellandra", "Loremel"],
+      "surname": ["Aurivell", "Brimshade", "Cinderval", "Drathmoor", "Esemir", "Faerywyn", "Glimmerveil", "Halcyondream", "Ithilien", "Jasperveil", "Kaervyl", "Lythiandra"]
+    },
+    "mundane": {
+      "given": ["Anne", "Bert", "Cara", "Dan", "Eli", "Fran", "Gus", "Hilda", "Ian", "Jean", "Karl", "Lou"],
+      "surname": ["Baker", "Cooper", "Drake", "Fields", "Glass", "Hill", "Lane", "Mills", "Smith", "Tanner", "Webb", "Young"]
+    },
+    "strong": {
+      "given": ["Alden", "Creel", "Dain", "Dorn", "Flint", "Glim", "Henk", "Krusk", "Nox", "Nyx", "Rukh", "Shan"],
+      "surname": ["Dench", "Drog", "Dusk", "Holg", "Horn", "Imsh", "Jask", "Keth", "Ku", "Kung", "Mott", "Quaal"]
+    },
+    "sinister": {
+      "given": ["Arachne", "Axyss", "Carrion", "Grinnus", "Melkhis", "Morthos", "Nadir", "Scandal", "Skellendyre", "Thaltus", "Valkora", "Vexander"],
+      "surname": ["Doomwhisper", "Dreadfield", "Gallows", "Hellstryke", "Killraven", "Nightblade", "Norixius", "Shadowfang", "Valtar", "Winterspell", "Xandros", "Zarkynzorn"]
+    },
+    "whimsical": {
+      "given": ["Cricket", "Daisy", "Dimble", "Ellywick", "Erky", "Fiddlestyx", "Fonkin", "Golly", "Mimsy", "Pumpkin", "Quarrel", "Sybilwick"],
+      "surname": ["Borogove", "Goldjoy", "Hoddypeak", "Huddle", "Jollywind", "Oneshoe", "Scramblewise", "Sunnyhill", "Tallgrass", "Timbers", "Underbough", "Wimbly"]
+    }
+  },
+  "personality_adjectives": [
+    "gruff", "cheerful", "suspicious", "earnest", "weary", "ambitious",
+    "haughty", "kind", "stoic", "anxious", "secretive", "garrulous",
+    "scholarly", "pious", "cynical", "naive", "wry", "fiery",
+    "calm", "manic", "melancholic", "shrewd", "gentle", "ruthless"
+  ],
+  "distinctive_features": [
+    "broken nose", "long scar across the cheek", "missing two fingers", "deep tan from years at sea",
+    "tattoo of a black rose on the shoulder", "white streak in dark hair", "soft lisp", "loud booming laugh",
+    "always carries a worn book", "eats sunflower seeds constantly", "wears mismatched gloves", "smells of woodsmoke",
+    "speaks in riddles", "hums while thinking", "winks too often", "never makes eye contact",
+    "missing tooth", "pierced ear with multiple rings", "carries a small caged bird", "wears a holy symbol of an obscure deity",
+    "left arm in a sling", "milky cataract over one eye", "writes notes constantly", "wears a strange amulet"
+  ],
+  "mannerisms": [
+    "fidgets with a coin", "taps the table when impatient", "always trails off mid-sentence",
+    "punctuates statements with 'aye'", "quotes scripture", "spits before answering",
+    "laughs at their own jokes before delivering them", "clears throat constantly",
+    "repeats key words for emphasis", "speaks slowly and deliberately", "speaks rapidly",
+    "uses elaborate metaphors", "swears in an obscure language", "compliments before correcting"
+  ],
+  "goals": [
+    "settle an old grudge", "find a missing family member", "retire wealthy",
+    "uncover an ancient secret", "build something lasting", "atone for a past mistake",
+    "win a person's affection", "best a hated rival", "join a prestigious organization",
+    "leave this town forever", "amass forbidden knowledge", "protect a vulnerable charge",
+    "complete a sacred quest", "find a cure for an illness", "expose a corrupt leader",
+    "achieve mastery of a craft", "escape a debt", "discover a lost ancestor",
+    "see a wonder of the world", "redeem a fallen friend"
+  ]
+}
