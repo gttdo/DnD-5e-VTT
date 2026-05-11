@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../lib/anthropic";
+import type { CampaignStyle } from "../data/campaignStyles";
 
 export interface AgentMessage extends ChatMessage {
   id: string;
@@ -12,6 +13,8 @@ export interface AgentCampaign {
   name: string;
   /** Free-form outline (markdown / plain text). Pre-loaded by the DM. */
   outline: string;
+  /** Style preset (flavor + tone + lethality) influencing the system prompt. */
+  style: CampaignStyle;
   /** If linked, the D&D Beyond campaign id we mirror context from. */
   dndbeyond_campaign_id: number | null;
   /** Chat history with the agent. */

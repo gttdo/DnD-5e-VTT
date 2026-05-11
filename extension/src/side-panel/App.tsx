@@ -5,18 +5,21 @@ import { RosterPanel } from "./RosterPanel";
 import { DnDBeyondPanel } from "./DnDBeyondPanel";
 import { CampaignsTab } from "./CampaignsTab";
 import { CampaignWorkspace } from "./CampaignWorkspace";
+import { CreateCampaignScreen } from "./CreateCampaignScreen";
 import { SettingsModal } from "./SettingsModal";
 import { useAgentCampaigns } from "../state/useAgentCampaigns";
 import type { AgentCampaign } from "../types/agentCampaign";
 
 type Tab = "live" | "roster" | "campaigns";
+type ModalScreen = "create-campaign" | null;
 
 export const App = () => {
   const auth = useAuth();
   const [tab, setTab] = useState<Tab>("campaigns");
   const [openCampaignId, setOpenCampaignId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const { campaigns } = useAgentCampaigns();
+  const [modal, setModal] = useState<ModalScreen>(null);
+  const { campaigns, create } = useAgentCampaigns();
 
   if (auth.loading) {
     return (
@@ -33,7 +36,27 @@ export const App = () => {
   const openCampaign: AgentCampaign | undefined =
     openCampaignId ? campaigns.find((c) => c.id === openCampaignId) : undefined;
 
-  // If we have an open campaign, show the workspace as the full panel.
+  // Full-screen modals (over everything except SettingsModal which is its own overlay)
+  if (modal === "create-campaign") {
+    return (
+      <>
+        <CreateCampaignScreen
+          onCancel={() => setModal(null)}
+          onCreate={async (input) => {
+            const c = await create(input.name, {
+              outline: input.outline,
+              style: input.style,
+              dndbeyondId: input.dndbeyondId,
+            });
+            setModal(null);
+            setOpenCampaignId(c.id);
+          }}
+        />
+        {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      </>
+    );
+  }
+
   if (openCampaign) {
     return (
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -97,7 +120,12 @@ export const App = () => {
       </nav>
 
       <main style={{ flex: 1, overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
-        {tab === "campaigns" && <CampaignsTab onOpen={(c) => setOpenCampaignId(c.id)} />}
+        {tab === "campaigns" && (
+          <CampaignsTab
+            onOpen={(c) => setOpenCampaignId(c.id)}
+            onCreate={() => setModal("create-campaign")}
+          />
+        )}
         {tab === "live" && <DnDBeyondPanel />}
         {tab === "roster" && <RosterPanel onOpen={() => { /* TODO: drill-in */ }} />}
       </main>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentCampaign, AgentMessage } from "../types/agentCampaign";
+import { DEFAULT_STYLE, type CampaignStyle } from "../data/campaignStyles";
 
 const STORAGE_KEY = "dm-agent-campaigns";
 
@@ -38,22 +39,41 @@ export const useAgentCampaigns = () => {
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  const create = useCallback(async (name: string, outline = ""): Promise<AgentCampaign> => {
-    const now = Date.now();
-    const camp: AgentCampaign = {
-      id: crypto.randomUUID(),
-      name,
-      outline,
-      dndbeyond_campaign_id: null,
-      messages: [],
-      created_at: now,
-      updated_at: now,
-    };
-    const next = [...campaigns, camp];
+  const create = useCallback(
+    async (
+      name: string,
+      opts: { outline?: string; style?: CampaignStyle; dndbeyondId?: number | null } = {}
+    ): Promise<AgentCampaign> => {
+      const now = Date.now();
+      const camp: AgentCampaign = {
+        id: crypto.randomUUID(),
+        name,
+        outline: opts.outline ?? "",
+        style: opts.style ?? { ...DEFAULT_STYLE },
+        dndbeyond_campaign_id: opts.dndbeyondId ?? null,
+        messages: [],
+        created_at: now,
+        updated_at: now,
+      };
+      const next = [...campaigns, camp];
+      setCampaigns(next);
+      await write(next);
+      return camp;
+    },
+    [campaigns]
+  );
+
+  // Migration: existing campaigns may not have `style` yet.
+  useEffect(() => {
+    if (!loaded) return;
+    const needsBackfill = campaigns.some((c) => !c.style);
+    if (!needsBackfill) return;
+    const next = campaigns.map((c) =>
+      c.style ? c : { ...c, style: { ...DEFAULT_STYLE } }
+    );
     setCampaigns(next);
-    await write(next);
-    return camp;
-  }, [campaigns]);
+    void write(next);
+  }, [loaded, campaigns]);
 
   const update = useCallback(async (id: string, patch: Partial<AgentCampaign>) => {
     const next = campaigns.map((c) =>

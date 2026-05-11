@@ -1,6 +1,7 @@
 import type { AgentCampaign } from "../types/agentCampaign";
 import type { CampaignDetailSnapshot } from "../types/snapshots";
 import { DM_SKILL_PRIMER } from "../data/dmSkillPrimer";
+import { stylePromptBlock, DEFAULT_STYLE } from "../data/campaignStyles";
 
 /**
  * Assemble the system prompt for an agent turn.
@@ -22,6 +23,11 @@ export const buildSystemPrompt = (
   const parts: string[] = [DM_SKILL_PRIMER];
 
   parts.push("\n---\n## CAMPAIGN: " + campaign.name);
+
+  const styleBlock = stylePromptBlock(campaign.style ?? DEFAULT_STYLE);
+  if (styleBlock) {
+    parts.push("\n### Style\n" + styleBlock);
+  }
 
   if (campaign.outline?.trim()) {
     parts.push("\n### Outline\n" + campaign.outline.trim());

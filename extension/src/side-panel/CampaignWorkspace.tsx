@@ -5,6 +5,15 @@ import { useAgentCampaigns } from "../state/useAgentCampaigns";
 import { useSettings } from "../state/useSettings";
 import { buildSystemPrompt } from "../lib/dmAgent";
 import { complete, type ChatMessage } from "../lib/anthropic";
+import {
+  FANTASY_FLAVORS,
+  TONES,
+  LETHALITY,
+  DEFAULT_STYLE,
+  type FantasyFlavorId,
+  type ToneId,
+  type LethalityId,
+} from "../data/campaignStyles";
 
 const LATEST_KEY = "latest-snapshots";
 
@@ -22,6 +31,7 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
   const [error, setError] = useState<string | null>(null);
   const [editingOutline, setEditingOutline] = useState(false);
   const [outlineDraft, setOutlineDraft] = useState(campaign.outline);
+  const [editingStyle, setEditingStyle] = useState(false);
   const [dndb, setDndb] = useState<CampaignDetailSnapshot | null>(null);
   const [activeSurface, setActiveSurface] = useState<Surface | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -202,7 +212,7 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
           </div>
         )}
 
-        <div className="row" style={{ gap: 4, marginTop: 6 }}>
+        <div className="row" style={{ gap: 4, marginTop: 6, flexWrap: "wrap" }}>
           {dndb && (
             <span className="dim" style={{ fontSize: 10 }}>
               ✓ Reading {dndb.party.length} party + DM Notes from D&D Beyond
@@ -217,6 +227,24 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
             <button className="ghost" onClick={handleUnlink} style={{ fontSize: 10, padding: "2px 6px", color: "var(--accent)" }}>
               Unlink
             </button>
+          )}
+        </div>
+
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line)" }}>
+          {!editingStyle ? (
+            <StyleSummary
+              campaign={campaign}
+              onEdit={() => setEditingStyle(true)}
+            />
+          ) : (
+            <StyleEditor
+              campaign={campaign}
+              onSave={async (style) => {
+                await update(campaign.id, { style });
+                setEditingStyle(false);
+              }}
+              onCancel={() => setEditingStyle(false)}
+            />
           )}
         </div>
       </div>
@@ -271,6 +299,79 @@ export const CampaignWorkspace = ({ campaign, onBack, onOpenSettings }: Props) =
             Send
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const StyleSummary = ({ campaign, onEdit }: { campaign: AgentCampaign; onEdit: () => void }) => {
+  const style = campaign.style ?? DEFAULT_STYLE;
+  const flavor = FANTASY_FLAVORS.find((f) => f.id === style.flavor);
+  const tone = TONES.find((t) => t.id === style.tone);
+  const leth = LETHALITY.find((l) => l.id === style.lethality);
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+        <span className="label">Style</span>
+        <button
+          className="ghost"
+          style={{ fontSize: 10, padding: "2px 6px" }}
+          onClick={onEdit}
+        >
+          Edit
+        </button>
+      </div>
+      <div className="dim" style={{ fontSize: 11 }}>
+        <span style={{ color: "var(--gold)" }}>{flavor?.label ?? style.flavor}</span>
+        {" · "}
+        <span>{tone?.label ?? style.tone}</span>
+        {" · "}
+        <span>{leth?.label ?? style.lethality}</span>
+      </div>
+    </div>
+  );
+};
+
+const StyleEditor = ({
+  campaign,
+  onSave,
+  onCancel,
+}: {
+  campaign: AgentCampaign;
+  onSave: (style: { flavor: FantasyFlavorId; tone: ToneId; lethality: LethalityId }) => Promise<void>;
+  onCancel: () => void;
+}) => {
+  const initial = campaign.style ?? DEFAULT_STYLE;
+  const [flavor, setFlavor] = useState<FantasyFlavorId>(initial.flavor);
+  const [tone, setTone] = useState<ToneId>(initial.tone);
+  const [lethality, setLethality] = useState<LethalityId>(initial.lethality);
+
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      <span className="label">Style</span>
+      <label className="col" style={{ gap: 2 }}>
+        <span className="dim" style={{ fontSize: 10 }}>Fantasy Flavor</span>
+        <select value={flavor} onChange={(e) => setFlavor(e.target.value as FantasyFlavorId)}>
+          {FANTASY_FLAVORS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </label>
+      <label className="col" style={{ gap: 2 }}>
+        <span className="dim" style={{ fontSize: 10 }}>Tone</span>
+        <select value={tone} onChange={(e) => setTone(e.target.value as ToneId)}>
+          {TONES.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </label>
+      <label className="col" style={{ gap: 2 }}>
+        <span className="dim" style={{ fontSize: 10 }}>Combat Lethality</span>
+        <select value={lethality} onChange={(e) => setLethality(e.target.value as LethalityId)}>
+          {LETHALITY.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+      </label>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 4 }}>
+        <button className="ghost" onClick={onCancel} style={{ fontSize: 11 }}>Cancel</button>
+        <button className="primary" onClick={() => void onSave({ flavor, tone, lethality })} style={{ fontSize: 11 }}>
+          Save
+        </button>
       </div>
     </div>
   );
