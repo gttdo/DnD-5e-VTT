@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>D&D 5e VTT — DM Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-0: #0c0e12;
+        --bg-1: #14181f;
+        --bg-3: #252c3a;
+        --panel: rgba(28, 34, 48, 0.95);
+        --panel-border: #3a4458;
+        --line: #2a3142;
+        --text: #e7e9ee;
+        --text-dim: #a7adba;
+        --text-muted: #6a7282;
+        --accent: #c0392b;
+        --gold: #d4af37;
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 13px;
+        color: var(--text);
+        background: var(--bg-0);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 0; min-height: 100vh; }
+      #root { min-height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
