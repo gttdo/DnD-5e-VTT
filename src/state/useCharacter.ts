@@ -1,14 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Character, Condition, InventoryItem, Attack, Feature } from "../types/character";
 import { sampleCharacter } from "../data/sampleCharacter";
-import { loadCharacter, saveCharacter } from "../lib/persistence";
+import { getCharacter, upsertCharacter } from "../lib/persistence";
 
-export const useCharacter = () => {
-  const [character, setCharacter] = useState<Character>(() => loadCharacter() ?? sampleCharacter);
+const STORAGE_EVENT = "dnd-5e-vtt:roster-changed";
 
-  // Persist on every change
+export const useCharacter = (id: string | null) => {
+  const [character, setCharacter] = useState<Character>(() => {
+    if (id) {
+      const stored = getCharacter(id);
+      if (stored) return stored;
+    }
+    return sampleCharacter;
+  });
+
+  // Reload when the active ID changes.
   useEffect(() => {
-    saveCharacter(character);
+    if (id) {
+      const stored = getCharacter(id);
+      if (stored) setCharacter(stored);
+    }
+  }, [id]);
+
+  // Persist on every change.
+  useEffect(() => {
+    upsertCharacter(character);
+    window.dispatchEvent(new Event(STORAGE_EVENT));
   }, [character]);
 
   const update = useCallback((mut: (draft: Character) => Character) => {
@@ -85,7 +102,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Inspiration ----------------
   const toggleInspiration = useCallback(
     () =>
       update((d) => {
@@ -95,7 +111,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Conditions ----------------
   const toggleCondition = useCallback(
     (cond: Condition) =>
       update((d) => {
@@ -107,7 +122,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Feature uses ----------------
   const setFeatureUses = useCallback(
     (id: string, current: number) =>
       update((d) => {
@@ -119,7 +133,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Inventory ----------------
   const addItem = useCallback(
     (item: InventoryItem) =>
       update((d) => {
@@ -147,7 +160,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Attacks ----------------
   const addAttack = useCallback(
     (atk: Attack) =>
       update((d) => {
@@ -175,7 +187,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Features ----------------
   const addFeature = useCallback(
     (feat: Feature) =>
       update((d) => {
@@ -194,7 +205,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Name / portrait / basic info ----------------
   const setName = useCallback(
     (name: string) =>
       update((d) => {
@@ -204,7 +214,6 @@ export const useCharacter = () => {
     [update]
   );
 
-  // ---------------- Currency ----------------
   const setCurrency = useCallback(
     (coin: keyof Character["currency"], value: number) =>
       update((d) => {
@@ -213,9 +222,6 @@ export const useCharacter = () => {
       }),
     [update]
   );
-
-  // ---------------- Resets ----------------
-  const reset = useCallback(() => setCharacter(structuredClone(sampleCharacter)), []);
 
   return {
     character,
@@ -239,7 +245,6 @@ export const useCharacter = () => {
     removeFeature,
     setName,
     setCurrency,
-    reset,
   };
 };
 
