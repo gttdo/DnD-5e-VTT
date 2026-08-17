@@ -3,6 +3,7 @@ import { Dialog } from "./ui/Dialog";
 import { Icon, type IconName } from "./ui/Icon";
 import { useRules } from "../state/Rules";
 import { findMonster } from "../lib/bestiary";
+import { npcTemplates } from "../lib/npcTemplates";
 import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
 import { abilityMod, formatMod } from "../lib/calc";
 import { TOKEN_SIZES, CREATURE_TYPES, findSize, type TokenSize, type CreatureType } from "../lib/tokenSmith";
@@ -431,7 +432,7 @@ export const TokenStudioDialog = ({
               </div>
             )}
             {details.kind === "monster" && <MonsterPreview d={details} onEdit={editMonster} advOpen={advOpen} onAdv={() => setAdvOpen((o) => !o)} />}
-            {details.kind === "npc" && <NpcPreview d={details} onEdit={editNpc} />}
+            {details.kind === "npc" && <NpcPreview d={details} onEdit={editNpc} bestiary={bestiary} />}
             {details.kind === "item" && <ItemPreview d={details} onEdit={editItem} advOpen={advOpen} onAdv={() => setAdvOpen((o) => !o)} />}
             {details.kind === "prop" && <PropPreview d={details} onEdit={editProp} />}
             {details.kind === "spell" && <SpellPreview d={details} onEdit={editSpell} />}
@@ -612,13 +613,53 @@ const MonsterPreview = ({ d, onEdit, advOpen, onAdv }: {
   );
 };
 
-const NpcPreview = ({ d, onEdit }: {
+const NpcPreview = ({ d, onEdit, bestiary }: {
   d: Extract<TokenDetails, { kind: "npc" }>;
   onEdit: (fn: (n: NpcProfile) => void) => void;
+  bestiary: MonsterStatblock[] | null;
 }) => {
   const n = d.npc;
+  const templates = npcTemplates(bestiary);
+  const sb = n.statblock;
+  const isTemplate = !!sb && templates.some((t) => t.name === sb.name);
+  const selectValue = sb ? (isTemplate ? sb.name : "__custom__") : "";
+  const attacks = (sb?.actions ?? []).filter((a) => a.attackBonus != null || a.saveDc != null);
   return (
     <>
+      {/* Combat stats — an NPC that fights carries a statblock and renders the
+          full combat HUD on the board. Pick an SRD template, keep the AI-drafted
+          one, or leave it a peaceful (statless) NPC. */}
+      <div className="tstudio-sec">Combat stats</div>
+      <div className="tstudio-npc-combat">
+        <select
+          className="tstudio-ein"
+          value={selectValue}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "" ) { onEdit((x) => { x.statblock = undefined; }); return; }
+            if (v === "__custom__") return; // keep the AI-drafted block as-is
+            const pick = templates.find((t) => t.name === v);
+            if (pick) onEdit((x) => { x.statblock = { ...pick }; });
+          }}
+        >
+          <option value="">None — peaceful NPC (no combat HUD)</option>
+          {sb && !isTemplate && <option value="__custom__">Drafted — {sb.name}</option>}
+          {templates.map((t) => (
+            <option key={t.name} value={t.name}>{t.name} · CR {t.cr}</option>
+          ))}
+        </select>
+        {sb && (
+          <div className="tstudio-npc-sbsum">
+            <span className="tstudio-npc-stat"><b>AC</b> {sb.ac}</span>
+            <span className="tstudio-npc-stat"><b>HP</b> {sb.hp}</span>
+            <span className="tstudio-npc-stat"><b>CR</b> {sb.cr}</span>
+            {attacks.slice(0, 4).map((a) => (
+              <span key={a.name} className="tstudio-npc-atk">{a.name}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="tstudio-grid2">
         <EField l="Ancestry"><EIn value={n.ancestry ?? ""} onChange={(v) => onEdit((x) => { x.ancestry = v; })} /></EField>
         <EField l="Role"><EIn value={n.role ?? ""} onChange={(v) => onEdit((x) => { x.role = v; })} /></EField>

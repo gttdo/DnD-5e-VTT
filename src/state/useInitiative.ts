@@ -30,6 +30,10 @@ export interface UseInitiative {
    *  Resolves with an error message if any write failed (e.g. migration 0008
    *  not applied yet), null on success. */
   rollAll: (rollFor: (t: Token) => number) => Promise<string | null>;
+  /** The initiative ritual (#102): start combat, auto-rolling ONLY the DM-side
+   *  combatants (monsters/NPCs with no bound character). Player-character tokens
+   *  are left blank so each player rolls their own on their screen. */
+  beginWithPlayerRolls: (rollFor: (t: Token) => number) => Promise<string | null>;
   start: () => Promise<string | null>;
   end: () => Promise<void>;
   next: () => Promise<void>;
@@ -74,6 +78,25 @@ export const useInitiative = (scene: Scene | null, tokens: Token[]): UseInitiati
     [tokens, patchScene]
   );
 
+  const beginWithPlayerRolls = useCallback(
+    async (rollFor: (t: Token) => number): Promise<string | null> => {
+      // Auto-roll the DM's side only: creatures with no bound character (monsters,
+      // NPCs). A token linked to a player character is left blank on purpose —
+      // its controller gets a "Roll for initiative" prompt on their own client
+      // (see TableCanvas). Props/spell areas never roll. Only fills blanks.
+      const auto = tokens.filter(
+        (t) => t.initiative == null && !t.character_id && t.kind !== "prop" && t.kind !== "spell"
+      );
+      const results = await Promise.all(
+        auto.map((t) => supabase.from("tokens").update({ initiative: rollFor(t) }).eq("id", t.id))
+      );
+      const writeError = results.find((r) => r.error)?.error?.message;
+      const sceneError = await patchScene({ in_combat: true, round: 1, turn_index: 0 });
+      return writeError ?? sceneError;
+    },
+    [tokens, patchScene]
+  );
+
   const start = useCallback(
     () => patchScene({ in_combat: true, round: 1, turn_index: 0 }),
     [patchScene]
@@ -102,5 +125,5 @@ export const useInitiative = (scene: Scene | null, tokens: Token[]): UseInitiati
   const next = useCallback(() => step(1), [step]);
   const previous = useCallback(() => step(-1), [step]);
 
-  return { order, activeToken, inCombat, round, setInitiative, rollAll, start, end, next, previous };
+  return { order, activeToken, inCombat, round, setInitiative, rollAll, beginWithPlayerRolls, start, end, next, previous };
 };

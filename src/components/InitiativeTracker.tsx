@@ -27,24 +27,34 @@ interface Props {
   dispositionOf?: (t: Token) => "friendly" | "hostile";
   /** DM flips a creature hostile ↔ friendly — drives Opportunity Attacks. */
   onToggleDisposition?: (t: Token) => void;
+  /** Combatants who still owe an initiative roll (players who haven't rolled). */
+  pendingRolls?: number;
 }
 
 const initialsOf = (label: string) =>
   label.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
 
-export const InitiativeTracker = ({ init, isDM, rollFor, onClose, onFocusToken, dispositionOf, onToggleDisposition }: Props) => {
+export const InitiativeTracker = ({ init, isDM, rollFor, onClose, onFocusToken, dispositionOf, onToggleDisposition, pendingRolls = 0 }: Props) => {
   const { order, activeToken, inCombat, round } = init;
   const toast = useToast();
 
-  const rollAll = async () => {
+  const columnsMissing = (error: string) =>
+    error.includes("initiative") || error.includes("in_combat")
+      ? "Combat columns are missing — apply migration 0008_initiative.sql to your database."
+      : error;
+
+  // Start the fight: monsters/NPCs auto-roll, players roll their own on their
+  // screens (the ritual, #102).
+  const begin = async () => {
+    const error = await init.beginWithPlayerRolls(rollFor);
+    if (error) toast.error(columnsMissing(error));
+  };
+
+  // Fill any blanks the DM wants to force — an absent player's token, or a "just
+  // roll everyone" shortcut.
+  const rollRemaining = async () => {
     const error = await init.rollAll(rollFor);
-    if (error) {
-      toast.error(
-        error.includes("initiative") || error.includes("in_combat")
-          ? "Combat columns are missing — apply migration 0008_initiative.sql to your database."
-          : error
-      );
-    }
+    if (error) toast.error(columnsMissing(error));
   };
 
   return (
@@ -129,9 +139,9 @@ export const InitiativeTracker = ({ init, isDM, rollFor, onClose, onFocusToken, 
       {isDM && (
         <div className="init-actions">
           {!inCombat ? (
-            <button className="primary" onClick={() => void rollAll()}>
+            <button className="primary" onClick={() => void begin()}>
               <Icon name="dice" size={13} />
-              Roll initiative
+              Roll for initiative
             </button>
           ) : (
             <>
@@ -148,6 +158,15 @@ export const InitiativeTracker = ({ init, isDM, rollFor, onClose, onFocusToken, 
             </>
           )}
         </div>
+      )}
+
+      {/* Players roll their own on their screens; the DM can force any who are
+          absent (or short-circuit the whole roll) from here. */}
+      {isDM && inCombat && pendingRolls > 0 && (
+        <button className="init-pending" onClick={() => void rollRemaining()}>
+          <Icon name="dice" size={12} />
+          Waiting on {pendingRolls} to roll — roll for them
+        </button>
       )}
     </aside>
   );

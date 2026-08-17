@@ -138,6 +138,33 @@ const wrap = (kind: TokenType, raw: unknown): TokenDetails =>
           ? { kind: "spell", spell: raw as SpellTokenDetails }
           : { kind: "item", item: raw as MagicItem };
 
+/**
+ * Draft a humanoid statblock for a generated NPC so it can actually fight — the
+ * profile generator returns narrative only (ancestry, personality…), no combat
+ * stats. We reuse the SAME generate-statblock function in its "monster" mode,
+ * seeded from the NPC's identity, and stamp the NPC's own name on the result.
+ * Best-effort: on any failure the NPC is simply left statless (the DM can attach
+ * an SRD template in the studio), so combat readiness never blocks creation.
+ */
+const draftNpcStatblock = async (
+  npc: NpcProfile,
+  description: string
+): Promise<MonsterStatblock | undefined> => {
+  const subject = [npc.name, npc.ancestry, npc.role].filter(Boolean).join(", ");
+  const notes = [description, npc.appearance].filter(Boolean).join(". ");
+  try {
+    const { data, error } = await supabase.functions.invoke("generate-statblock", {
+      body: { kind: "monster", name: subject || npc.name, description: notes, size: "medium" },
+    });
+    if (error) return undefined;
+    const payload = data as { details?: MonsterStatblock; error?: string };
+    if (payload.error || !payload.details) return undefined;
+    return { ...payload.details, name: npc.name, type: payload.details.type || "Humanoid" };
+  } catch {
+    return undefined;
+  }
+};
+
 /** Lookup (SRD monsters) then generate (unknown / NPC / item). */
 export const resolveStats = async (
   kind: TokenType,
@@ -179,7 +206,13 @@ export const resolveStats = async (
   const payload = data as { details?: unknown; error?: string };
   if (payload.error) throw new Error(payload.error);
   if (!payload.details) throw new Error("The generator returned no details.");
-  return { details: wrap(kind, payload.details), source: "generated" };
+  const details = wrap(kind, payload.details);
+  // NPCs need combat stats to take a turn; the profile pass returns none, so
+  // draft a matching statblock in a second pass (unless one already came back).
+  if (details.kind === "npc" && !details.npc.statblock) {
+    details.npc.statblock = await draftNpcStatblock(details.npc, description);
+  }
+  return { details, source: "generated" };
 };
 
 /** Generate the art via the image edge function; returns the stored URL. */

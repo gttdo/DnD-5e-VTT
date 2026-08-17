@@ -5763,3 +5763,234 @@ button.topbar-stat {
   font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--candle);
 }
+
+/* ============================================================================
+   Combat: turn rail (#81) + start ritual banner (#102)
+   ========================================================================== */
+
+/* BG3-style horizontal turn rail across the top of the table. */
+.turn-rail {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 13;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(92%, 900px);
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+}
+.turn-rail-round {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  color: var(--candle);
+  flex: none;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+}
+.turn-rail-round-n { font-family: var(--font-display); font-size: 18px; line-height: 1; }
+.turn-rail-round-l {
+  font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
+}
+.turn-rail-list {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.turn-rail-list::-webkit-scrollbar { display: none; }
+.turn-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 3px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  flex: none;
+}
+.turn-rail-item:hover { background: rgba(255, 255, 255, 0.06); }
+.turn-rail-item.is-active {
+  background: rgba(230, 179, 76, 0.14);
+  border-color: var(--candle);
+  transform: translateY(1px) scale(1.04);
+}
+.turn-rail-item.is-down { opacity: 0.4; filter: grayscale(0.7); }
+.turn-rail-portrait {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  border: 2px solid var(--border);
+  flex: none;
+}
+.turn-rail-item.is-active .turn-rail-portrait { width: 42px; height: 42px; }
+.turn-rail-item.is-hostile .turn-rail-portrait { border-color: var(--ember); }
+.turn-rail-item.is-friendly .turn-rail-portrait { border-color: #6fae6f; }
+.turn-rail-item.is-pc .turn-rail-portrait { border-color: var(--candle); }
+.turn-rail-score {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--ink);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 13px;
+  text-align: center;
+  z-index: 1;
+}
+.turn-rail-name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 2px;
+}
+.turn-rail-pending {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+  flex: none;
+}
+.turn-rail-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.turn-rail-controls button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.turn-rail-controls button:hover { border-color: var(--candle); }
+.turn-rail-next { font-family: var(--font-display); letter-spacing: 0.06em; }
+.turn-rail-end { color: var(--text-muted); }
+.turn-rail-end:hover { border-color: var(--ember) !important; color: var(--ember); }
+
+/* The DM "someone still owes a roll" straggler control in the side tracker. */
+.init-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.init-pending:hover { border-color: var(--candle); color: var(--text); }
+
+/* Combat-start ritual — a fleeting centred banner as initiative begins. */
+.combat-banner {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 46px;
+  text-align: center;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(20, 16, 12, 0.82), rgba(20, 16, 12, 0));
+  animation: combatBanner 2.6s ease-in-out forwards;
+}
+.combat-banner-swords { color: var(--candle); filter: drop-shadow(0 0 12px rgba(230, 179, 76, 0.6)); }
+.combat-banner-title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  letter-spacing: 0.08em;
+  color: var(--candle);
+  text-shadow: 0 2px 18px rgba(230, 179, 76, 0.45);
+}
+.combat-banner-sub {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+@keyframes combatBanner {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  14%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  78%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .combat-banner { animation: combatBannerFade 2.6s linear forwards; }
+  .turn-rail-item.is-active { transform: none; }
+}
+@keyframes combatBannerFade { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+
+/* NPC combat-stats picker in the Token Studio (#144). */
+.tstudio-npc-combat { display: flex; flex-direction: column; gap: 6px; }
+.tstudio-npc-sbsum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.tstudio-npc-stat {
+  color: var(--text);
+  padding: 2px 7px;
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+.tstudio-npc-stat b { color: var(--candle); font-weight: 600; margin-right: 2px; }
+.tstudio-npc-atk {
+  color: var(--text-muted);
+  padding: 2px 7px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}

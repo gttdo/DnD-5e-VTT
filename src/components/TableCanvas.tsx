@@ -40,6 +40,7 @@ import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
 import { PartyTray, DRAG_MIME } from "./PartyTray";
 import { InitiativeTracker } from "./InitiativeTracker";
+import { CombatTurnRail } from "./CombatTurnRail";
 import { RulesReference } from "./RulesReference";
 import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
@@ -306,9 +307,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     if (!activeScene) return { error: "no active scene" };
     const span = findSize(asset.size_category).cells;
     // A monster asset carries its statblock onto the token, with its own HP, so
-    // the DM's in-combat HUD can read + track it per placed instance.
+    // the DM's in-combat HUD can read + track it per placed instance. An NPC that
+    // fights carries the SAME thing under details.npc.statblock — copy it too so
+    // stat-carrying NPCs render the combat HUD instead of a bare identity card.
     const monster =
-      asset.token_type === "monster" && asset.details?.kind === "monster" ? asset.details.monster : null;
+      asset.token_type === "monster" && asset.details?.kind === "monster"
+        ? asset.details.monster
+        : asset.token_type === "npc" && asset.details?.kind === "npc"
+          ? asset.details.npc.statblock ?? null
+          : null;
     // Props and Spells freeze their board-behavior data at placement (like the
     // statblock above), so the canvas needs no join back to the library:
     //   • a spell copies its area footprint → translucent AoE render (#80)
@@ -379,6 +386,31 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   }, [tokens, characters, ownedCharacterIds, updateToken]);
 
   const init = useInitiative(activeScene ?? null, combatTokens);
+  // Combatants who still owe an initiative roll once the fight has begun — the
+  // players whose tokens the ritual left blank (monsters auto-roll). Drives the
+  // per-player roll prompt, the rail's "rolling…" chip, and the DM straggler
+  // control. Props/spell areas never roll.
+  const pendingRollers = useMemo(
+    () =>
+      init.inCombat
+        ? combatTokens.filter((t) => t.initiative == null && t.kind !== "prop" && t.kind !== "spell")
+        : [],
+    [init.inCombat, combatTokens]
+  );
+
+  // The combat-start "ritual": a brief banner shown the moment the scene enters
+  // combat. Driven by the synced in_combat flag, so it lands on every client.
+  const [combatBanner, setCombatBanner] = useState(false);
+  const wasInCombat = useRef(false);
+  useEffect(() => {
+    if (init.inCombat && !wasInCombat.current) {
+      wasInCombat.current = true;
+      setCombatBanner(true);
+      const t = window.setTimeout(() => setCombatBanner(false), 2600);
+      return () => window.clearTimeout(t);
+    }
+    if (!init.inCombat) wasInCombat.current = false;
+  }, [init.inCombat]);
   const { pings, sendPing } = usePings(activeScene?.id ?? null);
   const spellFx = useSpellFx(activeScene?.id ?? null);
   const partyOwners = usePartyOwners(game.id, game.dm_user_id);
@@ -757,6 +789,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     // click (even one that drifts a pixel toward the HUD) never lifts the token.
     if (!drag.active) {
       if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
+      // Turn gate on REAL drag intent: a combatant can't move off its turn. Say
+      // why and abort the lift (a plain select-click never reaches here).
+      const dt = tokens.find((tt) => tt.id === drag.id);
+      if (dt && blockedByTurn(dt)) {
+        toast.info(`It isn't ${dt.label}'s turn to move.`);
+        tokenDragRef.current = null;
+        return;
+      }
       drag.active = true;
     }
     const local = clientToSvg(e.clientX, e.clientY);
@@ -1270,6 +1310,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // area.movable and can be repositioned; for now that's DM-only until the token
   // tracks its caster (#125). Otherwise: DM moves anything; a player moves only
   // their own character token or a prop/scenery token.
+  // Ownership: who may move this token at all. The DM moves anything; a player
+  // moves only their own character token or a prop/scenery token (no statblock,
+  // no owner). The in-combat TURN gate is applied separately, at drag lift-off
+  // (see onDragMoveRef → blockedByTurn), so a plain select-click stays quiet.
   const canMoveToken = useCallback(
     (t: Token): boolean => {
       if (t.kind === "spell") return isDM && t.area?.movable === true;
@@ -1278,6 +1322,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     },
     [isDM, ownedCharacterIds]
   );
+
+  // Turn gate: once a fight is underway, a COMBATANT (any creature — PC, NPC, or
+  // monster) may only move on its OWN turn — the DM included. Scenery/props (no
+  // statblock, no character) stay freely movable for staging. No gate out of
+  // combat. Checked at real drag intent so selecting a token still works.
+  const blockedByTurn = (t: Token): boolean =>
+    init.inCombat && (!!t.character_id || !!t.statblock) && init.activeToken?.id !== t.id;
 
   // The HUD binds to the character the selected token represents (a plain
   // monster token has none — its statblock HUD arrives with the bestiary).
@@ -4127,7 +4178,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               economy={economyView}
               onSpend={(w) => markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}
-              endTurnEnabled={isDM || init.activeToken?.id === selectedToken.id}
+              // Only the ACTIVE combatant can end its turn — not "any token the
+              // DM has selected". The DM advances other/idle turns from the turn
+              // rail's Next button instead.
+              endTurnEnabled={init.activeToken?.id === selectedToken.id}
               conditions={selectedToken.conditions ?? undefined}
               onHp={(current) => void updateToken(selectedToken.id, { hp_current: current })}
               hidden={selectedToken.hidden}
@@ -4192,7 +4246,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               economy={economyView}
               onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}
-              endTurnEnabled={isDM || (!!selectedToken && init.activeToken?.id === selectedToken.id)}
+              // Same gate as the monster HUD: end-turn belongs to whoever's turn
+              // it actually is (the DM uses the rail's Next for everything else).
+              endTurnEnabled={!!selectedToken && init.activeToken?.id === selectedToken.id}
               conditions={selectedToken?.conditions ?? undefined}
               hp={hpApi}
               onCloseModal={() => setHudModal(null)}
@@ -4240,6 +4296,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               rollFor={rollInitiativeFor}
               dispositionOf={dispositionOf}
               onToggleDisposition={toggleDisposition}
+              pendingRolls={pendingRollers.length}
               onClose={() => setInitOpen(false)}
               onFocusToken={(t) => {
                 // Centre the view on the combatant whose turn it is.
@@ -4251,6 +4308,40 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 setSelectedId(t.id);
               }}
             />
+          )}
+
+          {/* BG3-style turn rail across the top — always visible in combat, unlike
+              the toggled side tracker. The DM drives the fight from here. */}
+          {init.inCombat && (
+            <CombatTurnRail
+              order={init.order}
+              activeToken={init.activeToken}
+              round={init.round}
+              isDM={isDM}
+              pendingRolls={pendingRollers.length}
+              onNext={() => void init.next()}
+              onPrev={() => void init.previous()}
+              onEnd={() => void init.end()}
+              onFocusToken={(t) => {
+                const span = findSize(t.size).cells;
+                setPan({
+                  x: (t.x + span / 2) * CELL - width / zoom / 2,
+                  y: (t.y + span / 2) * CELL - height / zoom / 2,
+                });
+                setSelectedId(t.id);
+              }}
+            />
+          )}
+
+          {/* Combat-start ritual — a fleeting banner as initiative begins. */}
+          {combatBanner && (
+            <div className="combat-banner" role="status" aria-live="polite">
+              <span className="combat-banner-swords">
+                <GameGlyph src="/icons/game_state/game_initiative.svg" size={30} />
+              </span>
+              <span className="combat-banner-title">Roll for Initiative</span>
+              <span className="combat-banner-sub">Combat begins — Round {init.round}</span>
+            </div>
           )}
 
           {tool === "fog" && isDM && (
@@ -4615,6 +4706,32 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               setStealRoll(null);
             }}
             onAutoFail={() => setStealRoll(null)}
+          />
+        );
+      })()}
+
+      {/* Initiative ritual (#102): each player rolls their OWN token's initiative
+          on their screen. Monsters/NPCs were auto-rolled when combat began; the
+          DM covers absent players from the tracker. Non-dismissible — the die is
+          the only way forward, just like BG3. */}
+      {init.inCombat && (() => {
+        const mine = pendingRollers.find((t) => !!t.character_id && iControlToken(t));
+        if (!mine || !mine.character_id) return null;
+        const ch = characters.find((c) => c.id === mine.character_id);
+        if (!ch) return null;
+        const bonus = initiativeMod(ch);
+        return (
+          <DiceRollDialog
+            title="Roll for Initiative"
+            subtitle={`${ch.name} · combat begins`}
+            bonus={bonus}
+            chips={[{ label: "Initiative", value: bonus }]}
+            performRoll={(mode) => rollD20(bonus, mode)}
+            onComplete={(res) => {
+              void init.setInitiative(mine.id, res.total);
+              broadcastRoll(ch.name, [{ label: `${ch.name} · Initiative`, result: res }]);
+            }}
+            onAutoFail={() => {}}
           />
         );
       })()}
