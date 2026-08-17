@@ -1,11 +1,16 @@
+import { useMemo } from "react";
 import type { Character } from "../types/character";
 import type { CharacterAPI } from "../state/useCharacter";
 import { attackBonus, damageBonus, formatMod } from "../lib/calc";
+import { resolveAttacks, damageLabel } from "../lib/attacks";
 import { roll, rollD20 } from "../lib/dice";
 import { useDiceLog } from "../state/DiceLog";
+import { DamageType } from "./ui/DamageType";
 
 export const ActionsPanel = ({ character: c }: { character: Character; api: CharacterAPI }) => {
   const { push } = useDiceLog();
+  // Only weapons the character is actually wielding — see lib/attacks.
+  const attacks = useMemo(() => resolveAttacks(c), [c]);
 
   const doAttack = (atk: Character["attacks"][number]) => {
     const hit = rollD20(attackBonus(c, atk));
@@ -21,7 +26,7 @@ export const ActionsPanel = ({ character: c }: { character: Character; api: Char
 
   return (
     <div>
-      <div className="panel-title" style={{ marginTop: 12 }}>Attacks & Damage</div>
+      <div className="panel-title">Attacks &amp; Damage</div>
       <table className="attack-table">
         <thead>
           <tr>
@@ -33,14 +38,17 @@ export const ActionsPanel = ({ character: c }: { character: Character; api: Char
           </tr>
         </thead>
         <tbody>
-          {c.attacks.map((atk) => {
+          {attacks.map((atk) => {
             const hit = attackBonus(c, atk);
             const dmgMod = damageBonus(c, atk);
             return (
               <tr key={atk.id}>
                 <td>
                   <div>{atk.name}</div>
-                  <div className="dim" style={{ fontSize: 11 }}>{atk.ability} · {atk.damageType ?? ""}</div>
+                  <div className="dim" style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+                    <span>{atk.ability}</span>
+                    {atk.damageType && <>· <DamageType type={atk.damageType} size={12} /></>}
+                  </div>
                 </td>
                 <td className="mono">{atk.range ?? "—"}</td>
                 <td>
@@ -50,15 +58,19 @@ export const ActionsPanel = ({ character: c }: { character: Character; api: Char
                 </td>
                 <td>
                   <button className="roll-btn" onClick={() => doDamage(atk)} title="Roll damage">
-                    {atk.damage}{dmgMod !== 0 ? formatMod(dmgMod) : ""}
+                    {damageLabel(atk, dmgMod)}
                   </button>
                 </td>
                 <td className="dim" style={{ fontSize: 11 }}>{atk.notes ?? ""}</td>
               </tr>
             );
           })}
-          {c.attacks.length === 0 && (
-            <tr><td colSpan={5} className="dim center" style={{ padding: 16 }}>No attacks yet.</td></tr>
+          {attacks.length === 0 && (
+            <tr>
+              <td colSpan={5} className="dim center" style={{ padding: "20px 12px", fontStyle: "italic", fontFamily: "var(--font-story)" }}>
+                No weapons drawn — equip one in your Inventory.
+              </td>
+            </tr>
           )}
         </tbody>
       </table>

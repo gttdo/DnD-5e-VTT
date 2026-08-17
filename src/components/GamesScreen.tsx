@@ -1,14 +1,17 @@
 import { useState } from "react";
 import type { Character } from "../types/character";
 import { useGames, type Game } from "../state/useGames";
+import { Card, CardBody, CardActions } from "./ui/Card";
+import { Button } from "./ui/Button";
+import { EmptyState } from "./ui/EmptyState";
+import { LibraryBanner } from "./ui/LibraryBanner";
 
 interface Props {
   characters: Character[];
-  onBack: () => void;
-  onOpenGame: (gameId: string) => void;
+  onOpenGame: (game: Game) => void;
 }
 
-export const GamesScreen = ({ characters, onBack, onOpenGame }: Props) => {
+export const GamesScreen = ({ characters, onOpenGame }: Props) => {
   const { games, loading, error, createGame, joinByCode, leaveGame } = useGames();
   const [newName, setNewName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -43,16 +46,13 @@ export const GamesScreen = ({ characters, onBack, onOpenGame }: Props) => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", padding: "32px 24px", maxWidth: 1100, margin: "0 auto" }}>
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 32, color: "var(--gold)" }}>Games</h1>
-          <div className="dim" style={{ marginTop: 4 }}>
-            {games.length} game{games.length === 1 ? "" : "s"}
-          </div>
-        </div>
-        <button className="ghost" onClick={onBack}>← My Characters</button>
-      </div>
+    <div className="screen-enter" style={{ padding: 24 }}>
+      <LibraryBanner
+        image="/art/login.png"
+        eyebrow="Your Table"
+        title="Campaigns"
+        subtitle={`${games.length} campaign${games.length === 1 ? "" : "s"}`}
+      />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
         {/* Create */}
@@ -118,12 +118,13 @@ export const GamesScreen = ({ characters, onBack, onOpenGame }: Props) => {
         </div>
       )}
 
-      <div className="panel-title">Your games</div>
+      <div className="panel-title">Your campaigns</div>
       {loading && <div className="dim">Loading…</div>}
       {!loading && games.length === 0 && (
-        <div className="panel center" style={{ padding: 40 }}>
-          <div className="dim">You haven't created or joined any games yet.</div>
-        </div>
+        <EmptyState icon="swords" title="No campaigns yet">
+          Run a game as DM to get a shareable invite code, or join a friend's
+          table with theirs.
+        </EmptyState>
       )}
       <div
         style={{
@@ -136,7 +137,7 @@ export const GamesScreen = ({ characters, onBack, onOpenGame }: Props) => {
           <GameCard
             key={g.id}
             game={g}
-            onOpen={() => onOpenGame(g.id)}
+            onOpen={() => onOpenGame(g)}
             onLeave={() => leaveGame(g.id)}
           />
         ))}
@@ -162,58 +163,87 @@ const GameCard = ({
   };
 
   return (
-    <div className="panel" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div style={{ fontFamily: "Cinzel, serif", fontSize: 18, fontWeight: 700 }}>
-          {game.name}
-        </div>
-        <span
-          className="dim mono"
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            color: game.my_role === "dm" ? "var(--gold)" : "var(--text-dim)",
-          }}
-        >
-          {game.my_role}
-        </span>
-      </div>
-
-      <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-        <div>
-          <div className="dim" style={{ fontSize: 11 }}>INVITE CODE</div>
+    <Card>
+      <CardBody>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
           <div
-            className="mono"
             style={{
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: "0.2em",
-              color: "var(--gold)",
+              fontFamily: "var(--font-display)",
+              fontSize: 17,
+              fontWeight: 500,
+              color: "var(--cream)",
+              letterSpacing: "0.02em",
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            {game.join_code}
+            {game.name}
           </div>
+          <span
+            className="mono"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              padding: "2px 8px",
+              borderRadius: 999,
+              border: "1px solid",
+              borderColor: game.my_role === "dm" ? "var(--candle)" : "var(--border)",
+              color: game.my_role === "dm" ? "var(--candle)" : "var(--text-dim)",
+              flexShrink: 0,
+              marginLeft: 8,
+            }}
+          >
+            {game.my_role}
+          </span>
         </div>
-        <button onClick={copy} className="ghost" style={{ fontSize: 11 }}>
-          {copied ? "✓ Copied" : "Copy"}
-        </button>
-      </div>
 
-      <div className="row" style={{ justifyContent: "space-between", marginTop: 4 }}>
-        <button onClick={onOpen}>Open</button>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end", gap: 8, marginTop: 12 }}>
+          <div>
+            <div className="dim" style={{ fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase" }}>
+              Invite Code
+            </div>
+            <div
+              className="mono"
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: "0.22em",
+                color: "var(--cream)",
+                marginTop: 2,
+              }}
+            >
+              {game.join_code}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={copied ? "check" : "copy"}
+            onClick={copy}
+          >
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      </CardBody>
+      <CardActions>
+        <Button variant="primary" size="sm" block onClick={onOpen}>Open</Button>
         {game.my_role !== "dm" && (
-          <button
-            className="ghost"
-            style={{ color: "var(--accent)", fontSize: 11 }}
+          <Button
+            variant="danger-ghost"
+            size="sm"
+            block
             onClick={() => {
               if (confirm(`Leave "${game.name}"?`)) void onLeave();
             }}
           >
             Leave
-          </button>
+          </Button>
         )}
-      </div>
-    </div>
+      </CardActions>
+    </Card>
   );
 };

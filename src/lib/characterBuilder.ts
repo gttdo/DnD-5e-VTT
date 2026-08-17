@@ -76,6 +76,8 @@ export const buildCharacter = (
     classes: Record<string, ClassData>;
     species: Record<string, SpeciesData>;
     backgrounds: Record<string, BackgroundData>;
+    /** Optional: real feat text from feats.json for the origin feat card. */
+    feats?: Record<string, { category: string; prerequisite: string | null; summary: string }>;
   }
 ): Character => {
   if (!state.className || !state.background || !state.species) {
@@ -140,13 +142,18 @@ export const buildCharacter = (
     }))
   );
 
-  // Background feat
+  // Background feat. backgrounds.json names it with a variant suffix
+  // ("Magic Initiate (Cleric)") while feats.json is keyed by the base name —
+  // strip the parenthetical to look up the real summary.
+  const baseFeatName = bg.feat.replace(/\s*\(.*\)$/, "");
+  const featData = data.feats?.[baseFeatName];
   features.push({
     id: `feat-bg-${state.background.toLowerCase()}`,
     name: bg.feat,
     source: "feat",
     sourceDetail: `${state.background} (Origin Feat)`,
-    description: `Origin feat from ${state.background} background. See PHB Chapter 5.`,
+    description:
+      featData?.summary ?? `Origin feat from ${state.background} background. See PHB Chapter 5.`,
   });
 
   // Combine tool/language profs

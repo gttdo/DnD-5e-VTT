@@ -1,0 +1,4677 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTokens, type Token } from "../state/useTokens";
+import { useScenes } from "../state/useScenes";
+import type { Game } from "../state/useGames";
+import { MapPickerDialog } from "./MapPickerDialog";
+import { TokenPickerDialog } from "./TokenPickerDialog";
+import { supabase } from "../lib/supabase";
+import type { MapAsset } from "../state/useMaps";
+import type { TokenAsset } from "../state/useTokenAssets";
+import { findSize } from "../lib/tokenSmith";
+import { Icon } from "./ui/Icon";
+import { GameGlyph } from "./ui/GameGlyph";
+import { useToast } from "../state/Toast";
+import { useInitiative } from "../state/useInitiative";
+import { usePings } from "../state/usePings";
+import { usePartyOwners } from "../state/usePartyOwners";
+import { useTableRolls } from "../state/useTableRolls";
+import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
+import type { SkillName } from "../types/character";
+import { aggregateConditions, autoFailsSave, conditionName, parseCondition } from "../lib/conditions";
+import { useSaveRequests } from "../state/useSaveRequests";
+import { type SaveRequest, encodeCondition } from "../lib/saves";
+import { useReactions } from "../state/useReactions";
+import { type ReactionOffer, type ReactionResponse, lowestOpenSlot, lowestOpenSlotAtLeast, knowsShield, knowsCounterspell } from "../lib/reactions";
+import { useRules } from "../state/Rules";
+import { casterClass, slotsFor, spellSaveDC } from "../lib/spellcasting";
+import { parseMonsterSpellcasting } from "../lib/monsterSpells";
+import { DiceRollDialog, type RollChip } from "./DiceRollDialog";
+import { CastingLoader } from "./CastingLoader";
+import { SpellProjectile, SPELL_FX_TRAVEL_MS, hasSpellFx } from "./SpellFx";
+import { useSpellFx } from "../state/useSpellFx";
+import { resolveDamage, type Defenses } from "../lib/damage";
+import { attackRangeFt, resolveAttacks } from "../lib/attacks";
+import { applyHeal, applyDamage, applyTempHp } from "../lib/hp";
+import { TableHud, TokenHud, MonsterHud } from "./TableHud";
+import { AttackCursor, CURSOR_SWING_MS, cursorSwingMs, cursorImpactMs, type CursorKind } from "./AttackCursor";
+import { TableModals, RegionMapModal, type HudModal } from "./TableModals";
+import { useFog } from "../state/useFog";
+import { useDrawings, type DrawKind } from "../state/useDrawings";
+import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
+import { PartyTray, DRAG_MIME } from "./PartyTray";
+import { InitiativeTracker } from "./InitiativeTracker";
+import { RulesReference } from "./RulesReference";
+import { DiceRoller } from "./DiceRoller";
+import { GameLog } from "./GameLog";
+import { useDiceLog } from "../state/DiceLog";
+import { RotateHint } from "./RotateHint";
+import { initiative as initiativeMod, saveBonus, abilityMod, abilityModFor, skillBonus, skillCheckChips, attackBonus, damageBonus } from "../lib/calc";
+import { LootDialog } from "./LootDialog";
+import { LootEditorDialog } from "./LootEditorDialog";
+import { Dialog } from "./ui/Dialog";
+import {
+  incidentalCreatureLoot,
+  incidentalContainerLoot,
+  lootIsEmpty,
+  lootToInventoryItem,
+  tierForLevel,
+  type TokenLoot,
+} from "../lib/loot";
+import { xpForCr, splitXp } from "../lib/xp";
+import { rollD20, roll, type RollResult } from "../lib/dice";
+import type { Character, Ability, Currency } from "../types/character";
+import { ABILITY_FULL } from "../types/character";
+
+interface Props {
+  game: Game;
+  onBack: () => void;
+  /** The signed-in user's characters, passed from App's single useRoster()
+   *  instance. TableCanvas must NOT call useRoster() itself: both hooks would
+   *  build a realtime channel with the same topic (characters:{userId}), and
+   *  supabase-js throws when callbacks are added to the already-subscribed
+   *  shared channel — which blanked the whole table. */
+  characters: Character[];
+  /** Of those characters, the ids this user actually owns (can write directly).
+   *  A party member's PC can be read (RLS) but not written — its HP goes through
+   *  the apply-hp edge function instead. From App's single useRoster. */
+  ownedCharacterIds: Set<string>;
+  /** Persist a mutation to one of the signed-in user's characters — the HUD's
+   *  path for adjusting HP from the table. From App's single useRoster. */
+  onUpdateCharacter: (id: string, mut: (c: Character) => Character) => void | Promise<void>;
+}
+
+// A sword cursor for attack-targeting mode — a clearer "pick your victim" signal
+// than a bare crosshair. Drawn once, encoded as a data URI. The blade tip is the
+// hotspot (7,7): the sword is a vertical blade rotated -45° so it points up-left
+// and its body trails down-right like a normal pointer. Cream blade + dark
+// outline stays legible on both dark and light maps; crosshair is the fallback
+// for browsers that don't support SVG cursors.
+const SWORD_CURSOR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+  '<g transform="rotate(-45 16 16)" stroke="#241a10" stroke-width="1.3" stroke-linejoin="round">' +
+  '<polygon points="16,3 18.4,8 18.4,18 13.6,18 13.6,8" fill="#f5ecd8"/>' +
+  '<rect x="9" y="17.6" width="14" height="2.8" rx="1" fill="#d4a95a"/>' +
+  '<rect x="14.4" y="20.4" width="3.2" height="6" fill="#7a5a34"/>' +
+  '<circle cx="16" cy="27.6" r="2.1" fill="#d4a95a"/>' +
+  '</g></svg>';
+const SWORD_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(SWORD_CURSOR_SVG)}") 7 7, crosshair`;
+
+// Pinching-fingers cursor for pickpocket targeting — a thumb + forefinger about
+// to nip something, tip at the top (hotspot 16,4). Cream fill + dark outline so
+// it reads on any map.
+const PINCH_CURSOR_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+  '<g stroke="#241a10" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" fill="#f5ecd8">' +
+  '<path d="M13 6 Q16 3 19 6 L18 15 Q16 17 14 15 Z"/>' +
+  '<path d="M11 13 Q9 16 11 20 L13 26 Q16 28 19 26 L21 20 Q23 16 21 13 Q19 16 16 16 Q13 16 11 13 Z"/>' +
+  '</g></svg>';
+const PINCH_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(PINCH_CURSOR_SVG)}") 16 4, pointer`;
+
+// Animated sprite sword cursor during attack targeting (public/sprites/sword_sprite.png,
+// geometry measured in AttackCursor). Falls back to the static SVG sword above
+// only if this is turned off.
+const ANIMATED_CURSOR = true;
+
+// Cell size is fixed in SVG user units; the grid dimensions come from the
+// active scene so different maps can have different sizes.
+const CELL = 40;
+// One grid cell = 5 ft, so a spell area's feet convert to SVG units directly.
+const FT_PER_CELL = 5;
+// Aimed-cone geometry, shared by the aim preview and the hit test so what you
+// see is exactly what's caught. Cone of Cold is a 60-ft cone → 12 cells. A D&D
+// cone is as wide as it is long, i.e. a half-angle of atan(0.5) (the base spans
+// ±length/2 at full reach).
+const CONE_LEN = 12 * CELL;
+const CONE_HALF_ANGLE = Math.atan(0.5);
+
+// Board tint for a Spell area token, chosen from its damage type so a Fireball
+// reads orange and a Cone of Cold blue at a glance. Falls back to arcane violet.
+const AREA_TINT: Record<string, string> = {
+  fire: "#e8663c", cold: "#5cc6e8", lightning: "#e8d24a", thunder: "#b58cff",
+  acid: "#8fd14a", poison: "#7bd14a", necrotic: "#7a4a8f", radiant: "#f2e08a",
+  psychic: "#e86ab0", force: "#9a8cff", bludgeoning: "#b0a08a", piercing: "#b0a08a",
+  slashing: "#b0a08a",
+};
+const areaTintFor = (damageType?: string): string =>
+  (damageType && AREA_TINT[damageType.toLowerCase()]) || "#9a7bd1";
+
+/**
+ * The SVG geometry for a spell area centered at (cx, cy), given its shape and
+ * size in feet. Returns an element description the render loop turns into a
+ * <circle>/<rect>/<polygon>. Directional shapes (cone/line) point right by
+ * default — the DM nudges the token to aim; exact facing is out of scope here.
+ */
+const spellAreaGeom = (
+  cx: number,
+  cy: number,
+  shape: string | undefined,
+  sizeFt: number
+): { tag: "circle"; r: number } | { tag: "rect"; x: number; y: number; w: number; h: number } | { tag: "polygon"; points: string } => {
+  const u = (sizeFt / FT_PER_CELL) * CELL; // area extent in SVG units
+  switch (shape) {
+    case "cube":
+      return { tag: "rect", x: cx - u / 2, y: cy - u / 2, w: u, h: u };
+    case "line":
+      // A 5-ft-wide beam of the given length, running right from the origin.
+      return { tag: "rect", x: cx, y: cy - CELL / 2, w: u, h: CELL };
+    case "cone":
+      // Triangle: apex at the origin, spreading to a base of ~size at range.
+      return { tag: "polygon", points: `${cx},${cy} ${cx + u},${cy - u / 2} ${cx + u},${cy + u / 2}` };
+    // sphere / cylinder / emanation → a radius circle.
+    default:
+      return { tag: "circle", r: u };
+  }
+};
+const DEFAULT_COLS = 30;
+const DEFAULT_ROWS = 20;
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 4;
+// Pointer travel (screen px) before a press on a token becomes a DRAG rather
+// than a click. Below it, the press just selects (shows the HUD) and the token
+// never moves — so a click can't accidentally pick the token up.
+const DRAG_THRESHOLD_PX = 5;
+
+const COLOR_CHOICES = [
+  "#c9a24a", // gold
+  "#60a5fa", // blue
+  "#4ade80", // green
+  "#c0392b", // red
+  "#a855f7", // violet
+  "#f97316", // orange
+];
+
+const initialsOf = (label: string): string => {
+  const parts = label.trim().split(/\s+/).slice(0, 2);
+  if (!parts.length) return "?";
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
+};
+
+/**
+ * Shared canvas for one game.
+ *
+ * Coordinate systems:
+ * - SVG user units (px in the viewBox) — CELL is 40 units
+ * - Grid cells (x, y integers) — what tokens store
+ * - Screen (clientX/Y) — pointer input
+ *
+ * The <svg> viewBox is transformed for pan+zoom (`pan.x/y` + `zoom`). Because
+ * getScreenCTM() reflects that transform, clientToSvg() keeps returning
+ * correct SVG user coords under any pan/zoom — so token drag math is unchanged.
+ *
+ * Interaction routing:
+ * - Middle-mouse drag OR space+left-drag anywhere → pan the view
+ *     (handled on the svg in the CAPTURE phase, stops the event before it
+ *     reaches token handlers)
+ * - Left-drag on a token → move the token (unchanged from before)
+ * - Wheel → zoom, keeping the cursor pinned to the same SVG point
+ */
+export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpdateCharacter }: Props) => {
+  const isDM = game.my_role === "dm";
+  const toast = useToast();
+  const {
+    scenes,
+    activeScene,
+    createScene,
+    setActiveScene,
+    deleteScene,
+    setSceneImageUrl,
+  } = useScenes(game.id, game.active_scene_id);
+  const cols = activeScene?.grid_cols ?? DEFAULT_COLS;
+  const rows = activeScene?.grid_rows ?? DEFAULT_ROWS;
+  const width = cols * CELL;
+  const height = rows * CELL;
+  const { tokens, addToken, moveToken, deleteToken, setTokenHidden, updateToken, loading, error } = useTokens(
+    game.id,
+    activeScene?.id ?? null
+  );
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newColor, setNewColor] = useState(COLOR_CHOICES[0]);
+  const [scenesOpen, setScenesOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
+  const [partyOpen, setPartyOpen] = useState(false);
+  const [initOpen, setInitOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  // Dice roller (input popover) + Game Log (record drawer) live on the tool
+  // rail now (#132), not as floating FABs. The log button badges unseen rolls.
+  const [rollerOpen, setRollerOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logSeen, setLogSeen] = useState(0);
+  const { entries: diceLogEntries } = useDiceLog();
+  const unseenRolls = logOpen ? 0 : Math.max(0, diceLogEntries.length - logSeen);
+  const openLog = () => {
+    setLogSeen(diceLogEntries.length);
+    setLogOpen(true);
+  };
+  const [hudModal, setHudModal] = useState<HudModal | null>(null);
+  // Fullscreen: the whole table shell (header + rail + board), not just the
+  // svg, so the HUD stays usable. State tracks the browser's own notion of
+  // fullscreen so Esc (which exits without firing our handler) stays in sync.
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void shellRef.current?.requestFullscreen();
+  };
+  // Currently-selected token (click to select). Delete/Backspace removes it.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+  // Latest tokens, read by the keyboard handler without re-subscribing.
+  const tokensRef = useRef(tokens);
+  useEffect(() => {
+    tokensRef.current = tokens;
+  }, [tokens]);
+  // Active canvas tool. "select" moves tokens, "pan" drags the view,
+  // "ping" pulses a point for every player, "ruler" measures distance.
+  // (Space-held still pans regardless of tool, as a quick modifier.)
+  const [tool, setTool] = useState<"select" | "pan" | "ping" | "ruler" | "fog" | "draw">("select");
+  const toolRef = useRef(tool);
+  useEffect(() => {
+    toolRef.current = tool;
+  }, [tool]);
+
+  // Surface token-load errors as a toast (the old inline panel is gone).
+  useEffect(() => {
+    if (error) toast.error(error);
+  }, [error, toast]);
+
+  // Attach a library map to the active scene: copy image_url + map_id.
+  // Scene.image_url is what players actually load; map_id is provenance so
+  // we can highlight "currently on scene" in the picker.
+  const applyMapToActiveScene = async (map: MapAsset): Promise<{ error: string | null }> => {
+    if (!activeScene) return { error: "no active scene" };
+    const { error: imgErr } = await setSceneImageUrl(activeScene.id, map.image_url);
+    if (imgErr) return { error: imgErr };
+    const { error: linkErr } = await supabase
+      .from("scenes")
+      .update({ map_id: map.id })
+      .eq("id", activeScene.id);
+    return { error: linkErr?.message ?? null };
+  };
+
+  // Place a library token asset at grid-center of the active scene. Copies
+  // image, name, and 5e size onto the tokens row so scenes stay self-contained.
+  const placeTokenFromLibrary = async (asset: TokenAsset): Promise<{ error: string | null }> => {
+    if (!activeScene) return { error: "no active scene" };
+    const span = findSize(asset.size_category).cells;
+    // A monster asset carries its statblock onto the token, with its own HP, so
+    // the DM's in-combat HUD can read + track it per placed instance.
+    const monster =
+      asset.token_type === "monster" && asset.details?.kind === "monster" ? asset.details.monster : null;
+    // Props and Spells freeze their board-behavior data at placement (like the
+    // statblock above), so the canvas needs no join back to the library:
+    //   • a spell copies its area footprint → translucent AoE render (#80)
+    //   • a container prop stamps tier-scaled loot → immediately lootable
+    const isProp = asset.token_type === "prop" && asset.details?.kind === "prop";
+    const isSpell = asset.token_type === "spell" && asset.details?.kind === "spell";
+    const kind = isProp ? "prop" : isSpell ? "spell" : null;
+    // Only spells with an actual area footprint carry `area`. A no-area spell
+    // (Magic Missile, a self-buff) places as a plain art marker.
+    const area =
+      isSpell && asset.details?.kind === "spell" && asset.details.spell.areaShape
+        ? {
+            shape: asset.details.spell.areaShape,
+            size: asset.details.spell.areaSize,
+            damageType: asset.details.spell.damageType,
+            level: asset.details.spell.level,
+          }
+        : null;
+    const container = isProp && asset.details?.kind === "prop" && asset.details.prop.container;
+    const avgLevel =
+      characters.length > 0
+        ? characters.reduce((sum, c) => sum + (c.level ?? 1), 0) / characters.length
+        : 1;
+    const loot = container ? incidentalContainerLoot(tierForLevel(avgLevel)) : null;
+    return addToken({
+      label: asset.name,
+      image_url: asset.image_url,
+      size: asset.size_category,
+      token_id: asset.id,
+      statblock: monster,
+      hp_current: monster?.hp ?? null,
+      hp_max: monster?.hp ?? null,
+      kind,
+      area,
+      loot,
+      x: Math.max(0, Math.floor(cols / 2) - Math.floor(span / 2)),
+      y: Math.max(0, Math.floor(rows / 2) - Math.floor(span / 2)),
+    });
+  };
+
+  // THE visibility boundary: players only ever work with visible tokens —
+  // the board, the initiative order, and the header count all read from this.
+  // The DM sees everything (hidden ones render ghosted).
+  const visibleTokens = useMemo(
+    () => (isDM ? tokens : tokens.filter((t) => !t.hidden)),
+    [isDM, tokens]
+  );
+
+  // Combat pool: hidden tokens are excluded for EVERY role, DM included.
+  // turn_index is an index into a per-client derived order — if the DM's
+  // order contained a hidden boss that players' order lacked, the same index
+  // would land on different combatants on different screens.
+  const combatTokens = useMemo(() => tokens.filter((t) => !t.hidden), [tokens]);
+
+  // Mirror a player character's live vitals (HP + level) onto their token so the
+  // whole table sees them. Runs only on the OWNER's client (they can write, and
+  // they hold the character's real HP/level); every other client reads the
+  // synced values over realtime. Converges — once the token matches, no write.
+  useEffect(() => {
+    tokens.forEach((t) => {
+      if (!t.character_id || !ownedCharacterIds.has(t.character_id)) return;
+      const c = characters.find((x) => x.id === t.character_id);
+      if (!c) return;
+      if (t.hp_current !== c.hp.current || t.hp_max !== c.hp.max || t.char_level !== c.level) {
+        void updateToken(t.id, { hp_current: c.hp.current, hp_max: c.hp.max, char_level: c.level });
+      }
+    });
+  }, [tokens, characters, ownedCharacterIds, updateToken]);
+
+  const init = useInitiative(activeScene ?? null, combatTokens);
+  const { pings, sendPing } = usePings(activeScene?.id ?? null);
+  const spellFx = useSpellFx(activeScene?.id ?? null);
+  const partyOwners = usePartyOwners(game.id, game.dm_user_id);
+  const fog = useFog(activeScene ?? null, cols);
+  const { drawings, addDrawing, eraseDrawing, clearDrawings } = useDrawings(
+    game.id,
+    activeScene?.id ?? null
+  );
+  // Draw tool: which shape, what colour. "erase" removes on click.
+  const [drawKind, setDrawKind] = useState<DrawKind | "erase">("pen");
+  const [drawColor, setDrawColor] = useState(DRAW_COLORS[0]);
+  const drawKindRef = useRef(drawKind);
+  const drawColorRef = useRef(drawColor);
+  useEffect(() => { drawKindRef.current = drawKind; }, [drawKind]);
+  useEffect(() => { drawColorRef.current = drawColor; }, [drawColor]);
+  // In-progress stroke, held in state so it renders live, in a ref so the
+  // window move/up handlers read it without re-subscribing every frame.
+  const [liveDraw, setLiveDraw] = useState<{ kind: DrawKind; color: string; points: number[] } | null>(null);
+  const liveDrawRef = useRef<{ kind: DrawKind; color: string; points: number[] } | null>(null);
+  const setLive = (d: typeof liveDrawRef.current) => {
+    liveDrawRef.current = d;
+    setLiveDraw(d);
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const live = liveDrawRef.current;
+      if (!live) return;
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (!local) return;
+      if (live.kind === "pen") {
+        setLive({ ...live, points: [...live.points, local.x, local.y] });
+      } else {
+        // Shapes/arrow: first point fixed, second tracks the cursor.
+        setLive({ ...live, points: [live.points[0], live.points[1], local.x, local.y] });
+      }
+    };
+    const onUp = () => {
+      const live = liveDrawRef.current;
+      setLive(null);
+      if (!live) return;
+      // Discard degenerate marks (a click that never moved).
+      const p = live.points;
+      const moved =
+        live.kind === "pen"
+          ? p.length >= 4
+          : Math.hypot(p[2] - p[0], p[3] - p[1]) > 3;
+      if (moved) void addDrawing({ kind: live.kind, color: live.color, points: p });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addDrawing]);
+
+  // Leaving the draw tool drops any half-finished stroke.
+  useEffect(() => {
+    if (tool !== "draw") setLive(null);
+  }, [tool]);
+  // Fog brush: "reveal" carves sight out of the fog, "hide" paints it back.
+  const [fogMode, setFogMode] = useState<"reveal" | "hide">("reveal");
+  const fogPaintingRef = useRef(false);
+
+  // 3×3 cell brush centred on an SVG point, clamped to the grid.
+  const brushCells = (sx: number, sy: number): number[] => {
+    const cx = Math.floor(sx / CELL);
+    const cy = Math.floor(sy / CELL);
+    const cells: number[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x >= 0 && x < cols && y >= 0 && y < rows) cells.push(y * cols + x);
+      }
+    }
+    return cells;
+  };
+
+  // Fog paint drag — window-level like every other drag on this canvas.
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!fogPaintingRef.current) return;
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (local) fog.paint(brushCells(local.x, local.y), fogMode === "reveal");
+    };
+    const onUp = () => {
+      fogPaintingRef.current = false;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fog.paint, fogMode, cols, rows]);
+
+  // Ruler: measure from a drag's start to its current point, snapped to cell
+  // centres. The last measurement stays visible while the tool is active so
+  // you can read it after releasing. Distance uses the PHB simple method —
+  // every square 5 ft, diagonals included (Chebyshev distance).
+  const rulerDragRef = useRef<{ x: number; y: number } | null>(null);
+  const [measure, setMeasure] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const snapToCellCenter = (v: number) => (Math.floor(v / CELL) + 0.5) * CELL;
+  const measureFeet = (m: { x1: number; y1: number; x2: number; y2: number }) => {
+    const cellsX = Math.abs(Math.round((m.x2 - m.x1) / CELL));
+    const cellsY = Math.abs(Math.round((m.y2 - m.y1) / CELL));
+    return Math.max(cellsX, cellsY) * 5;
+  };
+
+  // Ruler drag: window-level like the other drags, so it survives leaving the svg.
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const start = rulerDragRef.current;
+      if (!start) return;
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (!local) return;
+      setMeasure({
+        x1: start.x,
+        y1: start.y,
+        x2: snapToCellCenter(local.x),
+        y2: snapToCellCenter(local.y),
+      });
+    };
+    const onUp = () => {
+      rulerDragRef.current = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear any leftover measurement when leaving the ruler tool.
+  useEffect(() => {
+    if (tool !== "ruler") {
+      setMeasure(null);
+      rulerDragRef.current = null;
+    }
+  }, [tool]);
+
+  // Tool actions on the board itself: ping pulses a point, ruler starts a
+  // measurement. Runs on the svg's bubble phase so token/background handlers
+  // (which return early for these tools) don't swallow it.
+  const handleToolPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType !== "touch") return;
+    if (toolRef.current === "ping") {
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (local) {
+        void sendPing(local.x, local.y).then((err) => {
+          if (err) toast.error(err);
+        });
+      }
+    } else if (toolRef.current === "fog") {
+      if (!isDM) return;
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (local) {
+        fogPaintingRef.current = true;
+        fog.paint(brushCells(local.x, local.y), fogMode === "reveal");
+      }
+    } else if (toolRef.current === "draw") {
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (!local) return;
+      if (drawKindRef.current === "erase") {
+        // Erase the topmost drawing under the click.
+        const hit = [...drawings].reverse().find((d) => hitsDrawing(d, local.x, local.y, 8));
+        if (hit) void eraseDrawing(hit.id);
+        return;
+      }
+      setLive({ kind: drawKindRef.current, color: drawColorRef.current, points: [local.x, local.y, local.x, local.y] });
+    } else if (toolRef.current === "ruler") {
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (!local) return;
+      const start = { x: snapToCellCenter(local.x), y: snapToCellCenter(local.y) };
+      rulerDragRef.current = start;
+      setMeasure({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
+    }
+  };
+
+  // A token linked to one of my characters rolls with that character's
+  // initiative modifier; anything else (monsters, NPCs) rolls flat d20.
+  const rollInitiativeFor = (t: Token): number => {
+    const ch = t.character_id ? characters.find((c) => c.id === t.character_id) : undefined;
+    return rollD20(ch ? initiativeMod(ch) : 0).total;
+  };
+
+  // Place a roster character as a token, using their portrait as the art.
+  // `cell` is the target grid square; omitted means centre of the scene.
+  const placeCharacter = async (
+    ch: Character,
+    cell?: { x: number; y: number }
+  ): Promise<void> => {
+    if (!activeScene) return;
+    const x = cell ? cell.x : Math.floor(cols / 2);
+    const y = cell ? cell.y : Math.floor(rows / 2);
+    const { error } = await addToken({
+      label: ch.name,
+      image_url: ch.portrait ?? null,
+      character_id: ch.id,
+      controller: "player",
+      size: "medium",
+      // Mirror the character's vitals onto the shared token so the DM and other
+      // players can see HP/level at a glance (kept synced by the effect below).
+      hp_current: ch.hp.current,
+      hp_max: ch.hp.max,
+      char_level: ch.level,
+      x: Math.max(0, Math.min(cols - 1, x)),
+      y: Math.max(0, Math.min(rows - 1, y)),
+    });
+    if (error) {
+      toast.error(
+        error.includes("tokens_character_id_fkey")
+          ? `${ch.name} isn't saved to the cloud (or was saved under another account) — open their sheet to re-save, or recreate them, then try again.`
+          : error
+      );
+    } else {
+      toast.success(`${ch.name} joined the map`);
+    }
+  };
+
+  // Drop a dragged character onto the exact cell under the cursor.
+  const handleDrop = (e: React.DragEvent) => {
+    const id = e.dataTransfer.getData(DRAG_MIME);
+    if (!id) return;
+    e.preventDefault();
+    const ch = characters.find((c) => c.id === id);
+    if (!ch) return;
+    const local = clientToSvg(e.clientX, e.clientY);
+    void placeCharacter(
+      ch,
+      local ? { x: Math.floor(local.x / CELL), y: Math.floor(local.y / CELL) } : undefined
+    );
+  };
+
+  // Token drag state kept in refs so pointermove doesn't rerender per frame.
+  const tokenDragRef = useRef<{
+    id: string;
+    offsetX: number;
+    offsetY: number;
+    /** Screen coords where the press began — to measure drag distance. */
+    startX: number;
+    startY: number;
+    /** True once the pointer crossed the threshold: a real drag, not a click. */
+    active: boolean;
+  } | null>(null);
+  // The active creature's live movement budget, mirrored into a ref so the drop
+  // handler can clamp an over-speed move. `remainingCells` = feet left this turn
+  // (speed − moveUsedFt) ÷ 5; the clamp measures from the token's CURRENT cell.
+  const moveBudgetRef = useRef<{ id: string; remainingCells: number } | null>(null);
+  const [ghost, setGhost] = useState<{ id: string; x: number; y: number } | null>(null);
+
+  // Pan + zoom state.
+  // pan.x/pan.y = the top-left of the visible region in SVG user units.
+  // zoom = 1 shows the whole scene; 2 = 2x zoom in.
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const spaceHeldRef = useRef(false);
+  useEffect(() => {
+    spaceHeldRef.current = spaceHeld;
+  }, [spaceHeld]);
+  const panDragRef = useRef<{
+    startClientX: number;
+    startClientY: number;
+    startPanX: number;
+    startPanY: number;
+  } | null>(null);
+  const [panning, setPanning] = useState(false);
+
+  // ---- Multi-touch bookkeeping -------------------------------------------
+  // Live touch points by pointerId. Only "touch" pointers are tracked, so
+  // mouse and pen keep their existing behaviour untouched.
+  const touchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // Previous frame's finger spread + midpoint. Pinch is computed incrementally
+  // (frame-to-frame) rather than from gesture start, which keeps zoom and
+  // two-finger pan in one step and stays stable if a finger is re-seated.
+  const gestureRef = useRef<{ dist: number; midX: number; midY: number } | null>(null);
+  // Mirrors of pan/zoom. The gesture listeners attach once, so they must read
+  // current values from refs instead of a stale closure.
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  const viewBox = `${pan.x} ${pan.y} ${width / zoom} ${height / zoom}`;
+
+  // Screen → SVG user coords. Uses the live CTM so it respects viewBox transforms.
+  const clientToSvg = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const local = pt.matrixTransform(ctm.inverse());
+    return { x: local.x, y: local.y };
+  };
+
+  // ---- Token drag ---------------------------------------------------------
+  // The live ghost cell lives in a ref (updated synchronously as the pointer
+  // moves) AND in state (for rendering). The DROP handler reads the REF, never
+  // the state — so a fast release can't land on a stale ghost and silently drop
+  // the move (the old bug: the token snapped back to its start).
+  const ghostRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  // "Latest callback" refs: reassigned every render so the window listeners
+  // (subscribed ONCE below) always run against current tokens/cols/rows without
+  // re-subscribing every frame — that per-frame churn was the drag lag.
+  const onDragMoveRef = useRef<(e: PointerEvent) => void>(() => {});
+  const onDragUpRef = useRef<() => void>(() => {});
+
+  // ---- Spell-area rotation ------------------------------------------------
+  // Dragging a directional Spell token's handle aims its cone/line. Live angle
+  // lives in state (for the render) and a ref (for the drop write); the origin
+  // is captured at grab so the angle is measured from the token's centre.
+  const rotateRef = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const [rotating, setRotating] = useState<{ id: string; facing: number } | null>(null);
+  const rotatingRef = useRef<{ id: string; facing: number } | null>(null);
+  const onRotateMoveRef = useRef<(e: PointerEvent) => void>(() => {});
+  const onRotateUpRef = useRef<() => void>(() => {});
+
+  onRotateMoveRef.current = (e: PointerEvent) => {
+    const rot = rotateRef.current;
+    if (!rot) return;
+    const local = clientToSvg(e.clientX, e.clientY);
+    if (!local) return;
+    const deg = (Math.atan2(local.y - rot.oy, local.x - rot.ox) * 180) / Math.PI;
+    const next = { id: rot.id, facing: Math.round(deg) };
+    rotatingRef.current = next;
+    setRotating(next);
+  };
+
+  onRotateUpRef.current = () => {
+    const rot = rotateRef.current;
+    const live = rotatingRef.current;
+    rotateRef.current = null;
+    rotatingRef.current = null;
+    setRotating(null);
+    if (!rot || !live) return;
+    const t = tokens.find((tt) => tt.id === rot.id);
+    if (!t) return;
+    void updateToken(rot.id, { area: { ...(t.area ?? {}), facing: live.facing } });
+  };
+
+  const startRotate = (e: React.PointerEvent, t: Token) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const span = findSize(t.size).cells;
+    rotateRef.current = {
+      id: t.id,
+      ox: t.x * CELL + (span * CELL) / 2,
+      oy: t.y * CELL + (span * CELL) / 2,
+    };
+  };
+
+  onDragMoveRef.current = (e: PointerEvent) => {
+    const drag = tokenDragRef.current;
+    if (!drag) return;
+    // A press only becomes a drag once the pointer crosses the threshold — so a
+    // click (even one that drifts a pixel toward the HUD) never lifts the token.
+    if (!drag.active) {
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
+      drag.active = true;
+    }
+    const local = clientToSvg(e.clientX, e.clientY);
+    if (!local) return;
+    // Top-left cell of the footprint (fractional while dragging).
+    const g = { id: drag.id, x: (local.x - drag.offsetX) / CELL, y: (local.y - drag.offsetY) / CELL };
+    ghostRef.current = g;
+    setGhost(g);
+  };
+
+  onDragUpRef.current = () => {
+    const drag = tokenDragRef.current;
+    const g = ghostRef.current;
+    tokenDragRef.current = null;
+    ghostRef.current = null;
+    setGhost(null);
+    // Never crossed the threshold → a click to select, not a drag; leave it put.
+    if (!drag || !drag.active || !g) return;
+    const t = tokens.find((tt) => tt.id === drag.id);
+    const span = t ? findSize(t.size).cells : 1;
+    let snappedX = Math.max(0, Math.min(cols - span, Math.round(g.x)));
+    let snappedY = Math.max(0, Math.min(rows - span, Math.round(g.y)));
+    // Movement enforcement (cumulative): a step measured from the token's CURRENT
+    // cell can't exceed what's left of its speed. Over-budget clamps to the
+    // furthest reachable cell; with nothing left, the move is refused.
+    const budget = moveBudgetRef.current;
+    if (budget && budget.id === drag.id && t) {
+      const dx = snappedX - t.x;
+      const dy = snappedY - t.y;
+      const cheb = Math.max(Math.abs(dx), Math.abs(dy));
+      if (cheb > budget.remainingCells) {
+        if (budget.remainingCells <= 0) {
+          toast.info(`${t.label} is out of movement this turn.`);
+          return;
+        }
+        const f = budget.remainingCells / cheb;
+        snappedX = Math.max(0, Math.min(cols - span, t.x + Math.round(dx * f)));
+        snappedY = Math.max(0, Math.min(rows - span, t.y + Math.round(dy * f)));
+      }
+    }
+    // A tap / zero-distance drag skips the write (no needless DB round-trip).
+    if (t && snappedX === t.x && snappedY === t.y) return;
+    // Bank the distance actually travelled against this turn's budget.
+    if (budget && budget.id === drag.id && t) {
+      addMovement(drag.id, Math.max(Math.abs(snappedX - t.x), Math.abs(snappedY - t.y)) * 5);
+    }
+    // Capture the pre-move cell for the Opportunity-Attack check (the mover's
+    // token object still holds its old x/y until moveToken's optimistic update).
+    const oaFrom = t ? { mover: t, x: t.x, y: t.y } : null;
+    void moveToken(drag.id, snappedX, snappedY).then((res) => {
+      if (res.error) {
+        toast.info("That token snapped back — you're not allowed to move it.");
+        return;
+      }
+      // Only a move the table accepted can provoke — check after it commits.
+      if (oaFrom) maybeProvokeOAs(oaFrom.mover, oaFrom.x, oaFrom.y, snappedX, snappedY);
+    });
+  };
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      onDragMoveRef.current(e);
+      onRotateMoveRef.current(e);
+    };
+    const up = () => {
+      onDragUpRef.current();
+      onRotateUpRef.current();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    // pointercancel fires when the OS steals the gesture (a system swipe, a call).
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, []);
+
+  // ---- Removing the selected token ----------------------------------------
+  // One code path for every entry point: the Delete key, and the rail button
+  // that is the only way to do this on a touchscreen (no Delete key, no
+  // right-click). Reads the selection from a ref so callers never pass an id.
+  // Who may REMOVE a token: the DM removes anything; a player removes only their
+  // own character's token. Everything else (monsters, props, spell areas, other
+  // players' PCs) is the DM's to clear. RLS lets any member delete, so this is
+  // the gate — enforced on every removal path (Delete key + the rail button).
+  const canDeleteToken = useCallback(
+    (t: Token): boolean => isDM || (t.character_id != null && ownedCharacterIds.has(t.character_id)),
+    [isDM, ownedCharacterIds]
+  );
+
+  const deleteSelected = useCallback(() => {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    const t = tokensRef.current.find((tt) => tt.id === id);
+    if (t && !canDeleteToken(t)) {
+      toast.info("Only the DM can remove this token.");
+      return;
+    }
+    setSelectedId(null);
+    void deleteToken(id).then(({ error }) => {
+      if (error) toast.error(error);
+      else toast.success(`${t?.label ?? "Token"} removed`);
+    });
+  }, [deleteToken, toast, canDeleteToken]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const el = e.target as HTMLElement | null;
+      // Never hijack the key while typing (labels, prompts, etc.).
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (!selectedIdRef.current) return;
+      e.preventDefault();
+      deleteSelected();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteSelected]);
+
+  const startTokenDrag = (e: React.PointerEvent, t: Token) => {
+    if (e.button !== 0) return;
+    // Teleport targeting: this tap picks the destination cell (even over a token).
+    if (pendingMoveRef.current) {
+      e.stopPropagation();
+      resolveMoveAt(e.clientX, e.clientY);
+      return;
+    }
+    // Targeting an attack: this tap picks the target, not selects/drags.
+    const pa = pendingAttackRef.current;
+    if (pa) {
+      e.stopPropagation();
+      if (swingLockRef.current) return; // already swinging — ignore extra taps
+      // Aimed area/cone: any tap is just a DIRECTION, so resolve toward the
+      // tapped token's spot (no self/range gate — a cone is aimed, not a hit).
+      if (pa.spec.burst) {
+        const c = centerOfToken(t);
+        setPendingAttack(null);
+        resolveBurst(pa.by, pa.spec, pa.attackerId, c.x, c.y);
+        return;
+      }
+      // Props (scenery/containers) and Spell area markers are never combat
+      // targets — keep the cursor up so the player can pick a real creature. (#80)
+      if (t.kind === "prop" || t.kind === "spell") {
+        toast.info(`${t.label} isn't a target — pick a creature.`);
+        return;
+      }
+      // Can't attack yourself — but a healing or restoration spell CAN target
+      // its own caster.
+      if (t.id === pa.attackerId && pa.spec.heal == null && pa.spec.cleanse == null) {
+        setPendingAttack(null);
+        return;
+      }
+      // Range check: an attack (or targeted spell) can only reach so far. Melee
+      // / Touch (5 ft) needs an adjacent target; ranged up to its long range;
+      // Self / unlimited → no limit. Self-heals pass (gap 0). Out of range keeps
+      // the targeting cursor up so the player can pick a reachable mark instead.
+      const maxFt = attackRangeFt(pa.spec.range);
+      const attacker = tokens.find((x) => x.id === pa.attackerId);
+      if (maxFt != null && attacker) {
+        const gapFt = footprintGap(attacker, t) * 5;
+        if (gapFt > maxFt) {
+          toast.info(`${t.label} is out of range — ${pa.spec.label} reaches ${maxFt} ft, target is ${gapFt} ft away.`);
+          return;
+        }
+      }
+      // Play the swing, land the blow on the impact frame, and keep the sword
+      // cursor alive until the animation finishes — so the strike is visible
+      // before the roll/damage appears. (AttackCursor starts its own swing on
+      // this same pointerdown.) When the animated cursor is off, resolve at once.
+      if (ANIMATED_CURSOR) {
+        swingLockRef.current = true;
+        setSwinging(true);
+        attackTimers.current.push(
+          window.setTimeout(() => resolveAttack(pa.by, pa.spec, t, pa.attackerId), cursorImpactMs(attackKind)),
+          window.setTimeout(() => {
+            setPendingAttack(null);
+            setSwinging(false);
+            swingLockRef.current = false;
+          }, CURSOR_SWING_MS)
+        );
+      } else {
+        setPendingAttack(null);
+        resolveAttack(pa.by, pa.spec, t, pa.attackerId);
+      }
+      return;
+    }
+    // Pickpocket targeting: this tap picks the mark (adjacency checked there).
+    const ps = pendingStealRef.current;
+    if (ps) {
+      e.stopPropagation();
+      pickStealTarget(ps.attackerId, t);
+      return;
+    }
+    // A player tapping a downed DM token (or a loot container) gets a small
+    // context menu next to it — Loot / Examine — instead of auto-looting.
+    // Stays available on an already-looted corpse (Loot disabled, Examine on).
+    if (!isDM && menuEligible(t)) {
+      e.preventDefault();
+      e.stopPropagation();
+      setTokenMenu({ tokenId: t.id, x: e.clientX, y: e.clientY });
+      return;
+    }
+    // Ping/ruler clicks pass through tokens to the board handler.
+    if (toolRef.current === "ping" || toolRef.current === "ruler" || toolRef.current === "fog" || toolRef.current === "draw") return;
+    // Pan takes priority if the user is holding space, using middle-mouse, or
+    // has the Pan tool active — the svg's capture-phase handler gets it then.
+    if (spaceHeldRef.current || toolRef.current === "pan") {
+      // ...except on touch, which the capture handler ignores. Start the pan
+      // here so dragging over a token still pans instead of doing nothing.
+      if (e.pointerType === "touch" && touchesRef.current.size <= 1) {
+        beginPan(e.clientX, e.clientY);
+      }
+      return;
+    }
+    e.preventDefault();
+    setSelectedId(t.id);
+    // Movement permission: the DM moves anything; a player moves only their own
+    // character token or a prop/scenery token (no statblock, no owner). Creatures
+    // and other players' PCs stay put. Selection is still allowed — just no drag.
+    if (!canMoveToken(t)) return;
+    const local = clientToSvg(e.clientX, e.clientY);
+    if (!local) return;
+    // Offset from the top-left of the token's footprint (in SVG units)
+    // so multi-cell tokens don't jump on grab.
+    // Arm a potential drag, but don't lift the token yet — the ghost only
+    // appears once the pointer crosses DRAG_THRESHOLD_PX (see handleMove). A
+    // plain click therefore just selects and shows the HUD.
+    tokenDragRef.current = {
+      id: t.id,
+      offsetX: local.x - t.x * CELL,
+      offsetY: local.y - t.y * CELL,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
+    };
+  };
+
+  // ---- Pan (capture phase so it beats token handlers) ---------------------
+  const beginPan = (clientX: number, clientY: number) => {
+    panDragRef.current = {
+      startClientX: clientX,
+      startClientY: clientY,
+      startPanX: panRef.current.x,
+      startPanY: panRef.current.y,
+    };
+    setPanning(true);
+  };
+
+  const startPanIfTriggered = (e: React.PointerEvent) => {
+    // Touch is handled by the gesture layer below (one finger on empty canvas
+    // pans, two fingers pinch), so don't let it start a mouse-style pan here.
+    if (e.pointerType === "touch") return;
+    const trigger =
+      e.button === 1 ||
+      (e.button === 0 && (spaceHeldRef.current || toolRef.current === "pan"));
+    if (!trigger) return;
+    e.preventDefault();
+    e.stopPropagation();
+    beginPan(e.clientX, e.clientY);
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const p = panDragRef.current;
+      if (!p) return;
+      const svg = svgRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      // Convert screen deltas to SVG-user deltas via the current view size.
+      // (Not via CTM inverse because we don't want translation, only scaling.)
+      const dxSvg = ((e.clientX - p.startClientX) / rect.width) * (width / zoom);
+      const dySvg = ((e.clientY - p.startClientY) / rect.height) * (height / zoom);
+      setPan({ x: p.startPanX - dxSvg, y: p.startPanY - dySvg });
+    };
+    const onUp = () => {
+      if (panDragRef.current) {
+        panDragRef.current = null;
+        setPanning(false);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [width, height, zoom]);
+
+  // ---- Zoom (native wheel listener — React's onWheel is passive) ----------
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const viewW = width / zoom;
+      const viewH = height / zoom;
+      // Cursor position in SVG-user coords, computed from pan+view size (no CTM).
+      const cursorU = pan.x + ((e.clientX - rect.left) / rect.width) * viewW;
+      const cursorV = pan.y + ((e.clientY - rect.top) / rect.height) * viewH;
+      // Trackpad pinch and mouse wheel both come through here as deltaY.
+      // Exp keeps zoom feeling multiplicative rather than additive.
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+      if (newZoom === zoom) return;
+      const newViewW = width / newZoom;
+      const newViewH = height / newZoom;
+      const newPanX = cursorU - ((e.clientX - rect.left) / rect.width) * newViewW;
+      const newPanY = cursorV - ((e.clientY - rect.top) / rect.height) * newViewH;
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, [zoom, pan, width, height]);
+
+  // ---- Touch gestures: pinch-zoom + two-finger pan ------------------------
+  // Zoom used to be wheel-only, and `touch-action: none` suppresses the
+  // browser's own pinch — so on a touchscreen there was no way to zoom at all.
+  // Two fingers now scale about their midpoint AND pan by the midpoint's
+  // travel, so zooming and repositioning happen in a single natural gesture.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const pts = touchesRef.current;
+
+    const spread = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y);
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2) {
+        // A second finger landed. Abandon any single-finger token drag or pan
+        // so the token doesn't fly along with the pinch. Dropping the ghost
+        // also means the half-finished drag is never written to the DB (the
+        // drag's pointerup handler no-ops without it).
+        tokenDragRef.current = null;
+        setGhost(null);
+        panDragRef.current = null;
+        setPanning(false);
+        const [a, b] = [...pts.values()];
+        gestureRef.current = {
+          dist: spread(a, b),
+          midX: (a.x + b.x) / 2,
+          midY: (a.y + b.y) / 2,
+        };
+      }
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || !pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const g = gestureRef.current;
+      if (pts.size !== 2 || !g) return;
+
+      const rect = svg.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const [a, b] = [...pts.values()];
+      const dist = spread(a, b);
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      if (!g.dist || !dist) return;
+
+      const z0 = zoomRef.current;
+      const p0 = panRef.current;
+      // SVG-user point sitting under the PREVIOUS midpoint — the anchor we
+      // scale about (same fraction-of-viewport math as the wheel handler).
+      const fx = (g.midX - rect.left) / rect.width;
+      const fy = (g.midY - rect.top) / rect.height;
+      const anchorU = p0.x + fx * (width / z0);
+      const anchorV = p0.y + fy * (height / z0);
+
+      const z1 = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z0 * (dist / g.dist)));
+      // Re-pin the anchor under the NEW midpoint. The midpoint's travel between
+      // frames falls out of this as two-finger pan, for free.
+      const nx = anchorU - ((midX - rect.left) / rect.width) * (width / z1);
+      const ny = anchorV - ((midY - rect.top) / rect.height) * (height / z1);
+
+      zoomRef.current = z1;
+      panRef.current = { x: nx, y: ny };
+      setZoom(z1);
+      setPan({ x: nx, y: ny });
+      gestureRef.current = { dist, midX, midY };
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      pts.delete(e.pointerId);
+      if (pts.size >= 2) return;
+      gestureRef.current = null;
+      // Lifting to one finger hands control back to single-finger pan, so the
+      // gesture flows on instead of dead-stopping mid-motion.
+      if (pts.size === 1) {
+        const [only] = [...pts.values()];
+        beginPan(only.x, only.y);
+      }
+    };
+
+    svg.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      svg.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      pts.clear();
+      gestureRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height]);
+
+  // ---- Space key = pan modifier ------------------------------------------
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept space when typing into an input.
+      if (e.code !== "Space" || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      e.preventDefault();
+      setSpaceHeld(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      setSpaceHeld(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
+  const resetView = () => {
+    setPan({ x: 0, y: 0 });
+    setZoom(1);
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const label = newLabel.trim();
+    if (!label) return;
+    await addToken({
+      label,
+      color: newColor,
+      x: Math.floor(cols / 2),
+      y: Math.floor(rows / 2),
+    });
+    setNewLabel("");
+    setAddOpen(false);
+  };
+
+  // Ghost overlay: while a token is being dragged, render at cursor position
+  // instead of the DB position so the drag feels smooth (no round-trip lag).
+  const rendered = useMemo(() => {
+    if (!ghost) return visibleTokens;
+    return visibleTokens.map((t) => (t.id === ghost.id ? { ...t, x: ghost.x, y: ghost.y } : t));
+  }, [visibleTokens, ghost]);
+
+  // Resolved from the live token list, so a token deleted by another player
+  // clears the contextual rail button instead of leaving it pointing at a ghost.
+  const selectedToken = useMemo(
+    () => visibleTokens.find((t) => t.id === selectedId) ?? null,
+    [visibleTokens, selectedId]
+  );
+
+  // Table-wide dice: every HUD roll logs + blooms locally and broadcasts to the
+  // whole table. Single consumer of the rolls:{gameId} topic.
+  const { roll: broadcastRoll, blooms } = useTableRolls(game.id);
+  const saves = useSaveRequests(game.id);
+  const { tables, classes } = useRules();
+  // Reaction interrupt (Shield): the attacker's continuation per open window, a
+  // timeout per window, and the "waiting on the defender" banner. The hook's
+  // response callback is bounced through a ref so the channel never resubscribes.
+  const reactionContRef = useRef<Record<string, (resp: ReactionResponse) => void>>({});
+  const reactionTimers = useRef<Record<string, number>>({});
+  const reactionResolveRef = useRef<(resp: ReactionResponse) => void>(() => {});
+  const [awaitingReaction, setAwaitingReaction] = useState<{ id: string; targetLabel: string } | null>(null);
+  const reactions = useReactions(game.id, (resp) => reactionResolveRef.current(resp));
+  // Counterspell window (caster side): per-open-window promise resolver + caster
+  // token + spell, a timeout, the "casting…" banner, and — after a counter — the
+  // caster's own CON save. Reactor "No" clicks are dismissed locally (a decline
+  // must NOT close the window; only a real counter or the timeout does).
+  const counterspellRef = useRef<Record<string, { resolve: (countered: boolean) => void; casterTokenId: string; spell: string }>>({});
+  const counterspellTimers = useRef<Record<string, number>>({});
+  // Holds the caster's window resolver while their CON save dialog is open, so
+  // finishCounter can delete the window entry (idempotent) yet the save can
+  // still settle the promise.
+  const pendingCounterResolveRef = useRef<((countered: boolean) => void) | null>(null);
+  const [awaitingCounter, setAwaitingCounter] = useState<{ id: string; spell: string } | null>(null);
+  const [casterCounterSave, setCasterCounterSave] = useState<{ id: string; dc: number; by: string; spell: string; casterTokenId: string } | null>(null);
+  const [dismissedCounters, setDismissedCounters] = useState<Set<string>>(new Set());
+
+  // Who controls a token's rolls: the owning player for a PC, else the DM.
+  const iControlToken = useCallback(
+    (t: Token): boolean => (t.character_id ? ownedCharacterIds.has(t.character_id) : isDM),
+    [ownedCharacterIds, isDM]
+  );
+
+  // Who may DRAG a token (independent of speed — distance is only tracked in
+  // combat, never hard-blocked). A placed SPELL area is a fixed point in the
+  // world: locked for EVERYONE (caster, players, DM) once set — the DM deletes
+  // it to remove it. The rare relocatable areas (Moonbeam, Flaming Sphere) carry
+  // area.movable and can be repositioned; for now that's DM-only until the token
+  // tracks its caster (#125). Otherwise: DM moves anything; a player moves only
+  // their own character token or a prop/scenery token.
+  const canMoveToken = useCallback(
+    (t: Token): boolean => {
+      if (t.kind === "spell") return isDM && t.area?.movable === true;
+      if (t.character_id) return isDM || ownedCharacterIds.has(t.character_id);
+      return isDM || !t.statblock;
+    },
+    [isDM, ownedCharacterIds]
+  );
+
+  // The HUD binds to the character the selected token represents (a plain
+  // monster token has none — its statblock HUD arrives with the bestiary).
+  const boundCharacter = useMemo(
+    () =>
+      selectedToken?.character_id
+        ? characters.find((c) => c.id === selectedToken.character_id) ?? null
+        : null,
+    [selectedToken, characters]
+  );
+
+  // Action economy (client-local, per token, per turn): Action / Bonus /
+  // Reaction spent, plus movement CONSUMED cumulatively this turn (`moveUsedFt`
+  // — the sum of each committed step, not displacement, so moving out-and-back
+  // still spends the budget). Reset when initiative reaches this creature.
+  // `action` is a COUNT (main actions spent this turn) so Multiattack / Action
+  // Surge can allow more than one; bonus/reaction stay single.
+  type Econ = { action: number; bonus: boolean; reaction: boolean; dashed: boolean; moveUsedFt: number };
+  const [economy, setEconomy] = useState<Record<string, Econ>>({});
+  const activeTokenId = init.activeToken?.id ?? null;
+  useEffect(() => {
+    if (!activeTokenId) return;
+    setEconomy((e) => ({
+      ...e,
+      [activeTokenId]: { action: 0, bonus: false, reaction: false, dashed: false, moveUsedFt: 0 },
+    }));
+    // Re-fires each new turn (activeToken changes) and each round (for solo combats).
+  }, [activeTokenId, init.round]);
+
+  // Add feet to this turn's spent movement (called when a drag commits).
+  const addMovement = (id: string | null, ft: number) => {
+    if (!id || ft <= 0) return;
+    setEconomy((e) => (e[id] ? { ...e, [id]: { ...e[id], moveUsedFt: e[id].moveUsedFt + ft } } : e));
+  };
+
+  // Dash doubles this turn's movement budget (spends the action separately).
+  const markDash = (id: string | null) => {
+    if (!id) return;
+    setEconomy((e) => (e[id] ? { ...e, [id]: { ...e[id], dashed: true } } : e));
+  };
+
+  // Spend a resource — action increments (multiple attacks), bonus/reaction set.
+  // No-op outside combat (no entry until the creature's turn starts).
+  const markEconomy = (id: string | null, which: "action" | "bonus" | "reaction") => {
+    if (!id) return;
+    setEconomy((e) => {
+      const cur = e[id];
+      if (!cur) return e;
+      if (which === "action") return { ...e, [id]: { ...cur, action: cur.action + 1 } };
+      return cur[which] ? e : { ...e, [id]: { ...cur, [which]: true } };
+    });
+  };
+
+  const economyView = useMemo(() => {
+    if (!init.inCombat || !selectedToken) return null;
+    const eco = economy[selectedToken.id];
+    const agg = aggregateConditions(selectedToken.conditions ?? []);
+    const base = selectedToken.statblock
+      ? selectedToken.statblock.speed.walk ?? 30
+      : boundCharacter?.speed ?? 30;
+    const speed = (agg.speed0 ? 0 : base) * (eco?.dashed ? 2 : 1);
+    const moveUsed = eco?.moveUsedFt ?? 0;
+    return {
+      // Incapacitated → everything reads spent (the HUD also disables all items).
+      action: agg.incapacitated ? 99 : eco?.action ?? 0,
+      bonus: agg.incapacitated ? true : eco?.bonus ?? false,
+      reaction: agg.incapacitated ? true : eco?.reaction ?? false,
+      moveUsed,
+      speed,
+    };
+  }, [init.inCombat, selectedToken, economy, boundCharacter]);
+
+  // Keep the active creature's REMAINING movement (in cells) in a ref, so a drag
+  // drop can be clamped to what's left of its speed this turn.
+  useEffect(() => {
+    if (!init.inCombat || !activeTokenId) {
+      moveBudgetRef.current = null;
+      return;
+    }
+    const eco = economy[activeTokenId];
+    const t = tokens.find((x) => x.id === activeTokenId);
+    if (!eco || !t) {
+      moveBudgetRef.current = null;
+      return;
+    }
+    const char = t.character_id ? characters.find((c) => c.id === t.character_id) : undefined;
+    const base = t.statblock ? t.statblock.speed.walk ?? 30 : char?.speed ?? 30;
+    const speed = (aggregateConditions(t.conditions ?? []).speed0 ? 0 : base) * (eco.dashed ? 2 : 1);
+    const remainingFt = Math.max(0, speed - eco.moveUsedFt);
+    moveBudgetRef.current = { id: activeTokenId, remainingCells: Math.floor(remainingFt / 5) };
+  }, [init.inCombat, activeTokenId, economy, tokens, characters]);
+
+  // Fire a HUD roll, anchoring its board bloom just above the bound token.
+  const fireRoll = useCallback(
+    (entries: RollEntry[], opts?: { tone?: RollTone; label?: string }) => {
+      const by = boundCharacter?.name ?? selectedToken?.label ?? "Someone";
+      let seed: { x: number; y: number; tone?: RollTone; text?: string } | undefined;
+      if (selectedToken) {
+        const spec = findSize(selectedToken.size);
+        const cx = selectedToken.x * CELL + (spec.cells * CELL) / 2;
+        const cy = selectedToken.y * CELL + (spec.cells * CELL) / 2;
+        seed = { x: cx, y: cy - spec.radius * CELL - 8, tone: opts?.tone, text: opts?.label };
+      }
+      broadcastRoll(by, entries, seed);
+    },
+    [boundCharacter, selectedToken, broadcastRoll]
+  );
+
+  // HP edited from the dock flows to the character row (same truth as the
+  // sheet) — so a hit taken on the map shows up on the sheet too.
+  const hpApi = useMemo(() => {
+    if (!boundCharacter) return null;
+    const id = boundCharacter.id;
+    return {
+      heal: (n: number) => onUpdateCharacter(id, (c) => ({ ...c, hp: applyHeal(c.hp, n) })),
+      damage: (n: number) => onUpdateCharacter(id, (c) => ({ ...c, hp: applyDamage(c.hp, n) })),
+      setTemp: (n: number) => onUpdateCharacter(id, (c) => ({ ...c, hp: applyTempHp(c.hp, n) })),
+    };
+  }, [boundCharacter, onUpdateCharacter]);
+
+  // ---- Looting: pouch on a body/container → take coins & items into a PC -----
+  const [lootTokenId, setLootTokenId] = useState<string | null>(null);
+  // DM authoring loot onto a carrier token.
+  const [lootEditTokenId, setLootEditTokenId] = useState<string | null>(null);
+  // Player context menu on a downed DM token (Loot / Examine), anchored at the
+  // tap position; and the token currently being examined (read-only stat card).
+  const [tokenMenu, setTokenMenu] = useState<{ tokenId: string; x: number; y: number } | null>(null);
+  const [examineTokenId, setExamineTokenId] = useState<string | null>(null);
+  // The skill check being rolled from the Examine card (cinematic dice dialog).
+  const [examineCheck, setExamineCheck] = useState<{ skill: SkillName } | null>(null);
+  // A pending pickpocket: the player rolls Sleight of Hand in the dice dialog,
+  // then the total is checked vs the mark's passive Perception (#131).
+  const [stealRoll, setStealRoll] = useState<{ thiefId: string; targetId: string } | null>(null);
+  // DM override: which pending (player-owned) save the DM chose to roll.
+  const [dmPickId, setDmPickId] = useState<string | null>(null);
+  // Pickpocket targeting: the acting PC token's id while the pinch cursor is up,
+  // waiting for the player to tap an adjacent creature. Ref mirrors it so the
+  // token-tap handler reads the latest without re-binding.
+  const [pendingSteal, setPendingSteal] = useState<{ attackerId: string } | null>(null);
+  const pendingStealRef = useRef(pendingSteal);
+  useEffect(() => {
+    pendingStealRef.current = pendingSteal;
+  }, [pendingSteal]);
+  useEffect(() => {
+    if (!pendingSteal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPendingSteal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingSteal]);
+
+  const lootToken = lootTokenId ? tokens.find((t) => t.id === lootTokenId) ?? null : null;
+  const lootEditToken = lootEditTokenId ? tokens.find((t) => t.id === lootEditTokenId) ?? null : null;
+  const menuToken = tokenMenu ? tokens.find((t) => t.id === tokenMenu.tokenId) ?? null : null;
+  const examineToken = examineTokenId ? tokens.find((t) => t.id === examineTokenId) ?? null : null;
+  // Close the token menu on Escape (its backdrop handles click-away).
+  useEffect(() => {
+    if (!tokenMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTokenMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tokenMenu]);
+  // If the menu's token vanishes (removed, or fully looted away), drop the menu.
+  useEffect(() => {
+    if (tokenMenu && !menuToken) setTokenMenu(null);
+  }, [tokenMenu, menuToken]);
+
+  const saveDmLoot = async (id: string, loot: TokenLoot) => {
+    const { error } = await updateToken(id, { loot });
+    if (error) toast.error(`Couldn't save loot: ${error}`);
+    else toast.success("Loot placed.");
+  };
+
+  // Which character receives the loot: the selected token's PC if I own it,
+  // otherwise any character I own at the table. Null → I have nothing to loot into.
+  const looterCharacter = useMemo(() => {
+    if (boundCharacter && ownedCharacterIds.has(boundCharacter.id)) return boundCharacter;
+    return characters.find((c) => ownedCharacterIds.has(c.id)) ?? null;
+  }, [boundCharacter, characters, ownedCharacterIds]);
+
+  const tokenIsDead = (t: Token): boolean =>
+    !!t.statblock && (t.hp_current ?? t.statblock.hp) <= 0;
+
+  // Downed = the board should render it as a body (greyed, drained). Covers a
+  // defeated statblock creature AND a player character at 0 HP — but NOT for
+  // loot (a downed ally isn't lootable), so this is a VISUAL predicate only,
+  // separate from tokenIsDead which drives corpse/loot logic.
+  const tokenIsDowned = (t: Token): boolean => {
+    if (tokenIsDead(t)) return true;
+    if (t.character_id) {
+      const c = characters.find((x) => x.id === t.character_id);
+      if (c) return c.hp.current <= 0;
+    }
+    return false;
+  };
+
+  // A body or container a player can freely loot (no skill check): a defeated
+  // creature, or any token already carrying loot. Never my own PC, never once
+  // it's been picked clean.
+  const isFreeLootable = (t: Token): boolean => {
+    if (t.hidden) return false;
+    if (t.character_id && ownedCharacterIds.has(t.character_id)) return false;
+    if (t.loot && t.loot.looted && lootIsEmpty(t.loot)) return false;
+    return tokenIsDead(t) || (t.loot != null && !lootIsEmpty(t.loot));
+  };
+
+  // A token whose player context menu (Loot / Examine) should open. Unlike
+  // isFreeLootable this stays true for a corpse even after it's picked clean —
+  // a body is always examinable (Medicine, Investigation…), only Loot goes dead.
+  const menuEligible = (t: Token): boolean => {
+    if (t.hidden) return false;
+    if (t.character_id && ownedCharacterIds.has(t.character_id)) return false;
+    return tokenIsDead(t) || (t.loot != null && !lootIsEmpty(t.loot));
+  };
+  // Right-click target: any non-owned, visible token worth a menu — a LIVE
+  // creature (Steal/Examine, #131), a corpse (Loot/Examine), or a loot
+  // container. Broader than menuEligible (which the tap path uses for corpses
+  // only, so left-click still SELECTS a live token instead of opening a menu).
+  const menuTarget = (t: Token): boolean => {
+    if (t.hidden) return false;
+    if (t.character_id && ownedCharacterIds.has(t.character_id)) return false;
+    return !!t.statblock || tokenIsDead(t) || (t.loot != null && !lootIsEmpty(t.loot));
+  };
+
+  // The knowledge skill that fits a creature's type, for the Examine card.
+  const loreSkillFor = (type: string): SkillName => {
+    const t = type.toLowerCase();
+    if (/undead|fiend|celestial/.test(t)) return "Religion";
+    if (/aberration|construct|elemental|fey|ooze|dragon|monstrosity/.test(t)) return "Arcana";
+    return "Nature"; // beast, plant, giant, humanoid…
+  };
+
+  // A token's center in SVG user units (accounts for multi-cell footprints).
+  const centerOfToken = (t: Token): { x: number; y: number } => {
+    const span = findSize(t.size).cells;
+    return { x: t.x * CELL + (span * CELL) / 2, y: t.y * CELL + (span * CELL) / 2 };
+  };
+
+  // Launch a spell projectile from the caster token to the target and broadcast
+  // it to the table. Returns true when a projectile actually flew (a known vfx
+  // + a locatable caster) so callers can time an effect to its arrival.
+  const fireSpellProjectile = (vfx: string, attackerId: string | undefined, target: Token): boolean => {
+    if (!vfx || !hasSpellFx(vfx)) return false;
+    const attacker = attackerId ? tokens.find((t) => t.id === attackerId) : undefined;
+    if (!attacker) return false;
+    const from = centerOfToken(attacker);
+    const to = centerOfToken(target);
+    spellFx.sendFx({ vfx, fromX: from.x, fromY: from.y, toX: to.x, toY: to.y });
+    return true;
+  };
+
+  // Grid gap between two token footprints, in cells. 0 = touching/overlapping,
+  // 1 = one square away (5 ft — still "adjacent" for reach and pickpocketing).
+  const footprintGap = (a: Token, b: Token): number => {
+    const as = findSize(a.size).cells;
+    const bs = findSize(b.size).cells;
+    const dx = Math.max(0, a.x - (b.x + bs - 1), b.x - (a.x + as - 1));
+    const dy = Math.max(0, a.y - (b.y + bs - 1), b.y - (a.y + as - 1));
+    return Math.max(dx, dy);
+  };
+
+  // Passive Perception sets the steal DC: parse the statblock's Senses line,
+  // else fall back to 10 + WIS mod.
+  const passivePerceptionOf = (sb: NonNullable<Token["statblock"]>): number => {
+    const line = (sb.senses ?? []).join(", ");
+    const m = /passive perception\s+(\d+)/i.exec(line);
+    if (m) return parseInt(m[1], 10);
+    return 10 + abilityMod(sb.abilities?.WIS ?? 10);
+  };
+
+  const openLoot = async (t: Token) => {
+    // Roll & freeze incidental loot the first time a creature is looted.
+    if (t.loot == null && t.statblock) {
+      const generated = incidentalCreatureLoot(t.statblock);
+      const { error } = await updateToken(t.id, { loot: generated });
+      if (error) toast.error(`Couldn't stash loot: ${error}`);
+    }
+    setLootTokenId(t.id);
+  };
+
+  // Token-menu actions (player, on a downed DM token). Loot still needs one of
+  // your characters adjacent (you can't reach across the map); Examine is free.
+  const lootFromMenu = () => {
+    if (!menuToken) return;
+    const adj = tokens.some(
+      (o) => o.character_id && ownedCharacterIds.has(o.character_id) && footprintGap(o, menuToken) <= 1
+    );
+    if (!adj) {
+      toast.info(`Move one of your characters next to ${menuToken.label} to loot it.`);
+      setTokenMenu(null);
+      return;
+    }
+    void openLoot(menuToken);
+    setTokenMenu(null);
+  };
+  const examineFromMenu = () => {
+    if (!menuToken) return;
+    setExamineTokenId(menuToken.id);
+    setTokenMenu(null);
+  };
+  // Steal (#131): pickpocket a LIVE creature that isn't one of your own — needs
+  // one of your characters adjacent. Sleight of Hand vs the mark's passive
+  // Perception (resolveSteal). Downed bodies / your own tokens use Loot instead.
+  const stealFromMenu = () => {
+    if (!menuToken) return;
+    const thief = tokens.find(
+      (o) => o.character_id && ownedCharacterIds.has(o.character_id) && footprintGap(o, menuToken) <= 1
+    );
+    if (!thief) {
+      toast.info(`Move one of your characters next to ${menuToken.label} to pickpocket it.`);
+      setTokenMenu(null);
+      return;
+    }
+    setTokenMenu(null);
+    resolveSteal(thief, menuToken);
+  };
+
+  // DM tool-rail "Place loot": opens the loot editor for the selected token —
+  // any DM-controlled token (monster, NPC, prop/container), never a player's PC.
+  const placeLootFromRail = () => {
+    if (!selectedToken) {
+      toast.info("Select a monster, NPC, or prop token to place loot on it.");
+      return;
+    }
+    if (selectedToken.character_id) {
+      toast.info("Loot goes on monsters, NPCs, or props — not player characters.");
+      return;
+    }
+    setLootEditTokenId(selectedToken.id);
+  };
+  // Open the cinematic dice roller for a skill check on the body — Medicine,
+  // Investigation, etc. The player rolls it themselves; the result logs to the
+  // table (and blooms on the corpse), and the DM narrates what it reveals.
+  const examineRoll = (skill: SkillName) => {
+    if (!looterCharacter) {
+      toast.info("Select one of your characters to make that check.");
+      return;
+    }
+    setExamineCheck({ skill });
+  };
+
+  // Pickpocket resolution: fired when a steal target is tapped (adjacency
+  // already checked). Sleight of Hand vs the mark's passive Perception —
+  // success reveals the loot, failure blows the attempt and starts a fight.
+  const resolveSteal = (attacker: Token, target: Token) => {
+    const char = attacker.character_id
+      ? characters.find((c) => c.id === attacker.character_id)
+      : undefined;
+    if (!char || !ownedCharacterIds.has(char.id)) {
+      toast.error("You can only pickpocket with your own character.");
+      return;
+    }
+    if (!target.statblock) {
+      toast.error(`There's nothing to lift off ${target.label}.`);
+      return;
+    }
+    // Open the cinematic dice dialog — the player rolls Sleight of Hand; the
+    // verdict lands in the dialog's onComplete (below).
+    setStealRoll({ thiefId: attacker.id, targetId: target.id });
+  };
+
+  // Tap landed while the pinch cursor was up — validate the mark, play the
+  // pinch, and land the verdict on the grab frame (mirrors the attack swing).
+  const pickStealTarget = (attackerId: string, target: Token) => {
+    if (stealLockRef.current) return;
+    const attacker = tokens.find((t) => t.id === attackerId);
+    if (!attacker || target.id === attackerId) {
+      setPendingSteal(null);
+      return;
+    }
+    if (!target.statblock || tokenIsDead(target)) {
+      setPendingSteal(null);
+      // A body needs no sleight — just loot it if it's yours to loot.
+      if (tokenIsDead(target)) void openLoot(target);
+      else toast.error(`There's nothing to pickpocket on ${target.label}.`);
+      return;
+    }
+    if (footprintGap(attacker, target) > 1) {
+      setPendingSteal(null);
+      toast.error("Too far — you must be adjacent to pickpocket.");
+      return;
+    }
+    if (ANIMATED_CURSOR) {
+      stealLockRef.current = true;
+      setStealing(true);
+      attackTimers.current.push(
+        window.setTimeout(() => resolveSteal(attacker, target), cursorImpactMs("steal")),
+        window.setTimeout(() => {
+          setPendingSteal(null);
+          setStealing(false);
+          stealLockRef.current = false;
+        }, cursorSwingMs("steal"))
+      );
+    } else {
+      setPendingSteal(null);
+      resolveSteal(attacker, target);
+    }
+  };
+
+  // Enter pickpocket targeting from the skills sheet (Sleight of Hand).
+  const takeAllLoot = async () => {
+    const t = lootToken;
+    if (!t || !t.loot || !looterCharacter) return;
+    const loot = t.loot;
+    await onUpdateCharacter(looterCharacter.id, (c) => {
+      const cur: Currency = { ...c.currency };
+      (Object.keys(loot.coins) as (keyof Currency)[]).forEach((k) => {
+        cur[k] = (cur[k] ?? 0) + (loot.coins[k] ?? 0);
+      });
+      return { ...c, inventory: [...c.inventory, ...loot.items.map(lootToInventoryItem)], currency: cur };
+    });
+    await updateToken(t.id, { loot: { coins: {}, items: [], looted: true } });
+    toast.success(`${looterCharacter.name} takes everything from ${t.label}.`);
+    setLootTokenId(null);
+  };
+
+  const takeLootItem = async (itemId: string) => {
+    const t = lootToken;
+    if (!t || !t.loot || !looterCharacter) return;
+    const item = t.loot.items.find((i) => i.id === itemId);
+    if (!item) return;
+    await onUpdateCharacter(looterCharacter.id, (c) => ({
+      ...c,
+      inventory: [...c.inventory, lootToInventoryItem(item)],
+    }));
+    const items = t.loot.items.filter((i) => i.id !== itemId);
+    const next: TokenLoot = { ...t.loot, items, looted: lootIsEmpty({ ...t.loot, items }) };
+    await updateToken(t.id, { loot: next });
+  };
+
+  // ---- XP on defeat: a monster dropping to 0 HP pays out to the party --------
+  // Each client awards only its OWN characters (owner-only RLS), so there are no
+  // cross-writes and no double counting — every PC's XP is written once, by the
+  // player who owns it. The split divisor is the party PCs present on the board,
+  // which every client sees identically.
+  const prevHpRef = useRef<Map<string, number>>(new Map());
+  const awardedXpRef = useRef<Set<string>>(new Set());
+  const xpSeededRef = useRef(false);
+  useEffect(() => {
+    const prev = prevHpRef.current;
+    const partyIds = new Set(tokens.filter((t) => t.character_id).map((t) => t.character_id));
+    const partySize = partyIds.size;
+    const myPcs = characters.filter(
+      (c) => ownedCharacterIds.has(c.id) && partyIds.has(c.id)
+    );
+    for (const t of tokens) {
+      // Only monster/NPC statblock tokens pay XP — never a downed player.
+      if (!t.statblock || t.character_id) continue;
+      const hp = t.hp_current ?? t.statblock.hp;
+      const was = prev.get(t.id);
+      const justDied = xpSeededRef.current && was != null && was > 0 && hp <= 0;
+      if (justDied && !awardedXpRef.current.has(t.id)) {
+        awardedXpRef.current.add(t.id);
+        const each = splitXp(xpForCr(t.statblock.cr), Math.max(1, partySize));
+        if (each > 0 && myPcs.length > 0) {
+          myPcs.forEach((c) => void onUpdateCharacter(c.id, (ch) => ({ ...ch, xp: ch.xp + each })));
+          toast.success(`${t.label} defeated — +${each} XP${myPcs.length > 1 ? " each" : ""}.`);
+        }
+      }
+      prev.set(t.id, hp);
+    }
+    xpSeededRef.current = true;
+  }, [tokens, characters, ownedCharacterIds, onUpdateCharacter, toast]);
+
+  // ---- Repeat saves: a held creature re-rolls at the end of its turn ---------
+  // When the active turn passes off a token that carries a condition with an
+  // ongoing save (paralyzed@WIS:13), whoever controls that token is prompted to
+  // shake it off. Only the controller fires the request, so it isn't duplicated.
+  const prevTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    const cur = init.activeToken?.id ?? null;
+    const prev = prevTurnRef.current;
+    prevTurnRef.current = cur;
+    if (!init.inCombat || !prev || prev === cur) return;
+    const ended = tokens.find((t) => t.id === prev);
+    if (!ended || !iControlToken(ended)) return;
+    for (const entry of ended.conditions ?? []) {
+      const pc = parseCondition(entry);
+      if (!pc.save || pc.dc == null) continue;
+      saves.request({
+        id: `sr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${pc.name}`,
+        by: "End of turn",
+        targetTokenId: ended.id,
+        targetLabel: ended.label,
+        ability: pc.save,
+        dc: pc.dc,
+        sourceLabel: pc.name,
+        onFail: "condition",
+        condition: pc.name,
+        onSave: "none",
+        repeat: true,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [init.activeToken?.id, init.inCombat]);
+
+  // ---- Targeted combat: attack → tap a target → resolve vs AC → damage -----
+  const [pendingAttack, setPendingAttack] = useState<{ by: string; attackerId: string; spec: AttackSpec } | null>(null);
+  const pendingAttackRef = useRef(pendingAttack);
+  useEffect(() => {
+    pendingAttackRef.current = pendingAttack;
+  }, [pendingAttack]);
+
+  // Aim preview: while targeting, a dashed line runs from the caster to the
+  // cursor with a live distance readout — green in range, red past it — so you
+  // see distance + direction before committing. Updated imperatively (no
+  // re-render per mouse move); the caster end is fixed, the cursor end tracks.
+  const aimLineRef = useRef<SVGLineElement | null>(null);
+  const aimLabelRef = useRef<SVGTextElement | null>(null);
+  const aimConeRef = useRef<SVGGElement | null>(null);
+  const aimAreaRef = useRef<SVGGElement | null>(null);
+  useEffect(() => {
+    const pa = pendingAttack;
+    if (!pa) return;
+    const attacker = tokens.find((t) => t.id === pa.attackerId);
+    if (!attacker) return;
+    const origin = centerOfToken(attacker);
+    const maxFt = attackRangeFt(pa.spec.range);
+    const onMove = (e: PointerEvent) => {
+      const p = clientToSvg(e.clientX, e.clientY);
+      if (!p) return;
+      // Lingering area spell (Web, Wall of Fire…): the footprint follows the
+      // cursor to the drop point (no aiming from the caster).
+      if (pa.spec.placeArea) {
+        const g = aimAreaRef.current;
+        if (g) g.setAttribute("transform", `translate(${p.x} ${p.y})`);
+        return;
+      }
+      // Aimed area spell (Cone of Cold): the preview is the cone footprint,
+      // anchored at the caster and rotated to point at the cursor — direction
+      // only (a cone's length is fixed), so no distance readout.
+      if (pa.spec.burst) {
+        const angle = (Math.atan2(p.y - origin.y, p.x - origin.x) * 180) / Math.PI;
+        const cone = aimConeRef.current;
+        if (cone) cone.setAttribute("transform", `translate(${origin.x} ${origin.y}) rotate(${angle})`);
+        return;
+      }
+      const ft = Math.round(Math.hypot(p.x - origin.x, p.y - origin.y) / CELL) * 5;
+      const inRange = maxFt == null || ft <= maxFt;
+      const color = inRange ? "#6fcf6f" : "#e0533d";
+      const line = aimLineRef.current;
+      if (line) {
+        line.setAttribute("x2", String(p.x));
+        line.setAttribute("y2", String(p.y));
+        line.setAttribute("stroke", color);
+      }
+      const label = aimLabelRef.current;
+      if (label) {
+        label.setAttribute("x", String((origin.x + p.x) / 2));
+        label.setAttribute("y", String((origin.y + p.y) / 2 - 6));
+        label.setAttribute("fill", color);
+        label.textContent = `${ft} ft`;
+      }
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [pendingAttack, tokens]);
+
+  // Esc bails out of targeting.
+  useEffect(() => {
+    if (!pendingAttack) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPendingAttack(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingAttack]);
+
+  // Movement/teleport targeting (Misty Step): pick a destination CELL, not a
+  // token. Separate from pendingAttack because it resolves on a board tap.
+  const [pendingMove, setPendingMove] = useState<{ by: string; tokenId: string; label: string } | null>(null);
+  const pendingMoveRef = useRef(pendingMove);
+  useEffect(() => {
+    pendingMoveRef.current = pendingMove;
+  }, [pendingMove]);
+  useEffect(() => {
+    if (!pendingMove) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPendingMove(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pendingMove]);
+
+  const requestMove = useCallback((by: string, tokenId: string, label: string) => {
+    setPendingMove({ by, tokenId, label });
+  }, []);
+
+  // One-shot teleport bursts (Misty Step), in SVG board coords. Each removes
+  // itself when its animation finishes.
+  // Teleport plume — a burst played in place, broadcast to the whole table
+  // through the shared spell-VFX channel (so it's not just local anymore). #94
+  const spawnMistyFx = (x: number, y: number) => {
+    spellFx.sendFx({ vfx: "misty-step", fromX: x, fromY: y, toX: x, toY: y });
+  };
+
+  const resolveMoveAt = (clientX: number, clientY: number) => {
+    const pm = pendingMoveRef.current;
+    if (!pm) return;
+    const local = clientToSvg(clientX, clientY);
+    if (!local) return;
+    const cx = Math.max(0, Math.min(cols - 1, Math.floor(local.x / CELL)));
+    const cy = Math.max(0, Math.min(rows - 1, Math.floor(local.y / CELL)));
+    // Teleport VFX: a burst where they vanish and where they reappear.
+    const tok = tokens.find((t) => t.id === pm.tokenId);
+    if (tok) {
+      const span = findSize(tok.size).cells;
+      const half = (span * CELL) / 2;
+      spawnMistyFx(tok.x * CELL + half, tok.y * CELL + half);
+      spawnMistyFx(cx * CELL + half, cy * CELL + half);
+    }
+    void moveToken(pm.tokenId, cx, cy);
+    toast.info(`${pm.by} casts ${pm.label}.`);
+    setPendingMove(null);
+  };
+
+  // While a swing plays we keep the sword cursor alive and defer the roll to the
+  // impact frame, so the strike reads before its result. `swinging` outlives
+  // pendingAttack for the tail of the animation; the ref guards against a second
+  // click landing a second attack mid-swing.
+  const [swinging, setSwinging] = useState(false);
+  const [attackKind, setAttackKind] = useState<CursorKind>("sword");
+  const swingLockRef = useRef(false);
+  const attackTimers = useRef<number[]>([]);
+  useEffect(
+    () => () => attackTimers.current.forEach((id) => window.clearTimeout(id)),
+    []
+  );
+  // Steal cursor's swing tail — keeps the pinch animation alive after the tap
+  // that lands it, mirroring the attack swing.
+  const [stealing, setStealing] = useState(false);
+  const stealLockRef = useRef(false);
+
+  // A just-landed hit the target may still react to (Uncanny Dodge, etc.). This
+  // is deliberately post-hoc and non-blocking: the attack resolves at full
+  // damage immediately, and this offer — auto-fading after a few seconds — lets
+  // the resolver hand back the difference if a reaction is declared. `applied`
+  // is what already landed; `halved` is what it becomes if the reaction fires.
+  const [reaction, setReaction] = useState<{
+    targetId: string;
+    targetLabel: string;
+    by: string;
+    label: string;
+    type?: string;
+    applied: number;
+    halved: number;
+  } | null>(null);
+
+  // Reaction offers are ephemeral — one window per hit, ~7s, then gone.
+  useEffect(() => {
+    if (!reaction) return;
+    const id = window.setTimeout(() => setReaction(null), 7000);
+    return () => window.clearTimeout(id);
+  }, [reaction]);
+
+  const bloomSeedFor = (t: Token, tone: RollTone, text: string) => {
+    const spec = findSize(t.size);
+    const cx = t.x * CELL + (spec.cells * CELL) / 2;
+    const cy = t.y * CELL + (spec.cells * CELL) / 2;
+    return { x: cx, y: cy - spec.radius * CELL - 8, tone, text };
+  };
+
+  const acOfToken = (t: Token): number | null => {
+    if (t.statblock) return t.statblock.ac;
+    const c = t.character_id ? characters.find((x) => x.id === t.character_id) : undefined;
+    return c ? c.ac.override ?? c.ac.value : null;
+  };
+
+  const defensesOfToken = (t: Token): Defenses => {
+    if (t.statblock)
+      return {
+        resistances: t.statblock.damageResistances,
+        immunities: t.statblock.damageImmunities,
+        vulnerabilities: t.statblock.damageVulnerabilities,
+      };
+    const c = t.character_id ? characters.find((x) => x.id === t.character_id) : undefined;
+    return c ? { ...c.defenses } : {};
+  };
+
+  // Whose HP can this client actually write? A monster token (member-wide RLS)
+  // or one of my own characters (owner-only RLS). A plain token or another
+  // player's PC is logged and applied by hand — so no auto-damage, no reaction
+  // offer (there'd be nothing to give back).
+  const canWriteHp = (t: Token): boolean =>
+    !!t.statblock || (!!t.character_id && characters.some((x) => x.id === t.character_id));
+
+  // Can this token cast Shield as a reaction, and how do we spend for it?
+  //  - a linked PC: knows Shield + a persistent slot open → spend that slot;
+  //  - a statblock NPC/monster: Shield in its parsed spellcasting with a slot →
+  //    ephemeral (monster slots aren't tracked centrally, so just log + reaction).
+  // Returns null when Shield isn't available (drives the offer, prompt, and spend).
+  const shieldSourceForToken = (
+    t: Token
+  ): { kind: "pc"; character: Character; slotLevel: number } | { kind: "statblock" } | null => {
+    if (t.character_id) {
+      const c = characters.find((x) => x.id === t.character_id);
+      if (!c || !knowsShield(c)) return null;
+      const cc = casterClass(c, classes);
+      const slots = cc ? slotsFor(cc.caster, cc.level, tables) : {};
+      const lvl = lowestOpenSlot(slots, c.spellcasting?.slotsUsed ?? {});
+      return lvl != null ? { kind: "pc", character: c, slotLevel: lvl } : null;
+    }
+    if (t.statblock) {
+      const mc = parseMonsterSpellcasting(t.statblock);
+      const inSlots = (mc?.groups ?? []).some(
+        (g) => g.level > 0 && g.max > 0 && g.spells.some((s) => /^shield$/i.test(s.trim()))
+      );
+      // Fallback for AI-generated statblocks that don't use the SRD "(N slots)"
+      // format: Shield named anywhere inside a Spellcasting / Innate Spellcasting
+      // trait still counts (statblock slots aren't tracked centrally anyway).
+      const inTrait = (t.statblock.traits ?? []).some(
+        (tr) => /spellcasting/i.test(tr.name) && /\bshield\b/i.test(tr.text ?? "")
+      );
+      return inSlots || inTrait ? { kind: "statblock" } : null;
+    }
+    return null;
+  };
+
+  // Can this token cast Counterspell (knows it + a 3rd-level-or-higher slot)?
+  // PC → spend that slot; statblock → ephemeral, and carries its save DC so the
+  // caster knows what CON DC to roll against.
+  const counterSourceForToken = (
+    t: Token
+  ): { kind: "pc"; character: Character; slotLevel: number } | { kind: "statblock"; dc: number } | null => {
+    if (t.character_id) {
+      const c = characters.find((x) => x.id === t.character_id);
+      if (!c || !knowsCounterspell(c)) return null;
+      const cc = casterClass(c, classes);
+      const slots = cc ? slotsFor(cc.caster, cc.level, tables) : {};
+      const lvl = lowestOpenSlotAtLeast(slots, c.spellcasting?.slotsUsed ?? {}, 3);
+      return lvl != null ? { kind: "pc", character: c, slotLevel: lvl } : null;
+    }
+    if (t.statblock) {
+      const mc = parseMonsterSpellcasting(t.statblock);
+      const inSlots = (mc?.groups ?? []).some(
+        (g) => g.level >= 3 && g.max > 0 && g.spells.some((s) => /^counterspell$/i.test(s.trim()))
+      );
+      const inTrait = (t.statblock.traits ?? []).some(
+        (tr) => /spellcasting/i.test(tr.name) && /counterspell/i.test(tr.text ?? "")
+      );
+      if (!(inSlots || inTrait)) return null;
+      const best = Math.max(t.statblock.abilities.INT ?? 10, t.statblock.abilities.WIS ?? 10, t.statblock.abilities.CHA ?? 10);
+      const dc = mc?.saveDC ?? 8 + (t.statblock.proficiencyBonus ?? 2) + abilityMod(best);
+      return { kind: "statblock", dc };
+    }
+    return null;
+  };
+
+  // Counterspell has a 60 ft range (12 cells). Is there any readable creature
+  // near the caster that *could* counter? (Used to skip the window entirely when
+  // nobody could — avoids a needless pause on every spell.)
+  const anyPotentialCounterspeller = (caster: Token): boolean =>
+    tokens.some((t) => t.id !== caster.id && footprintGap(t, caster) <= 12 && counterSourceForToken(t) != null);
+
+  // The token I control that would counter this caster's spell, if any.
+  const counterspellerFor = (offer: ReactionOffer): Token | null => {
+    const caster = tokens.find((t) => t.id === offer.targetTokenId);
+    if (!caster) return null;
+    return (
+      tokens.find(
+        (t) =>
+          t.id !== caster.id &&
+          iControlToken(t) &&
+          !economy[t.id]?.reaction &&
+          footprintGap(t, caster) <= 12 &&
+          counterSourceForToken(t) != null
+      ) ?? null
+    );
+  };
+
+  const ownsCharacter = (id: string | null | undefined): boolean =>
+    !!id && ownedCharacterIds.has(id);
+
+  // Apply HP to a PC this client can't own-write (a party member's character):
+  // the write goes through the service-role apply-hp function, which authorizes
+  // the caller as a game member first. The player's own realtime subscription
+  // reflects the change on their sheet/HUD. If the function isn't deployed yet,
+  // the hit is still logged — we just tell the DM to apply it by hand.
+  const applyHpRemote = async (characterId: string, op: "damage" | "heal", amount: number) => {
+    if (amount <= 0) return;
+    const { error } = await supabase.functions.invoke("apply-hp", {
+      body: { gameId: game.id, characterId, op, amount },
+    });
+    if (error) {
+      toast.info(
+        `Rolled and logged — but auto-applying HP to another player's PC needs the apply-hp function deployed. Have them apply ${amount} by hand.`
+      );
+    }
+  };
+
+  const applyDamageToToken = (t: Token, amount: number) => {
+    if (amount <= 0) return;
+    if (t.statblock) {
+      const cur = t.hp_current ?? t.statblock.hp;
+      void updateToken(t.id, { hp_current: Math.max(0, cur - amount) });
+    } else if (t.character_id && ownsCharacter(t.character_id)) {
+      // My own character — a direct owner write is allowed by RLS.
+      onUpdateCharacter(t.character_id, (c) => ({ ...c, hp: applyDamage(c.hp, amount) }));
+    } else if (t.character_id && characters.some((x) => x.id === t.character_id)) {
+      // A party member's PC — readable but not owner-writable; go through apply-hp.
+      void applyHpRemote(t.character_id, "damage", amount);
+    }
+    // else: a plain token — logged, applied by hand.
+    maybeRequestConcentration(t, amount);
+  };
+
+  // Damage to a concentrating creature demands a Constitution save (DC = 10 or
+  // half the damage, whichever is higher). Emitted through the save pipeline so
+  // it resolves on the concentrating PLAYER's own screen — the one client that
+  // can drop the held spell. Skipped when the blow drops them (unconsciousness
+  // ends concentration anyway) and for statblock tokens (no tracked spell).
+  const maybeRequestConcentration = (t: Token, amount: number) => {
+    const c = t.character_id ? characters.find((x) => x.id === t.character_id) : null;
+    const spell = c?.spellcasting?.concentratingOn;
+    if (!c || !spell) return;
+    if (amount >= c.hp.current + (c.hp.temp ?? 0)) return; // downed → drops via incapacitation
+    saves.request({
+      id: `conc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      by: c.name,
+      targetTokenId: t.id,
+      targetLabel: t.label,
+      ability: "CON",
+      dc: Math.max(10, Math.floor(amount / 2)),
+      sourceLabel: `Concentration (${spell})`,
+      onFail: "concentration",
+      onSave: "none",
+    });
+  };
+
+  // Give HP back to a target — the un-damage half of a reaction, re-reading the
+  // token live so it stacks on whatever its HP is *now*, not the stale snapshot.
+  const healToken = (id: string, amount: number) => {
+    if (amount <= 0) return;
+    const t = tokens.find((x) => x.id === id);
+    if (!t) return;
+    if (t.statblock) {
+      const cur = t.hp_current ?? t.statblock.hp;
+      const max = t.hp_max ?? t.statblock.hp;
+      void updateToken(id, { hp_current: Math.min(max, cur + amount) });
+    } else if (t.character_id && ownsCharacter(t.character_id)) {
+      onUpdateCharacter(t.character_id, (c) => ({ ...c, hp: applyHeal(c.hp, amount) }));
+    } else if (t.character_id && characters.some((x) => x.id === t.character_id)) {
+      void applyHpRemote(t.character_id, "heal", amount);
+    }
+  };
+
+  // A token's saving-throw bonus for a given ability — monster statblock save
+  // (or its ability mod) / a character's computed save.
+  const saveBonusOfToken = (t: Token, ab: Ability): number => {
+    if (t.statblock) return t.statblock.saves?.[ab] ?? abilityMod(t.statblock.abilities[ab] ?? 10);
+    const c = t.character_id ? characters.find((x) => x.id === t.character_id) : undefined;
+    return c ? saveBonus(c, ab) : 0;
+  };
+
+  // Breakdown chips for the dice dialog: the raw ability mod, plus whatever the
+  // total adds on top (proficiency + misc), so the chips always sum to the total.
+  const saveChips = (t: Token, ab: Ability): RollChip[] => {
+    const c = t.character_id ? characters.find((x) => x.id === t.character_id) : undefined;
+    const mod = t.statblock ? abilityMod(t.statblock.abilities[ab] ?? 10) : c ? abilityModFor(c, ab) : 0;
+    const total = saveBonusOfToken(t, ab);
+    const chips: RollChip[] = [{ label: ab, value: mod }];
+    if (total - mod !== 0) chips.push({ label: "Proficiency", value: total - mod });
+    return chips;
+  };
+
+  // Apply a condition that carries its own end-of-turn shake-off save, encoded
+  // as "paralyzed@WIS:13". De-dupes on the base name.
+  const applyConditionEncoded = (t: Token, name: string, save?: Ability, dc?: number) => {
+    if (!name) return;
+    const current = t.conditions ?? [];
+    if (current.some((c) => conditionName(c).toLowerCase() === name.toLowerCase())) return;
+    void updateToken(t.id, { conditions: [...current, encodeCondition(name, save, dc)] });
+  };
+  const clearCondition = (id: string, cond: string) => {
+    const t = tokens.find((x) => x.id === id);
+    if (!t) return;
+    // `cond` may be a bare name (badge click) or a full encoded entry — match on name.
+    const name = conditionName(cond).toLowerCase();
+    void updateToken(id, { conditions: (t.conditions ?? []).filter((c) => conditionName(c).toLowerCase() !== name) });
+  };
+
+  // Ask the token's controller to roll the save that ends a save-removable
+  // condition. Fired by clicking its badge (or automatically at end of turn).
+  const requestShakeOff = (t: Token, entry: string) => {
+    const pc = parseCondition(entry);
+    if (!pc.save || pc.dc == null) return;
+    saves.request({
+      id: `sr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${pc.name}`,
+      by: "Shake off",
+      targetTokenId: t.id,
+      targetLabel: t.label,
+      ability: pc.save,
+      dc: pc.dc,
+      sourceLabel: pc.name,
+      onFail: "condition",
+      condition: pc.name,
+      onSave: "none",
+      repeat: true,
+    });
+  };
+
+  // Badge click: a save-removable condition rolls to shake it off (only the
+  // controller / DM may trigger it); a condition with no save can't be waved
+  // away — it needs a cleansing spell or item — so only the DM force-clears it.
+  const onConditionBadge = (t: Token, entry: string) => {
+    const pc = parseCondition(entry);
+    if (pc.save && pc.dc != null) {
+      if (!iControlToken(t) && !isDM) {
+        toast.info(`Only ${t.label}'s controller can attempt that save.`);
+        return;
+      }
+      requestShakeOff(t, entry);
+    } else if (isDM) {
+      clearCondition(t.id, entry);
+    } else {
+      toast.info(`${pc.name} can't be shrugged off — it needs a spell or item to remove.`);
+    }
+  };
+
+  // ---- Save-request resolution (defender side) ------------------------------
+  // Apply the outcome of a demanded save + log it for the whole table, then
+  // clear the request everywhere.
+  const applySaveOutcome = (req: SaveRequest, target: Token, saved: boolean, result: RollResult) => {
+    let outcome: string;
+    if (req.repeat) {
+      // End-of-turn shake-off: success REMOVES the condition, failure keeps it.
+      if (saved) {
+        clearCondition(target.id, req.condition ?? "");
+        outcome = `shakes off ${req.condition}!`;
+      } else {
+        outcome = `still ${req.condition}`;
+      }
+    } else if (req.onFail === "damage") {
+      const rolled = parseInt(req.damage ?? "0", 10) || 0;
+      const dmg = saved && req.onSave === "half" ? Math.floor(rolled / 2) : saved ? 0 : rolled;
+      if (dmg > 0) applyDamageToToken(target, dmg);
+      outcome = saved
+        ? req.onSave === "half"
+          ? `saves — takes ${dmg} (half)`
+          : "saves — unharmed"
+        : `fails — takes ${dmg}`;
+    } else if (req.onFail === "concentration") {
+      // A failed save drops the held spell (owner-side write on the defender).
+      if (!saved && target.character_id) {
+        void onUpdateCharacter(target.character_id, (ch) => ({
+          ...ch,
+          spellcasting: ch.spellcasting ? { ...ch.spellcasting, concentratingOn: null } : ch.spellcasting,
+        }));
+      }
+      outcome = saved ? "holds concentration" : "loses concentration!";
+    } else {
+      // Save-or-condition.
+      if (!saved && req.condition) applyConditionEncoded(target, req.condition, req.ability, req.dc);
+      outcome = saved ? "resists" : req.condition ? `is ${req.condition}!` : "is affected!";
+    }
+    broadcastRoll(
+      target.label,
+      [{ label: `${req.ability} save vs ${req.sourceLabel} (DC ${req.dc}) — ${outcome}`, result }],
+      bloomSeedFor(
+        target,
+        saved ? "normal" : "crit",
+        saved ? "saved" : req.onFail === "concentration" ? "broke!" : req.condition || "hit"
+      )
+    );
+    saves.resolve(req.id);
+  };
+
+
+  const resolveSaveAutoFail = (req: SaveRequest) => {
+    const target = tokens.find((t) => t.id === req.targetTokenId);
+    if (!target) {
+      saves.resolve(req.id);
+      return;
+    }
+    const synthetic: RollResult = { expression: "auto", rolls: [], modifier: 0, total: 0, detail: "auto-fails" };
+    applySaveOutcome(req, target, false, synthetic);
+  };
+
+  const doubleDmg = (expr: string) =>
+    expr.replace(/^(\d+)d(\d+)/i, (_, n: string, s: string) => `${parseInt(n, 10) * 2}d${s}`);
+
+  // Auto-start combat on the first HARMFUL blow that actually LANDS ON A TARGET
+  // — not the moment the action button is pressed. Held in a ref so the memoized
+  // requestAttack (empty deps, to keep the cursor stable) always calls the latest
+  // closure over init/isDM rather than a stale one. Only the DM can roll
+  // initiative for the whole table (RLS), so player attacks just resolve; the
+  // DM's first strike kicks the fight off for everyone. Called from the target-
+  // resolution path (resolveAttack / resolveBurst), gated on the action dealing
+  // damage — so a utility cast (Charm Person, a heal, a restoration) never
+  // triggers a fight on its own.
+  const autoStartCombatRef = useRef<() => void>(() => {});
+  autoStartCombatRef.current = () => {
+    if (init.inCombat || !isDM) return;
+    if (combatTokens.length < 2) return; // nothing to order against
+    void init.rollAll(rollInitiativeFor).then((err) => {
+      if (err) toast.error(`Couldn't start combat: ${err}`);
+      else toast.success("Combat begins — initiative rolled for the table.");
+    });
+  };
+  // A harmful action = one that deals damage (attacks, Magic Missile, a cone…).
+  // Save-or-condition control (Charm/Hold Person), heals, and restorations don't
+  // start a fight by themselves — the DM (or the first damaging blow) does.
+  const startCombatIfHarmful = (spec: AttackSpec) => {
+    if (spec.damage != null) autoStartCombatRef.current();
+  };
+
+  const requestAttack = useCallback((by: string, attackerId: string, spec: AttackSpec) => {
+    // Pick the cursor sheet from the attack: a casting hand for spell/magical
+    // attacks, a fist for unarmed strikes, a sword for everything else. Held in
+    // state so it persists through the swing tail.
+    const ARCANE = /fire|cold|lightning|acid|force|necrotic|radiant|psychic|thunder/i;
+    const kind: CursorKind = spec.heal != null || spec.condition != null || spec.cleanse != null || spec.burst || spec.placeArea != null
+      ? "spell"
+      : /unarm|fist|punch/i.test(spec.label)
+        ? "unarmed"
+        : /\b(bolt|ray|blast|spell|cast|eldritch|magic|arcane|firebolt)\b/i.test(spec.label) ||
+            (spec.damageType != null && ARCANE.test(spec.damageType))
+          ? "spell"
+          : "sword";
+    setAttackKind(kind);
+    setPendingAttack({ by, attackerId, spec });
+    // Economy is spent by the HUD (onSpend) when the action button is pressed —
+    // one source of truth, so Multiattack counts and non-attack actions agree.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resolve an aimed area/cone (Cone of Cold) toward a POINT — not a token —
+  // because an area spell is aimed at a spot, not a creature. Plays the burst
+  // from the caster toward (aimX, aimY) and damages every creature in the wedge.
+  const resolveBurst = (by: string, spec: AttackSpec, attackerId: string | undefined, aimX: number, aimY: number) => {
+    startCombatIfHarmful(spec); // a damaging area cast begins the fight
+    // Lingering area spell (Web, Wall of Fire…): drop a persistent #80 area token
+    // at the aimed cell. It stays until removed; the DM adjudicates who's inside
+    // each round. Directional shapes (line/wall) start facing east — rotate via
+    // the token's handle (#80).
+    if (spec.placeArea) {
+      const x = Math.max(0, Math.min(cols - 1, Math.floor(aimX / CELL)));
+      const y = Math.max(0, Math.min(rows - 1, Math.floor(aimY / CELL)));
+      void addToken({
+        label: spec.label,
+        kind: "spell",
+        area: { shape: spec.placeArea.shape, size: spec.placeArea.size, damageType: spec.placeArea.damageType, level: spec.placeArea.level, facing: 0, movable: spec.placeArea.movable },
+        size: "medium",
+        x,
+        y,
+        controller: "dm",
+      });
+      const saveTxt = spec.save
+        ? ` — ${spec.save} save${spec.dc != null ? ` DC ${spec.dc}` : ""}${spec.condition ? ` or ${spec.condition}` : ""}`
+        : "";
+      broadcastRoll(
+        by,
+        [{ label: `${spec.label}${saveTxt} (area placed)`, result: roll("1d1") }],
+        { x: x * CELL + CELL / 2, y: y * CELL, tone: "normal" as RollTone, text: "✦" }
+      );
+      toast.info(`${spec.label} placed — rotate/move it via its handle; remove it when the spell ends.`);
+      return;
+    }
+    const caster = attackerId ? tokens.find((t) => t.id === attackerId) : undefined;
+    if (!caster) return;
+    const apex = centerOfToken(caster);
+    if (spec.vfx && hasSpellFx(spec.vfx)) {
+      spellFx.sendFx({ vfx: spec.vfx, fromX: apex.x, fromY: apex.y, toX: aimX, toY: aimY });
+    }
+    if (!spec.damage) return;
+    const dir = Math.atan2(aimY - apex.y, aimX - apex.x);
+    // Every non-caster combatant whose center falls in the cone — indiscriminate.
+    const caught = tokens.filter((t) => {
+      if (t.id === caster.id || t.hidden || t.kind === "prop" || t.kind === "spell") return false;
+      const c = centerOfToken(t);
+      const dist = Math.hypot(c.x - apex.x, c.y - apex.y);
+      if (dist < 1 || dist > CONE_LEN) return false;
+      const diff = Math.abs(((Math.atan2(c.y - apex.y, c.x - apex.x) - dir + Math.PI) % (2 * Math.PI)) - Math.PI);
+      return diff <= CONE_HALF_ANGLE;
+    });
+    // RAW: one damage roll for the whole area; each caught creature saves for half
+    // (auto-rolled off its own bonus — statblock or PC sheet).
+    // RAW: one damage roll for the whole area; each caught creature saves for
+    // half. Two creatures that both fail with no resistance take the same number
+    // (correct) — the per-creature amount only diverges on a save or resistance.
+    const dmgRoll = roll(spec.damage);
+    const dcTxt = spec.dc != null ? ` DC ${spec.dc}` : "";
+    const entries: RollEntry[] = [
+      { label: `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"} (${spec.save ?? "save"}${dcTxt} for half)`, result: dmgRoll },
+    ];
+    // A floating number for EACH caught creature (a bloom is one-per-roll, so we
+    // log every line in one call, then bloom each token separately).
+    const tokenBlooms: { t: Token; tone: RollTone; text: string }[] = [];
+    caught.forEach((t) => {
+      const sv = spec.save ? rollD20(saveBonusOfToken(t, spec.save)) : null;
+      const saved = sv != null && spec.dc != null && sv.total >= spec.dc;
+      const raw = saved ? Math.floor(dmgRoll.total / 2) : dmgRoll.total;
+      const out = resolveDamage(raw, spec.damageType, defensesOfToken(t));
+      applyDamageToToken(t, out.final);
+      const saveTxt = sv ? `${sv.total} vs${dcTxt} ${saved ? "save" : "fail"} — ` : "";
+      entries.push({
+        label: `${t.label} — ${saveTxt}${out.final} ${spec.damageType ?? "damage"}${out.note ? ` (${out.note})` : ""}`,
+        result: sv ?? dmgRoll,
+      });
+      tokenBlooms.push({ t, tone: saved ? "normal" : "crit", text: out.immune ? "immune" : String(out.final) });
+    });
+    if (caught.length === 0) entries.push({ label: `— no creatures in the cone`, result: dmgRoll });
+    // Log the whole cone in one entry-set (no bloom)…
+    broadcastRoll(by, entries);
+    // …then a damage number over every creature it caught.
+    tokenBlooms.forEach(({ t, tone, text }) => broadcastRoll("", [], bloomSeedFor(t, tone, text)));
+  };
+
+  const resolveAttack = (by: string, spec: AttackSpec, target: Token, attackerId?: string) => {
+    // A harmful strike that reaches a target starts combat (utility casts don't).
+    startCombatIfHarmful(spec);
+    // Restoration spell/item (Lesser Restoration, antitoxin…): no to-hit — strip
+    // one matching condition from the target. RAW removes a single named effect,
+    // so we clear the first badge whose name the spell can cure.
+    if (spec.cleanse != null) {
+      const cures = spec.cleanse.map((s) => s.toLowerCase());
+      const held = target.conditions ?? [];
+      const hit = held.find((c) => cures.includes(conditionName(c).toLowerCase()));
+      if (hit) {
+        const cured = conditionName(hit);
+        clearCondition(target.id, cured);
+        const entry: RollEntry = {
+          label: `${by} → ${target.label} · ${spec.label} — cures ${cured}`,
+          result: roll("1d1"),
+        };
+        broadcastRoll(by, [entry], bloomSeedFor(target, "normal", "✦"));
+      } else {
+        toast.info(`${target.label} has nothing ${spec.label} can cure.`);
+      }
+      return;
+    }
+    // Healing spell: no to-hit — roll the dice and restore HP to the chosen
+    // token (which may be the caster's own). Green bloom, no AC.
+    if (spec.heal != null) {
+      const healRoll = roll(spec.heal);
+      healToken(target.id, healRoll.total);
+      const entry: RollEntry = {
+        label: `${by} → ${target.label} · ${spec.label} — heals ${healRoll.total}`,
+        result: healRoll,
+      };
+      broadcastRoll(by, [entry], bloomSeedFor(target, "normal", `+${healRoll.total}`));
+      return;
+    }
+    // Save-or-be-conditioned spell (Hold Person, Fear, …). The caster only sets
+    // the DC — the DEFENDER rolls the save, on their own screen. Emit a save
+    // request that travels to whoever controls the target; resolution + the
+    // condition badge happen there. See resolveSaveRequest below.
+    if (spec.condition != null && spec.save) {
+      const cond = spec.condition;
+      const dc = spec.dc ?? 10;
+      // Guard: condition immunity (statblock) and creature-type restriction
+      // (Hold Person → humanoids only) — the save simply never happens.
+      const immune = (target.statblock?.conditionImmunities ?? []).some(
+        (ci) => conditionName(ci).toLowerCase() === cond.toLowerCase()
+      );
+      const wrongType =
+        !!spec.restrictType &&
+        !!target.statblock &&
+        !target.statblock.type.toLowerCase().includes(spec.restrictType.toLowerCase());
+      if (immune || wrongType) {
+        toast.info(`${target.label} is unaffected by ${spec.label}.`);
+        return;
+      }
+      saves.request({
+        id: `sr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        by,
+        targetTokenId: target.id,
+        targetLabel: target.label,
+        ability: spec.save,
+        dc,
+        sourceLabel: spec.label,
+        onFail: "condition",
+        condition: cond,
+        onSave: "none",
+      });
+      toast.info(`${target.label} must make a ${spec.save} save vs ${spec.label}…`);
+      return;
+    }
+    // Aimed area/cone (Cone of Cold): the tapped token only sets the DIRECTION.
+    // Play the cone burst anchored at the caster, roll the damage, and announce
+    // the save — a cone catches a wedge of creatures, so the DM adjudicates who's
+    // in it and applies damage (matching how the table's other AoE saves work).
+    // A cone tapped ON a token just uses that token as the aim POINT (direction);
+    // the real work is point-based in resolveBurst.
+    if (spec.burst) {
+      const tgt = centerOfToken(target);
+      resolveBurst(by, spec, attackerId, tgt.x, tgt.y);
+      return;
+    }
+    // Auto-hit projectile spell (Magic Missile): no to-hit, no Shield window.
+    // Fire the VFX from caster → target and land the damage on the projectile's
+    // arrival, so the number pops exactly when the bolt strikes.
+    if (spec.autoHit) {
+      const applyHit = () => {
+        if (!spec.damage) return;
+        const def = defensesOfToken(target);
+        const dmgRoll = roll(spec.damage);
+        const out = resolveDamage(dmgRoll.total, spec.damageType, def);
+        applyDamageToToken(target, out.final);
+        const detail =
+          out.final !== dmgRoll.total ? `${dmgRoll.detail} → ${out.final}${out.note ? ` (${out.note})` : ""}` : dmgRoll.detail;
+        const entry: RollEntry = {
+          label: `${by} → ${target.label} · ${spec.label} — ${out.final} ${spec.damageType ?? "damage"}${out.note ? ` (${out.note})` : ""}`,
+          result: { ...dmgRoll, total: out.final, detail },
+        };
+        broadcastRoll(by, [entry], bloomSeedFor(target, "normal", out.immune ? "immune" : String(out.final)));
+      };
+      // Land the damage on the projectile's arrival; if there's no vfx, at once.
+      const fired = spec.vfx ? fireSpellProjectile(spec.vfx, attackerId, target) : false;
+      if (fired) window.setTimeout(applyHit, SPELL_FX_TRAVEL_MS);
+      else applyHit();
+      return;
+    }
+    // Attack-roll spell with a projectile (Fire Bolt): the bolt is cosmetic and
+    // flies as the to-hit/damage resolves through the normal path below.
+    if (spec.vfx) fireSpellProjectile(spec.vfx, attackerId, target);
+    const ac = acOfToken(target);
+    // Conditions bend the to-hit: the target may grant attackers advantage
+    // (paralyzed/restrained/prone/…), the attacker may have disadvantage
+    // (frightened/poisoned/…). If both apply they cancel to a straight roll.
+    const tgtAgg = aggregateConditions(target.conditions ?? []);
+    const attacker = attackerId ? tokens.find((t) => t.id === attackerId) : undefined;
+    const atkAgg = aggregateConditions(attacker?.conditions ?? []);
+    const adv = tgtAgg.attackersAdvantage;
+    const dis = atkAgg.selfAttackDisadvantage;
+    const mode: RollMode = adv && dis ? "normal" : adv ? "adv" : dis ? "dis" : "normal";
+    const hit = rollD20(spec.attackBonus, mode);
+    const nat = naturalD20(hit);
+    const crit = nat === 20;
+    const fumble = nat === 1;
+    const isHit = crit || (!fumble && (ac == null || hit.total >= ac));
+    // True to rules: a hit that Shield could still turn into a miss PAUSES here.
+    // The defender's controller gets a reaction window; finishAttack runs on
+    // their answer (or a timeout). Everything else finalizes immediately.
+    if (isHit && ac != null && offerShieldWindow(by, spec, target, hit, mode, crit, fumble, ac)) return;
+    finishAttack(by, spec, target, hit, mode, crit, fumble, ac, 0);
+  };
+
+  // Finalize an attack once any reaction window has closed: recompute hit/miss
+  // against the (possibly Shield-boosted) AC, then roll + apply damage and log.
+  // `acBonus` is whatever a defensive reaction added (+5 for Shield).
+  const finishAttack = (
+    by: string,
+    spec: AttackSpec,
+    target: Token,
+    hit: RollResult,
+    mode: RollMode,
+    crit: boolean,
+    fumble: boolean,
+    baseAc: number | null,
+    acBonus: number,
+    reactionLabel?: string
+  ) => {
+    const ac = baseAc == null ? null : baseAc + acBonus;
+    const isHit = crit || (!fumble && (ac == null || hit.total >= ac));
+    const modeTag = mode === "adv" ? " (adv)" : mode === "dis" ? " (dis)" : "";
+    const reactTag = acBonus > 0 ? ` (${reactionLabel ?? "reaction"} +${acBonus})` : "";
+    const acLabel = ac != null ? ` vs AC ${ac}${reactTag}` : "";
+    const entries: RollEntry[] = [
+      {
+        label: `${by} → ${target.label} · ${spec.label}${acLabel}${modeTag} — ${isHit ? (crit ? "crit!" : "hit") : "miss"}`,
+        result: hit,
+      },
+    ];
+    const tone: RollTone = crit ? "crit" : isHit ? "normal" : "fumble";
+    let bloomText = isHit ? "hit" : "miss";
+    if (isHit && spec.damage) {
+      const def = defensesOfToken(target);
+      const dmgRoll = roll(crit ? doubleDmg(spec.damage) : spec.damage);
+      const out = resolveDamage(dmgRoll.total, spec.damageType, def);
+      applyDamageToToken(target, out.final);
+      const detail =
+        out.final !== dmgRoll.total ? `${dmgRoll.detail} → ${out.final}${out.note ? ` (${out.note})` : ""}` : dmgRoll.detail;
+      entries.push({
+        label: `${spec.label} — ${out.final} ${spec.damageType ?? "damage"}${out.note ? ` (${out.note})` : ""}`,
+        result: { ...dmgRoll, total: out.final, detail },
+      });
+      bloomText = out.immune ? "immune" : String(out.final);
+
+      // Offer a damage-halving reaction while it can still matter: only when we
+      // actually wrote HP (so there's something to give back) and halving would
+      // change the number. Stacks correctly with resistance — the resolver
+      // recomputes from the same raw roll with the reaction applied.
+      const halvedOut = resolveDamage(dmgRoll.total, spec.damageType, def, { reactionHalves: true });
+      if (canWriteHp(target) && halvedOut.final < out.final) {
+        setReaction({
+          targetId: target.id,
+          targetLabel: target.label,
+          by,
+          label: spec.label,
+          type: spec.damageType,
+          applied: out.final,
+          halved: halvedOut.final,
+        });
+      }
+    }
+    broadcastRoll(by, entries, bloomSeedFor(target, tone, bloomText));
+  };
+
+  // Close a reaction window exactly once (a response OR the timeout): tear the
+  // offer down everywhere and run the stored continuation with the answer.
+  const resolveReaction = (id: string, resp: ReactionResponse) => {
+    const cont = reactionContRef.current[id];
+    if (!cont) return; // already resolved (guards timeout-vs-response races)
+    delete reactionContRef.current[id];
+    const to = reactionTimers.current[id];
+    if (to) {
+      window.clearTimeout(to);
+      delete reactionTimers.current[id];
+    }
+    setAwaitingReaction((a) => (a?.id === id ? null : a));
+    reactions.clear(id);
+    cont(resp);
+  };
+  // (reactionResolveRef is assigned in the counterspell block, dispatching by kind.)
+
+  // Attacker: a hit that Shield could flip opens a reaction window — pause,
+  // offer it to the target's controller, and defer finishAttack. Returns true
+  // when a window opened. Gated so the prompt is never noise: linked PC only,
+  // knows Shield, has a slot open, not a crit, and +5 could actually save them.
+  const offerShieldWindow = (
+    by: string,
+    spec: AttackSpec,
+    target: Token,
+    hit: RollResult,
+    mode: RollMode,
+    crit: boolean,
+    fumble: boolean,
+    baseAc: number
+  ): boolean => {
+    // A crit auto-hits regardless of AC, so Shield can't stop the triggering
+    // blow — no window. Otherwise offer on any hit the caster could Shield (it
+    // also lasts the round, so it's worth casting even when it won't flip this
+    // one); the defender's client makes the final availability call.
+    if (crit || fumble) return false;
+    if (!shieldSourceForToken(target)) return false;
+    const id = `rx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    reactionContRef.current[id] = (resp) =>
+      finishAttack(by, spec, target, hit, mode, crit, fumble, baseAc, resp.acBonus ?? 0, resp.label);
+    setAwaitingReaction({ id, targetLabel: target.label });
+    reactions.offer({
+      id,
+      kind: "shield",
+      by,
+      targetTokenId: target.id,
+      targetLabel: target.label,
+      sourceLabel: spec.label,
+      toHit: hit.total,
+      baseAc,
+    });
+    reactionTimers.current[id] = window.setTimeout(() => resolveReaction(id, { id, kind: "shield", acBonus: 0 }), 12000);
+    return true;
+  };
+
+  // --- Hostility & Movement-triggered Opportunity Attacks (#101) -----------
+  // A player character is always party-side; a placed creature uses its DM-set
+  // disposition, defaulting to hostile when unset. Two creatures are enemies
+  // when their dispositions differ — that's what provokes an OA.
+  const dispositionOf = (t: Token): "friendly" | "hostile" =>
+    t.character_id ? "friendly" : t.disposition ?? "hostile";
+  const areEnemies = (a: Token, b: Token): boolean => dispositionOf(a) !== dispositionOf(b);
+
+  // DM flips a creature between hostile and friendly (from the tracker). PCs are
+  // always party-side, so their disposition is not editable.
+  const toggleDisposition = (t: Token) => {
+    if (!isDM || t.character_id) return;
+    void updateToken(t.id, { disposition: dispositionOf(t) === "hostile" ? "friendly" : "hostile" });
+  };
+
+  // A creature's first MELEE attack, as an AttackSpec — the OA it makes when a
+  // foe leaves its reach. Null if it has no melee option (pure caster/ranged).
+  const oaMeleeSpec = (r: Token): AttackSpec | null => {
+    if (r.statblock) {
+      const a = (r.statblock.actions ?? []).find(
+        (x) => x.attackBonus != null && !/multiattack/i.test(x.name) && (attackRangeFt(x.reach) ?? 5) <= 10
+      );
+      return a
+        ? { label: a.name, attackBonus: a.attackBonus ?? 0, damage: a.damage, damageType: a.damageType, range: a.reach ?? "5 ft" }
+        : null;
+    }
+    const c = r.character_id ? characters.find((x) => x.id === r.character_id) : undefined;
+    if (!c) return null;
+    const atks = resolveAttacks(c);
+    const atk = atks.find((x) => (attackRangeFt(x.range) ?? 5) <= 10) ?? atks[0];
+    if (!atk) return null;
+    const mod = damageBonus(c, atk);
+    const dmg = mod === 0 ? atk.damage : `${atk.damage}${mod >= 0 ? "+" : ""}${mod}`;
+    return { label: atk.name, attackBonus: attackBonus(c, atk), damage: dmg, damageType: atk.damageType, range: atk.range ?? "5 ft" };
+  };
+
+  // On a committed move (see onDragUpRef), offer an OA to every enemy whose reach
+  // the mover just LEFT — was within reach at the old cell, out of it at the new.
+  // The offer is broadcast; only that enemy's controller is prompted. Enemy =
+  // opposite faction (PC token ↔ monster/DM token); there is no attitude model.
+  const maybeProvokeOAs = (mover: Token, oldX: number, oldY: number, newX: number, newY: number) => {
+    if (!init.inCombat || mover.kind === "prop" || mover.kind === "spell") return;
+    const at = (x: number, y: number): Token => ({ ...mover, x, y });
+    for (const r of tokens) {
+      if (r.id === mover.id || r.kind === "prop" || r.kind === "spell" || r.hidden) continue;
+      if ((r.hp_current ?? 1) <= 0) continue;
+      if (!areEnemies(mover, r)) continue; // only opposing dispositions provoke
+      if (aggregateConditions(r.conditions ?? []).incapacitated) continue;
+      const spec = oaMeleeSpec(r);
+      if (!spec) continue;
+      const reachCells = Math.max(1, Math.round((attackRangeFt(spec.range) ?? 5) / 5));
+      if (footprintGap(r, at(oldX, oldY)) <= reachCells && footprintGap(r, at(newX, newY)) > reachCells) {
+        const id = `oa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${r.id.slice(0, 4)}`;
+        reactions.offer({
+          id,
+          kind: "opportunity",
+          by: mover.label,
+          targetTokenId: r.id,
+          targetLabel: r.label,
+          sourceLabel: spec.label,
+          moverTokenId: mover.id,
+          moverLabel: mover.label,
+        });
+        reactionTimers.current[id] = window.setTimeout(() => reactions.clear(id), 15000);
+      }
+    }
+  };
+
+  // Reactor's controller took the OA: run their melee attack at the mover through
+  // the normal resolution (to-hit → damage → log), spend the reaction, tear the
+  // offer down everywhere.
+  const runOpportunityAttack = (offer: ReactionOffer) => {
+    reactions.respond({ id: offer.id, kind: "opportunity", label: "Opportunity Attack" });
+    const reactor = tokens.find((t) => t.id === offer.targetTokenId);
+    const mover = offer.moverTokenId ? tokens.find((t) => t.id === offer.moverTokenId) : undefined;
+    if (!reactor || !mover) return;
+    const spec = oaMeleeSpec(reactor);
+    if (!spec) return;
+    markEconomy(reactor.id, "reaction");
+    resolveAttack(`${reactor.label} (Opportunity Attack)`, spec, mover, reactor.id);
+  };
+
+  // The target declares a damage-halving reaction: give back the difference and
+  // log it. Idempotent-ish — the offer is cleared immediately so a double-tap
+  // can't refund twice.
+  const applyReaction = () => {
+    const r = reaction;
+    if (!r) return;
+    setReaction(null);
+    markEconomy(r.targetId, "reaction"); // the defender spent its reaction
+    const giveBack = r.applied - r.halved;
+    if (giveBack > 0) healToken(r.targetId, giveBack);
+    const target = tokens.find((t) => t.id === r.targetId);
+    const seed = target ? bloomSeedFor(target, "normal", String(r.halved)) : undefined;
+    const detail = `reaction — halved to ${r.halved}`;
+    broadcastRoll(r.by, [
+      {
+        label: `${r.targetLabel} — reaction · ${r.label} halved to ${r.halved} ${r.type ?? "damage"}`,
+        result: { expression: "reaction", rolls: [], modifier: 0, total: r.halved, detail },
+      },
+    ], seed);
+  };
+
+  // ---- Shield reaction (defender side) --------------------------------------
+  // Is Shield actually castable right now for this offer's target? (Reaction
+  // unspent + a slot open.) Drives both the prompt and the auto-decline.
+  const shieldReadyFor = useCallback(
+    (offer: ReactionOffer): boolean => {
+      if (economy[offer.targetTokenId]?.reaction) return false; // reaction already spent
+      const t = tokens.find((x) => x.id === offer.targetTokenId);
+      return !!t && shieldSourceForToken(t) != null;
+    },
+    // shieldSourceForToken closes over the same inputs listed here.
+    [economy, tokens, characters, classes, tables]
+  );
+
+  const declineReaction = useCallback(
+    (offer: ReactionOffer) => reactions.respond({ id: offer.id, kind: "shield", acBonus: 0 }),
+    [reactions]
+  );
+
+  // Cast Shield in response: spend the reaction (and a PC's lowest slot), log to
+  // the table, and answer +5 AC so the attacker recomputes the hit.
+  const castShieldReaction = (offer: ReactionOffer) => {
+    const t = tokens.find((x) => x.id === offer.targetTokenId);
+    const src = t ? shieldSourceForToken(t) : null;
+    if (!t || !src) {
+      declineReaction(offer);
+      return;
+    }
+    markEconomy(offer.targetTokenId, "reaction");
+    if (src.kind === "pc") {
+      // Persist the spent slot on the owned character.
+      void onUpdateCharacter(src.character.id, (ch) => {
+        const sc = ch.spellcasting ?? { known: [], prepared: [], slotsUsed: {} };
+        const lvl = String(src.slotLevel);
+        return { ...ch, spellcasting: { ...sc, slotsUsed: { ...sc.slotsUsed, [lvl]: (sc.slotsUsed[lvl] ?? 0) + 1 } } };
+      });
+    }
+    // (Statblock casters: monster slots aren't tracked centrally — the reaction
+    //  economy is the meaningful cost, and it's logged below.)
+    broadcastRoll(t.label, [
+      {
+        label: `${t.label} casts Shield (reaction) — +5 AC vs ${offer.sourceLabel}`,
+        result: { expression: "reaction", rolls: [], modifier: 0, total: 0, detail: "+5 AC" },
+      },
+    ]);
+    reactions.respond({ id: offer.id, kind: "shield", acBonus: 5, label: "Shield" });
+  };
+
+  // Auto-decline any offer I control but can't answer (reaction spent / no slot)
+  // so the attacker isn't left waiting on a dead option.
+  useEffect(() => {
+    for (const o of reactions.pending) {
+      if (o.kind !== "shield") continue; // counterspell declines are local-only (see below)
+      const t = tokens.find((x) => x.id === o.targetTokenId);
+      if (t && iControlToken(t) && !shieldReadyFor(o)) declineReaction(o);
+    }
+  }, [reactions.pending, tokens, iControlToken, shieldReadyFor, declineReaction]);
+
+  // Prune locally-dismissed counterspell offers once they leave the pending set.
+  useEffect(() => {
+    setDismissedCounters((prev) => {
+      const live = new Set(reactions.pending.map((o) => o.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [reactions.pending]);
+
+  // ---- Counterspell window (caster + reactor sides) -------------------------
+  // Caster side: opened from the HUD as a spell is cast. Resolves with whether
+  // the spell was countered. Skipped (resolves false at once) when no one nearby
+  // could counter, so a normal cast isn't paused.
+  const counterspellCheck = (
+    casterToken: Token,
+    casterName: string,
+    spellName: string,
+    level: number
+  ): Promise<boolean> =>
+    new Promise((resolve) => {
+      if (!init.inCombat || level < 1 || !anyPotentialCounterspeller(casterToken)) {
+        resolve(false);
+        return;
+      }
+      const id = `cs-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      counterspellRef.current[id] = { resolve, casterTokenId: casterToken.id, spell: spellName };
+      setAwaitingCounter({ id, spell: spellName });
+      reactions.offer({
+        id,
+        kind: "counterspell",
+        by: casterName,
+        targetTokenId: casterToken.id,
+        targetLabel: casterToken.label,
+        sourceLabel: spellName,
+        spellLevel: level,
+      });
+      counterspellTimers.current[id] = window.setTimeout(() => finishCounter(id, { counter: false }), 12000);
+    });
+
+  // A counter response (or the timeout) arrives on the caster's client. A real
+  // counter demands the caster's OWN CON save (vs the counterspeller's DC) — the
+  // window's promise stays open until that save resolves; otherwise it's a pass.
+  const finishCounter = (id: string, resp: { counter?: boolean; counterDc?: number; counterBy?: string }) => {
+    const entry = counterspellRef.current[id];
+    if (!entry) return;
+    const to = counterspellTimers.current[id];
+    if (to) {
+      window.clearTimeout(to);
+      delete counterspellTimers.current[id];
+    }
+    setAwaitingCounter((a) => (a?.id === id ? null : a));
+    reactions.clear(id);
+    delete counterspellRef.current[id]; // window consumed — later duplicates no-op
+    if (resp.counter && resp.counterDc != null) {
+      pendingCounterResolveRef.current = entry.resolve; // settled by the CON save
+      setCasterCounterSave({
+        id,
+        dc: resp.counterDc,
+        by: resp.counterBy ?? "Counterspell",
+        spell: entry.spell,
+        casterTokenId: entry.casterTokenId,
+      });
+    } else {
+      entry.resolve(false);
+    }
+  };
+  reactionResolveRef.current = (resp) => {
+    if (resp.kind === "counterspell") return finishCounter(resp.id, resp);
+    // OA resolves on the reactor's own client; the mover's side just clears its
+    // auto-expire timer once the offer is answered (or already torn down).
+    if (resp.kind === "opportunity") {
+      const tm = reactionTimers.current[resp.id];
+      if (tm) {
+        window.clearTimeout(tm);
+        delete reactionTimers.current[resp.id];
+      }
+      return;
+    }
+    return resolveReaction(resp.id, resp);
+  };
+
+  // The caster's CON save landed: success = spell holds (not countered).
+  const resolveCounterSave = (countered: boolean) => {
+    const resolve = pendingCounterResolveRef.current;
+    pendingCounterResolveRef.current = null;
+    setCasterCounterSave(null);
+    resolve?.(countered);
+  };
+
+  // Reactor side: cast Counterspell in response — spend reaction + a 3rd+ slot,
+  // log it, and answer with the counterspeller's spell save DC.
+  const doCounterspell = (offer: ReactionOffer) => {
+    const cst = counterspellerFor(offer);
+    const src = cst ? counterSourceForToken(cst) : null;
+    if (!cst || !src) return;
+    markEconomy(cst.id, "reaction");
+    let dc = 13;
+    if (src.kind === "pc") {
+      const cc = casterClass(src.character, classes);
+      dc = (cc ? spellSaveDC(src.character, cc.name) : null) ?? 13;
+      void onUpdateCharacter(src.character.id, (ch) => {
+        const sc = ch.spellcasting ?? { known: [], prepared: [], slotsUsed: {} };
+        const lvl = String(src.slotLevel);
+        return { ...ch, spellcasting: { ...sc, slotsUsed: { ...sc.slotsUsed, [lvl]: (sc.slotsUsed[lvl] ?? 0) + 1 } } };
+      });
+    } else {
+      dc = src.dc;
+    }
+    broadcastRoll(cst.label, [
+      {
+        label: `${cst.label} casts Counterspell on ${offer.by}'s ${offer.sourceLabel}!`,
+        result: { expression: "reaction", rolls: [], modifier: 0, total: 0, detail: "reaction" },
+      },
+    ]);
+    reactions.respond({ id: offer.id, kind: "counterspell", counter: true, counterDc: dc, counterBy: cst.label });
+  };
+
+  // One <path> holding every fogged cell as a subpath — hundreds of rects
+  // would bloat the DOM; a single path renders cheaply at any grid size.
+  const fogPath = useMemo(() => {
+    if (!fog.enabled) return null;
+    let d = "";
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        if (!fog.revealed.has(y * cols + x)) {
+          d += `M${x * CELL},${y * CELL}h${CELL}v${CELL}h${-CELL}z`;
+        }
+      }
+    }
+    return d || null;
+  }, [fog.enabled, fog.revealed, cols, rows]);
+
+  // Tokens with a saving throw still pending — the caster sees a casting loader.
+  const savePendingIds = new Set(saves.pending.map((r) => r.targetTokenId));
+
+  const svgCursor = pendingSteal || stealing
+    ? ANIMATED_CURSOR
+      ? "none"
+      : PINCH_CURSOR
+    : pendingMove
+    ? "crosshair"
+    : pendingAttack
+    ? ANIMATED_CURSOR
+      ? "none"
+      : SWORD_CURSOR
+    : panning
+    ? "grabbing"
+    : spaceHeld || tool === "pan"
+      ? "grab"
+      : tool === "ping" || tool === "ruler" || tool === "fog" || tool === "draw"
+        ? "crosshair"
+        : "default";
+
+  return (
+    <div className="table-shell" ref={shellRef}>
+      <RotateHint />
+      {/* Header */}
+      <header className="table-header">
+        <button
+          className="ghost table-back"
+          onClick={onBack}
+          title="Back to campaigns"
+          style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <Icon name="back" size={14} />
+          <span className="table-back-label">Games</span>
+        </button>
+
+        {/* Scene selector — Owlbear-style "Grass Field ▼" */}
+        <div style={{ position: "relative" }}>
+          <button
+            className="ghost"
+            onClick={() => setScenesOpen((v) => !v)}
+            style={{ fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}
+            title={isDM ? "Switch or create a scene" : "Current scene"}
+          >
+            <span className="scene-name">{activeScene?.name ?? "No scene"}</span>
+            <Icon name="down" size={14} />
+          </button>
+          {scenesOpen && (
+            <div
+              className="panel"
+              style={{
+                position: "absolute",
+                top: "100%",
+                left: 0,
+                marginTop: 4,
+                zIndex: 50,
+                minWidth: 240,
+                padding: 8,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                boxShadow: "var(--shadow-lg)",
+              }}
+            >
+            {scenes.map((s) => (
+              <button
+                key={s.id}
+                className={s.id === activeScene?.id ? "primary" : "ghost"}
+                onClick={async () => {
+                  if (isDM) await setActiveScene(s.id);
+                  setScenesOpen(false);
+                }}
+                disabled={!isDM && s.id !== activeScene?.id}
+                style={{
+                  justifyContent: "space-between",
+                  display: "flex",
+                  fontSize: 12,
+                  textAlign: "left",
+                }}
+                title={isDM ? "Switch to this scene" : "Only the DM can switch scenes"}
+              >
+                <span>{s.name}</span>
+                {isDM && s.id !== activeScene?.id && scenes.length > 1 && (
+                  <span
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete scene "${s.name}"? Its tokens will be lost.`)) {
+                        await deleteScene(s.id);
+                      }
+                    }}
+                    style={{ opacity: 0.6, marginLeft: 8, cursor: "pointer", display: "inline-flex", alignItems: "center" }}
+                    aria-label="Delete scene"
+                  >
+                    <Icon name="close" size={12} />
+                  </span>
+                )}
+              </button>
+            ))}
+            {isDM && activeScene && (
+              <button
+                className="ghost"
+                onClick={() => {
+                  setPickerOpen(true);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12, marginTop: 4, borderTop: "1px solid var(--line)", paddingTop: 8, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <Icon name="library" size={14} />
+                Pick from library…
+              </button>
+            )}
+            {isDM && activeScene && activeScene.image_url && (
+              <button
+                className="ghost"
+                onClick={async () => {
+                  const { error } = await setSceneImageUrl(activeScene.id, null);
+                  if (error) toast.error(error);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <Icon name="delete" size={14} />
+                Clear background
+              </button>
+            )}
+            {isDM && (
+              <button
+                className="ghost"
+                onClick={async () => {
+                  const name = prompt("New scene name?", `Scene ${scenes.length + 1}`);
+                  if (!name) return;
+                  const { scene, error } = await createScene(name);
+                  if (scene) await setActiveScene(scene.id);
+                  if (error) toast.error(error);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12 }}
+              >
+                + New Scene
+              </button>
+            )}
+            </div>
+          )}
+        </div>
+
+        <span className="join-code" title="Share this code so players can join">
+          {game.join_code}
+        </span>
+
+        <span className="dim table-token-count" style={{ fontSize: 12, marginLeft: "auto" }}>
+          {loading ? "Loading table…" : `${visibleTokens.length} token${visibleTokens.length === 1 ? "" : "s"}`}
+        </span>
+
+        <div className="zoom-cluster">
+          <button
+            className="rail-tool zoom-step"
+            style={{ width: 30, height: 30 }}
+            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.25))}
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <Icon name="zoom-out" size={14} />
+          </button>
+          <span className="pct">{Math.round(zoom * 100)}%</span>
+          <button
+            className="rail-tool zoom-step"
+            style={{ width: 30, height: 30 }}
+            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.25))}
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <Icon name="zoom-in" size={14} />
+          </button>
+          <button
+            className="rail-tool"
+            style={{ width: 30, height: 30 }}
+            onClick={resetView}
+            title="Reset view"
+            aria-label="Reset view"
+          >
+            <Icon name="reset" size={14} />
+          </button>
+          {isDM && (
+            <button
+              className="rail-tool"
+              style={{ width: 30, height: 30 }}
+              onClick={() =>
+                window.open(
+                  `${window.location.origin}${window.location.pathname}#/display/${game.id}`,
+                  "_blank",
+                  "noopener"
+                )
+              }
+              title="Open player view — a read-only board in a new tab, for casting to a screen"
+              aria-label="Open player view"
+            >
+              <Icon name="eye" size={14} />
+            </button>
+          )}
+          <button
+            className="rail-tool"
+            style={{ width: 30, height: 30 }}
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            <Icon name="fullscreen" size={14} />
+          </button>
+        </div>
+      </header>
+
+      {/* Body: left tool rail + board */}
+      <div className="table-body">
+        <div className="table-rail">
+          <button
+            className={`rail-tool ${tool === "select" ? "active" : ""}`}
+            onClick={() => setTool("select")}
+            title="Select & move tokens"
+            aria-label="Select tool"
+          >
+            <Icon name="select" size={18} />
+          </button>
+          <button
+            className={`rail-tool ${tool === "pan" ? "active" : ""}`}
+            onClick={() => setTool("pan")}
+            title="Pan the view (or hold Space)"
+            aria-label="Pan tool"
+          >
+            <Icon name="pan" size={18} />
+          </button>
+          <button
+            className={`rail-tool ${tool === "ping" ? "active" : ""}`}
+            onClick={() => setTool("ping")}
+            title="Ping — pulse a point every player can see"
+            aria-label="Ping tool"
+          >
+            <Icon name="ping" size={18} />
+          </button>
+          <button
+            className={`rail-tool ${tool === "ruler" ? "active" : ""}`}
+            onClick={() => setTool("ruler")}
+            title="Ruler — drag to measure (5 ft per square)"
+            aria-label="Ruler tool"
+          >
+            <Icon name="ruler" size={18} />
+          </button>
+          {isDM && (
+            <button
+              className={`rail-tool ${tool === "fog" ? "active" : ""} ${fog.enabled ? "is-live" : ""}`}
+              onClick={() => {
+                setTool("fog");
+                setPartyOpen(false); // both panels live top-left; one at a time
+              }}
+              title="Fog of war — reveal or cover the map"
+              aria-label="Fog of war tool"
+            >
+              <Icon name="fog" size={18} />
+            </button>
+          )}
+          <button
+            className={`rail-tool ${tool === "draw" ? "active" : ""}`}
+            onClick={() => {
+              setTool("draw");
+              setPartyOpen(false);
+            }}
+            title="Draw — pen, shapes, and arrows everyone sees"
+            aria-label="Draw tool"
+          >
+            <Icon name="draw" size={18} />
+          </button>
+
+          <div className="rail-divider" />
+
+          <button
+            className={`rail-tool ${initOpen ? "active" : ""} ${init.inCombat ? "is-live" : ""}`}
+            onClick={() => setInitOpen((v) => !v)}
+            title={init.inCombat ? `Initiative — round ${init.round}` : "Initiative order"}
+            aria-label="Initiative order"
+          >
+            <Icon name="swords" size={18} />
+          </button>
+          <button
+            className={`rail-tool ${partyOpen ? "active" : ""}`}
+            onClick={() => setPartyOpen((v) => !v)}
+            title="Your characters — drag one onto the map"
+            aria-label="Your characters"
+          >
+            <Icon name="users" size={18} />
+          </button>
+          {isDM && (
+            <>
+              <button
+                className="rail-tool"
+                onClick={() => setTokenPickerOpen(true)}
+                title="Place a token from your library"
+                aria-label="Place token from library"
+              >
+                <Icon name="drama" size={18} />
+              </button>
+              <button
+                className="rail-tool"
+                onClick={placeLootFromRail}
+                title="Place loot on the selected token"
+                aria-label="Place loot on selected token"
+              >
+                <Icon name="package" size={18} />
+              </button>
+            </>
+          )}
+          <button
+            className={`rail-tool ${addOpen ? "active" : ""}`}
+            onClick={() => setAddOpen((v) => !v)}
+            title="Add a custom token"
+            aria-label="Add custom token"
+          >
+            <Icon name="add" size={18} />
+          </button>
+
+          <div className="rail-divider" />
+
+          <button
+            className={`rail-tool ${rollerOpen ? "active" : ""}`}
+            onClick={() => setRollerOpen((v) => !v)}
+            title="Roll dice"
+            aria-label="Roll dice"
+          >
+            <Icon name="dice" size={18} />
+          </button>
+          <button
+            className={`rail-tool has-badge ${logOpen ? "active" : ""}`}
+            onClick={() => (logOpen ? setLogOpen(false) : openLog())}
+            title="Game Log — every roll, in order"
+            aria-label={unseenRolls ? `Game Log (${unseenRolls} new)` : "Game Log"}
+          >
+            <Icon name="library" size={18} />
+            {unseenRolls > 0 && <span className="rail-badge">{unseenRolls > 9 ? "9+" : unseenRolls}</span>}
+          </button>
+          <button
+            className={`rail-tool ${hudModal === "map" ? "active" : ""}`}
+            onClick={() => setHudModal((v) => (v === "map" ? null : "map"))}
+            title="Region map — the world map the DM shares"
+            aria-label="Region map"
+          >
+            <GameGlyph src="/icons/board/compass.svg" size={18} />
+          </button>
+          <button
+            className={`rail-tool ${rulesOpen ? "active" : ""}`}
+            onClick={() => setRulesOpen((v) => !v)}
+            title="Rules reference — DCs, cover, conditions, travel"
+            aria-label="Rules reference"
+          >
+            <Icon name="rules" size={18} />
+          </button>
+
+          {/* Contextual: appears once a token is selected. This is the ONLY way
+              to remove a token by touch — the other two routes (Delete key,
+              right-click) don't exist on a phone. */}
+          {selectedToken && (
+            <>
+              <div className="rail-divider" />
+              {isDM && (
+                <button
+                  className={`rail-tool ${selectedToken.hidden ? "active" : ""}`}
+                  onClick={() => {
+                    void setTokenHidden(selectedToken.id, !selectedToken.hidden).then(({ error }) => {
+                      if (error) {
+                        toast.error(
+                          error.includes("hidden")
+                            ? "Visibility column is missing — apply migration 0009_token_visibility.sql."
+                            : error
+                        );
+                      }
+                    });
+                  }}
+                  title={
+                    selectedToken.hidden
+                      ? `Reveal ${selectedToken.label} to players`
+                      : `Hide ${selectedToken.label} from players`
+                  }
+                  aria-label={selectedToken.hidden ? "Reveal token" : "Hide token"}
+                >
+                  <Icon name={selectedToken.hidden ? "eye-off" : "eye"} size={18} />
+                </button>
+              )}
+              <button
+                className="rail-tool is-danger"
+                onClick={deleteSelected}
+                title={`Remove ${selectedToken.label}`}
+                aria-label={`Remove ${selectedToken.label}`}
+              >
+                <Icon name="delete" size={18} />
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="table-board">
+          <svg
+            ref={svgRef}
+            viewBox={viewBox}
+            onPointerDownCapture={startPanIfTriggered}
+            onPointerDown={handleToolPointerDown}
+            onContextMenu={(e) => {
+              // Middle-mouse can be read as context-menu on some setups; and we
+              // don't want a browser context menu on the canvas anyway.
+              e.preventDefault();
+            }}
+            // Accept characters dragged out of the party tray.
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes(DRAG_MIME)) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+              }
+            }}
+            onDrop={handleDrop}
+            style={{
+              width: "100%",
+              height: "100%",
+              touchAction: "none",
+              userSelect: "none",
+              cursor: svgCursor,
+            }}
+          >
+            {/* Grid — a single <pattern> keeps the DOM tiny even at big sizes */}
+            <defs>
+              <pattern id="grid-cell" width={CELL} height={CELL} patternUnits="userSpaceOnUse">
+                <path d={`M ${CELL} 0 L 0 0 0 ${CELL}`} fill="none" stroke="var(--line)" strokeWidth="1" />
+              </pattern>
+            </defs>
+            {/* Background — clicking empty canvas clears the selection.
+                (During a pan the capture-phase handler stops the event before
+                it reaches here, so panning keeps the current selection.) */}
+            <rect
+              width={width}
+              height={height}
+              fill="var(--bg-0)"
+              onPointerDown={(e) => {
+                // Teleport targeting: an empty-ground tap is the destination.
+                if (pendingMoveRef.current) {
+                  resolveMoveAt(e.clientX, e.clientY);
+                  return;
+                }
+                // A swing is mid-flight — ignore stray ground taps so it plays out.
+                if (swingLockRef.current) return;
+                // During targeting: an aimed area/cone resolves toward the tapped
+                // spot (it's aimed at a point, not a creature); any other attack
+                // just cancels on an empty-ground tap.
+                if (pendingAttackRef.current) {
+                  const pa = pendingAttackRef.current;
+                  const p = pa.spec.burst ? clientToSvg(e.clientX, e.clientY) : null;
+                  setPendingAttack(null);
+                  if (pa.spec.burst && p) resolveBurst(pa.by, pa.spec, pa.attackerId, p.x, p.y);
+                  return;
+                }
+                setSelectedId(null);
+                // Touch: one finger on empty canvas pans, without having to
+                // switch to the Pan tool (there's no space bar on a phone).
+                // Tokens sit above this rect, so dragging one never lands here.
+                if (
+                  e.pointerType === "touch" &&
+                  touchesRef.current.size <= 1 &&
+                  toolRef.current !== "ping" &&
+                  toolRef.current !== "ruler" &&
+                  toolRef.current !== "fog" &&
+                  toolRef.current !== "draw"
+                ) {
+                  beginPan(e.clientX, e.clientY);
+                }
+              }}
+            />
+            {activeScene?.image_url && (
+              <image
+                href={activeScene.image_url}
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                preserveAspectRatio="xMidYMid slice"
+                style={{ pointerEvents: "none" }}
+              />
+            )}
+            {/* Grid overlays the background so cells stay visible on any map. */}
+            <rect
+              width={width}
+              height={height}
+              fill="url(#grid-cell)"
+              style={{ pointerEvents: "none", opacity: activeScene?.image_url ? 0.55 : 1 }}
+            />
+
+            {/* DM's fog preview — under the tokens so the DM still sees
+                everything; translucent so the map reads through. */}
+            {isDM && fogPath && (
+              <path d={fogPath} fill="rgba(10, 7, 4, 0.45)" style={{ pointerEvents: "none" }} />
+            )}
+
+            {/* Combat movement preview — while dragging the creature whose turn
+                it is, a line from its CURRENT cell to the cursor: green up to the
+                movement it has left this turn, red for the overflow. */}
+            {(() => {
+              if (!init.inCombat || !ghost) return null;
+              const eco = economy[ghost.id];
+              if (!eco) return null; // only the active token carries a budget
+              const t = tokens.find((x) => x.id === ghost.id);
+              if (!t) return null;
+              const half = (findSize(t.size).cells * CELL) / 2;
+              const sx = t.x * CELL + half; // this step starts at the token's live cell
+              const sy = t.y * CELL + half;
+              const ex = ghost.x * CELL + half;
+              const ey = ghost.y * CELL + half;
+              const gx = Math.round(ghost.x);
+              const gy = Math.round(ghost.y);
+              const stepFt = Math.max(Math.abs(gx - t.x), Math.abs(gy - t.y)) * 5; // this step's distance
+              const base = t.statblock ? t.statblock.speed.walk ?? 30 : boundCharacter?.speed ?? 30;
+              const speed = (aggregateConditions(t.conditions ?? []).speed0 ? 0 : base) * (eco.dashed ? 2 : 1);
+              const remaining = Math.max(0, speed - eco.moveUsedFt);
+              const frac = stepFt > remaining && stepFt > 0 ? remaining / stepFt : 1;
+              const midX = sx + (ex - sx) * frac;
+              const midY = sy + (ey - sy) * frac;
+              const over = stepFt > remaining;
+              const label = over ? `${stepFt} ft · ${stepFt - remaining} over` : `${stepFt} ft · ${remaining - stepFt} left`;
+              return (
+                <g className="move-preview" style={{ pointerEvents: "none" }}>
+                  <line x1={sx} y1={sy} x2={midX} y2={midY} className="mp-ok" vectorEffect="non-scaling-stroke" />
+                  {over && (
+                    <line x1={midX} y1={midY} x2={ex} y2={ey} className="mp-over" vectorEffect="non-scaling-stroke" />
+                  )}
+                  <circle cx={ex} cy={ey} r={5} className={over ? "mp-dot-over" : "mp-dot"} vectorEffect="non-scaling-stroke" />
+                  {(() => {
+                    const tagW = label.length * 7 + 14; // auto-size to the label
+                    return (
+                      <g transform={`translate(${ex}, ${ey - 16})`}>
+                        <rect className={`mp-tag ${over ? "is-over" : ""}`} x={-tagW / 2} y={-13} width={tagW} height={20} rx={6} />
+                        <text className="mp-tag-t" x={0} y={1} textAnchor="middle" dominantBaseline="middle">{label}</text>
+                      </g>
+                    );
+                  })()}
+                </g>
+              );
+            })()}
+
+            {rendered.map((t) => {
+              const spec = findSize(t.size);
+              const span = spec.cells;
+              const cx = t.x * CELL + (span * CELL) / 2;
+              const cy = t.y * CELL + (span * CELL) / 2;
+              const r = spec.radius * CELL;
+              const dragging = ghost?.id === t.id;
+              const clipId = `token-clip-${t.id}`;
+              const dead = tokenIsDowned(t);
+
+              // Spell area marker (#80): a translucent, non-combatant footprint
+              // sized to the spell's area of effect — not a creature disc. A
+              // spell WITHOUT an area (no shape) falls through to the normal
+              // token render below, showing its art as a plain marker.
+              if (t.kind === "spell" && t.area?.shape) {
+                const tint = areaTintFor(t.area?.damageType ?? undefined);
+                const geom = spellAreaGeom(cx, cy, t.area?.shape, t.area?.size ?? 20);
+                const selected = selectedId === t.id;
+                // Aim: rotate directional shapes (cone/line) about the origin.
+                // Live angle wins while dragging the handle; else the saved facing.
+                const facing = rotating?.id === t.id ? rotating.facing : t.area?.facing ?? 0;
+                const directional = t.area?.shape === "cone" || t.area?.shape === "line";
+                const uSize = ((t.area?.size ?? 20) / FT_PER_CELL) * CELL;
+                const rad = (facing * Math.PI) / 180;
+                const handleDist = uSize + 22;
+                const hx = cx + handleDist * Math.cos(rad);
+                const hy = cy + handleDist * Math.sin(rad);
+                return (
+                  <g
+                    key={t.id}
+                    onPointerDown={(e) => startTokenDrag(e, t)}
+                    style={{
+                      cursor: spaceHeld ? "grab" : dragging ? "grabbing" : "grab",
+                      opacity: t.hidden ? 0.5 : dragging ? 0.85 : 1,
+                    }}
+                  >
+                    {/* The area shape rotates about the origin; label + handle don't.
+                        It's INERT (pointerEvents none) so clicks fall through to the
+                        creatures standing inside — only the centre dot grabs it. */}
+                    <g transform={`rotate(${facing} ${cx} ${cy})`} style={{ pointerEvents: "none" }}>
+                      {geom.tag === "circle" && (
+                        <circle cx={cx} cy={cy} r={geom.r} fill={tint} fillOpacity={0.22}
+                          stroke={tint} strokeOpacity={0.85} strokeWidth={2} strokeDasharray="6 4" />
+                      )}
+                      {geom.tag === "rect" && (
+                        <rect x={geom.x} y={geom.y} width={geom.w} height={geom.h} fill={tint} fillOpacity={0.22}
+                          stroke={tint} strokeOpacity={0.85} strokeWidth={2} strokeDasharray="6 4" />
+                      )}
+                      {geom.tag === "polygon" && (
+                        <polygon points={geom.points} fill={tint} fillOpacity={0.22}
+                          stroke={tint} strokeOpacity={0.85} strokeWidth={2} strokeDasharray="6 4" />
+                      )}
+                    </g>
+                    {/* Origin marker + label so the DM can grab and read it. */}
+                    <circle cx={cx} cy={cy} r={6} fill={tint} />
+                    <text x={cx} y={cy - 12} textAnchor="middle" fontSize={12} fontWeight={700}
+                      fill={tint} style={{ pointerEvents: "none" }}>
+                      {t.label}
+                    </text>
+                    {selected && (
+                      <circle cx={cx} cy={cy} r={geom.tag === "circle" ? geom.r + 4 : 14} fill="none"
+                        stroke="var(--candle)" strokeWidth={2} strokeDasharray="4 4"
+                        style={{ pointerEvents: "none" }} />
+                    )}
+                    {/* Rotate handle — a ↻ grab knob at the aim, for cone/line only.
+                        DM-only: aiming a wall/line is the DM's setup, even though a
+                        spell area can't be dragged. */}
+                    {selected && directional && isDM && (
+                      <g>
+                        <line x1={cx} y1={cy} x2={hx} y2={hy} stroke={tint} strokeOpacity={0.5} strokeWidth={2} strokeDasharray="3 3" style={{ pointerEvents: "none" }} />
+                        {/* Disc is the grab target; the ↻ icon rides on top (inert). */}
+                        <circle
+                          cx={hx} cy={hy} r={12}
+                          fill="var(--candle)" stroke="#14100c" strokeWidth={2}
+                          style={{ cursor: "grab" }}
+                          onPointerDown={(e) => startRotate(e, t)}
+                        />
+                        <g transform={`translate(${hx - 8} ${hy - 8})`} style={{ color: "#14100c", pointerEvents: "none" }}>
+                          <Icon name="rotate" size={16} />
+                        </g>
+                        {rotating?.id === t.id && (
+                          <text x={cx} y={cy + 26} textAnchor="middle" fontSize={11} fontWeight={700}
+                            fill={tint} style={{ pointerEvents: "none" }}>
+                            {((facing % 360) + 360) % 360}°
+                          </text>
+                        )}
+                      </g>
+                    )}
+                    {t.hidden && (
+                      <text x={cx} y={cy + 20} textAnchor="middle" fontSize={11} fill="var(--text-dim)"
+                        style={{ pointerEvents: "none" }}>hidden</text>
+                    )}
+                  </g>
+                );
+              }
+
+              return (
+                <g
+                  key={t.id}
+                  onPointerDown={(e) => startTokenDrag(e, t)}
+                  onContextMenu={(e) => {
+                    // Right-click a non-owned creature/corpse/container → the
+                    // Steal / Loot / Examine menu (#131). Left-click still selects.
+                    if (!isDM && menuTarget(t)) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTokenMenu({ tokenId: t.id, x: e.clientX, y: e.clientY });
+                    }
+                  }}
+                  style={{
+                    // While targeting, show the action cursor over tokens too
+                    // (the grab cursor would otherwise win and read as "drag").
+                    cursor: pendingSteal || stealing
+                      ? ANIMATED_CURSOR
+                        ? "none"
+                        : PINCH_CURSOR
+                      : pendingAttack
+                      ? ANIMATED_CURSOR
+                        ? "none"
+                        : SWORD_CURSOR
+                      : spaceHeld
+                        ? "grab"
+                        : dragging
+                          ? "grabbing"
+                          : "grab",
+                    // Hidden tokens only render for the DM — ghosted, so the
+                    // DM always knows what the players can't see. A defeated
+                    // creature reads as a body: dimmed and drained of colour.
+                    opacity: t.hidden ? 0.42 : dead ? 0.5 : dragging ? 0.9 : 1,
+                    filter: dead ? "grayscale(0.85)" : undefined,
+                  }}
+                >
+                  {/* Always-present hit target for the whole disc. `fill="transparent"`
+                      IS hit-tested (unlike `fill="none"`), so clicks land on the token
+                      even when its art fails to load — e.g. an expired generated-image
+                      URL — instead of falling through to the background and cancelling
+                      an attack or the selection. */}
+                  <circle cx={cx} cy={cy} r={r} fill="transparent" />
+                  {t.image_url ? (
+                    <>
+                      <defs>
+                        <clipPath id={clipId}>
+                          <circle cx={cx} cy={cy} r={r} />
+                        </clipPath>
+                      </defs>
+                      <image
+                        href={t.image_url}
+                        x={cx - r}
+                        y={cy - r}
+                        width={r * 2}
+                        height={r * 2}
+                        preserveAspectRatio="xMidYMid slice"
+                        clipPath={`url(#${clipId})`}
+                      />
+                      <circle cx={cx} cy={cy} r={r} fill="none" stroke={t.color} strokeWidth={Math.max(2, r * 0.06)} />
+                    </>
+                  ) : (
+                    <>
+                      {/* Fixed dark stroke + initials (not --bg-0, which flips to
+                          parchment in light mode and kills contrast on the disc). */}
+                      <circle cx={cx} cy={cy} r={r} fill={t.color} stroke="#14100c" strokeWidth={2} />
+                      <text
+                        x={cx}
+                        y={cy + r * 0.15}
+                        textAnchor="middle"
+                        fontSize={r * 0.9}
+                        fontWeight={700}
+                        fill="#14100c"
+                        style={{ pointerEvents: "none" }}
+                      >
+                        {initialsOf(t.label)}
+                      </text>
+                    </>
+                  )}
+                  {/* Whose turn it is, marked on the board itself — you
+                      shouldn't have to read the tracker to know. */}
+                  {init.activeToken?.id === t.id && (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={r + 7}
+                      fill="none"
+                      stroke="var(--ember)"
+                      strokeWidth={3}
+                      style={{ pointerEvents: "none" }}
+                    >
+                      <animate
+                        attributeName="opacity"
+                        values="1;0.35;1"
+                        dur="2s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  )}
+                  {t.hidden && (
+                    <text
+                      x={cx}
+                      y={cy - r - 6}
+                      textAnchor="middle"
+                      fontSize={11}
+                      fill="var(--text-dim)"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      hidden
+                    </text>
+                  )}
+                  {selectedId === t.id && (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={r + 4}
+                      fill="none"
+                      stroke="var(--candle)"
+                      strokeWidth={2.5}
+                      strokeDasharray="6 4"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      <animateTransform
+                        attributeName="transform"
+                        type="rotate"
+                        from={`0 ${cx} ${cy}`}
+                        to={`360 ${cx} ${cy}`}
+                        dur="12s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  )}
+                  <text
+                    x={cx}
+                    y={cy + r + 12}
+                    textAnchor="middle"
+                    fontSize={11}
+                    fill="var(--text)"
+                    stroke="var(--bg-0)"
+                    strokeWidth={3}
+                    paintOrder="stroke"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {t.label}
+                  </text>
+
+                  {/* Condition badges — a row of red chips above the token,
+                      tap one to clear it. Everyone at the table sees them. */}
+                  {(t.conditions ?? []).length > 0 && (() => {
+                    const conds = t.conditions ?? [];
+                    const chipW = 22;
+                    const gap = 3;
+                    const total = conds.length * chipW + (conds.length - 1) * gap;
+                    const by = cy - r - 20;
+                    return (
+                      <g>
+                        {conds.map((cond, ci) => {
+                          const bx = cx - total / 2 + ci * (chipW + gap);
+                          return (
+                            <g
+                              key={cond}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onConditionBadge(t, cond);
+                              }}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <title>
+                                {(() => {
+                                  const pc = parseCondition(cond);
+                                  return pc.save && pc.dc != null
+                                    ? `${pc.name} — click to roll a ${pc.save} save (DC ${pc.dc})`
+                                    : `${pc.name} — needs a spell or item to remove`;
+                                })()}
+                              </title>
+                              <rect x={bx} y={by} width={chipW} height={14} rx={4} fill="rgba(122, 26, 26, 0.94)" stroke="#e0864f" strokeWidth={1} />
+                              <text x={bx + chipW / 2} y={by + 10.5} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
+                                {conditionName(cond).slice(0, 3).toUpperCase()}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </g>
+                    );
+                  })()}
+
+                  {/* Caster's "they're rolling" loader while a save is pending. */}
+                  {savePendingIds.has(t.id) && <CastingLoader cx={cx} cy={cy - r} />}
+
+                </g>
+              );
+            })}
+
+            {/* Misty Step teleport bursts now render through the shared spell-VFX
+                layer below (a "burst" kind), so they broadcast to all clients. */}
+
+            {/* Spell projectiles (Magic Missile…) — fly caster → target, then clear. */}
+            {spellFx.fx.map((fx) => (
+              <SpellProjectile key={fx.id} fx={fx} onDone={() => spellFx.removeFx(fx.id)} />
+            ))}
+
+            {/* Aim preview — a cone footprint for aimed area spells (Cone of Cold),
+                else a dashed caster→cursor line with a live distance readout. */}
+            {pendingAttack && !swinging && (() => {
+              const attacker = tokens.find((t) => t.id === pendingAttack.attackerId);
+              if (!attacker) return null;
+              const o = centerOfToken(attacker);
+              // Lingering area spell: the footprint follows the cursor to its
+              // drop point (positioned by the pointer effect via aimAreaRef).
+              if (pendingAttack.spec.placeArea) {
+                const pa = pendingAttack.spec.placeArea;
+                const tint = areaTintFor(pa.damageType ?? undefined);
+                const g = spellAreaGeom(0, 0, pa.shape, pa.size);
+                const stroke = { fill: tint, fillOpacity: 0.2, stroke: tint, strokeOpacity: 0.9, strokeWidth: 2.5, strokeDasharray: "7 5" };
+                return (
+                  <g ref={aimAreaRef} className="aim-area" transform="translate(-9999 -9999)" style={{ pointerEvents: "none" }}>
+                    {g.tag === "circle" && <circle cx={0} cy={0} r={g.r} {...stroke} />}
+                    {g.tag === "rect" && <rect x={g.x} y={g.y} width={g.w} height={g.h} {...stroke} />}
+                    {g.tag === "polygon" && <polygon points={g.points} {...stroke} />}
+                  </g>
+                );
+              }
+              if (pendingAttack.spec.burst) {
+                const U = CONE_LEN; // shared with the hit test — WYSIWYG
+                const tint = areaTintFor(pendingAttack.spec.damageType ?? undefined);
+                return (
+                  <g ref={aimConeRef} className="aim-cone" transform={`translate(${o.x} ${o.y})`} style={{ pointerEvents: "none" }}>
+                    <polygon
+                      points={`0,0 ${U},${-U / 2} ${U},${U / 2}`}
+                      fill={tint} fillOpacity={0.2}
+                      stroke={tint} strokeOpacity={0.9} strokeWidth={2.5} strokeDasharray="7 5"
+                    />
+                  </g>
+                );
+              }
+              return (
+                <g className="aim-preview" style={{ pointerEvents: "none" }}>
+                  <line
+                    ref={aimLineRef}
+                    x1={o.x} y1={o.y} x2={o.x} y2={o.y}
+                    stroke="#6fcf6f" strokeWidth={2.5} strokeDasharray="7 5" opacity={0.9}
+                  />
+                  <text
+                    ref={aimLabelRef}
+                    x={o.x} y={o.y}
+                    textAnchor="middle" fontSize={12} fontWeight={700}
+                    stroke="#14100c" strokeWidth={0.6} paintOrder="stroke"
+                  />
+                </g>
+              );
+            })()}
+
+            {/* ---- Drawings ------------------------------------------------- */}
+            {/* Above tokens so you can circle or point at a piece. Committed
+                ink + the in-progress stroke render the same way. */}
+            {[...drawings, ...(liveDraw ? [{ ...liveDraw, id: "__live" }] : [])].map((d) => {
+              const common = {
+                stroke: d.color,
+                strokeWidth: 3,
+                fill: "none" as const,
+                strokeLinecap: "round" as const,
+                strokeLinejoin: "round" as const,
+                style: { pointerEvents: "none" as const },
+              };
+              if (d.kind === "pen") return <path key={d.id} d={penPathD(d.points)} {...common} />;
+              if (d.kind === "arrow") {
+                return (
+                  <g key={d.id} style={{ pointerEvents: "none" }}>
+                    <line x1={d.points[0]} y1={d.points[1]} x2={d.points[2]} y2={d.points[3]} {...common} />
+                    <polygon points={arrowHead(d.points)} fill={d.color} stroke="none" />
+                  </g>
+                );
+              }
+              const b = shapeBox(d.points);
+              if (d.kind === "rect") return <rect key={d.id} x={b.x} y={b.y} width={b.w} height={b.h} {...common} />;
+              return <ellipse key={d.id} cx={b.x + b.w / 2} cy={b.y + b.h / 2} rx={b.w / 2} ry={b.h / 2} {...common} />;
+            })}
+
+            {/* ---- Ruler overlay -------------------------------------------- */}
+            {measure && (() => {
+              const feet = measureFeet(measure);
+              const midX = (measure.x1 + measure.x2) / 2;
+              const midY = (measure.y1 + measure.y2) / 2;
+              return (
+                <g style={{ pointerEvents: "none" }}>
+                  <line
+                    x1={measure.x1} y1={measure.y1} x2={measure.x2} y2={measure.y2}
+                    stroke="var(--candle)" strokeWidth={3} strokeDasharray="10 6" strokeLinecap="round"
+                  />
+                  <circle cx={measure.x1} cy={measure.y1} r={5} fill="var(--candle)" />
+                  <circle cx={measure.x2} cy={measure.y2} r={5} fill="var(--candle)" />
+                  <g transform={`translate(${midX}, ${midY - 14})`}>
+                    <rect x={-34} y={-13} width={68} height={22} rx={5}
+                      fill="rgba(20, 16, 12, 0.88)" stroke="var(--candle)" strokeWidth={1} />
+                    <text textAnchor="middle" y={3} fontSize={12} fontWeight={700}
+                      fill="var(--cream)" style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {feet} ft
+                    </text>
+                  </g>
+                </g>
+              );
+            })()}
+
+            {/* Player fog — ABOVE tokens: what's in the dark stays unseen.
+                Pings still render on top so the DM can point through fog. */}
+            {!isDM && fogPath && (
+              <path d={fogPath} fill="rgb(12, 9, 6)" style={{ pointerEvents: "none" }} />
+            )}
+
+            {/* ---- Pings ---------------------------------------------------- */}
+            {/* CSS-animated (not SMIL): SMIL inserted by React doesn't reliably
+                auto-start, which is why pings sometimes showed nothing. Styled
+                after the D&D Beyond reference — red glow, light expanding rings,
+                bright centre dot. Sub-elements sit at the group origin so
+                transform-box:fill-box scales them in place (see .ping-* CSS). */}
+            {pings.map((p) => (
+              <g key={p.id} className="ping" transform={`translate(${p.x} ${p.y})`} style={{ pointerEvents: "none" }}>
+                <circle className="ping-glow" r={46} fill="var(--ember)" />
+                <circle className="ping-ring" r={46} fill="none" stroke="#f6ecd2" strokeWidth={3} />
+                <circle className="ping-ring ping-ring-delayed" r={46} fill="none" stroke="#f6ecd2" strokeWidth={2.5} />
+                <circle className="ping-dot" r={7} fill="var(--ember)" stroke="#f6ecd2" strokeWidth={2} />
+              </g>
+            ))}
+
+            {/* Roll blooms — a result floats up from the roller's token so the
+                whole table SEES the number land, not just reads it in the log. */}
+            {blooms.map((b) => (
+              <text
+                key={b.id}
+                className={`roll-bloom roll-bloom-${b.tone}`}
+                x={b.x}
+                y={b.y}
+                textAnchor="middle"
+                style={{ pointerEvents: "none" }}
+              >
+                {b.text}
+              </text>
+            ))}
+          </svg>
+
+          {/* Animated attack cursor (sword / fist) — stays alive through the swing tail. */}
+          <AttackCursor
+            active={ANIMATED_CURSOR && (!!pendingAttack || swinging || !!pendingSteal || stealing)}
+            kind={pendingSteal || stealing ? "steal" : attackKind}
+          />
+
+          {/* Targeting banner — while an attack waits for its mark (hidden once
+              the swing is playing so it doesn't linger over the strike). */}
+          {pendingAttack && !swinging && (
+            <div className="combat-target-hint" role="status">
+              <Icon name="ping" size={15} />
+              {pendingAttack.spec.placeArea
+                ? "Tap where to place "
+                : pendingAttack.spec.burst
+                  ? "Tap to aim "
+                  : pendingAttack.spec.heal != null
+                    ? "Tap who to heal with "
+                    : pendingAttack.spec.cleanse != null
+                      ? "Tap who to cure with "
+                      : "Tap a target for "}
+              <b>{pendingAttack.spec.label}</b>
+              <button onClick={() => setPendingAttack(null)}>
+                {pendingAttack.spec.burst ? "Esc to cancel" : "Esc or tap ground to cancel"}
+              </button>
+            </div>
+          )}
+
+          {pendingMove && (
+            <div className="combat-target-hint" role="status">
+              <Icon name="ping" size={15} />
+              Tap a destination for <b>{pendingMove.label}</b>
+              <button onClick={() => setPendingMove(null)}>Esc to cancel</button>
+            </div>
+          )}
+
+          {pendingSteal && (
+            <div className="combat-target-hint" role="status">
+              <Icon name="package" size={15} />
+              Tap an <b>adjacent</b> creature to pickpocket
+              <button onClick={() => setPendingSteal(null)}>Esc to cancel</button>
+            </div>
+          )}
+
+          {/* Reaction offer — a just-landed hit the target can still halve. Fades
+              on its own; taking it refunds the difference to the target. */}
+          {reaction && (
+            <div className="combat-reaction" role="status">
+              <Icon name="shield" size={15} />
+              <span>
+                <b>{reaction.targetLabel}</b> took <b>{reaction.applied}</b> — halve with a reaction?
+              </span>
+              <button className="react-take" onClick={applyReaction}>
+                Halve → {reaction.halved}
+              </button>
+              <button className="react-skip" onClick={() => setReaction(null)} aria-label="Dismiss">
+                <Icon name="close" size={13} />
+              </button>
+            </div>
+          )}
+
+          {/* Blocking reaction interrupt (Shield). The DEFENDER's controller sees
+              the prompt; the ATTACKER sees a waiting banner until it resolves.
+              When one client is both (solo / DM controls both), only the prompt
+              shows — the pill is suppressed. */}
+          {(() => {
+            const mine = reactions.pending.find((o) => {
+              const t = tokens.find((x) => x.id === o.targetTokenId);
+              return t && iControlToken(t) && shieldReadyFor(o);
+            });
+            return (
+              <>
+                {mine && (
+                  <div className="reaction-offer" role="alertdialog" aria-label="Reaction window">
+                    <div className="reaction-offer-h">
+                      <Icon name="shield" size={15} /> Reaction
+                    </div>
+                    <p className="reaction-offer-b">
+                      <b>{mine.by}</b>'s {mine.sourceLabel} would hit <b>{mine.targetLabel}</b>{" "}
+                      <span className="reaction-offer-roll">({mine.toHit} vs AC {mine.baseAc})</span>
+                    </p>
+                    <div className="reaction-offer-btns">
+                      <button className="ro-take" onClick={() => castShieldReaction(mine)}>
+                        Cast Shield <span>+5 AC</span>
+                      </button>
+                      <button className="ro-skip" onClick={() => declineReaction(mine)}>
+                        No reaction
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {awaitingReaction && !mine && (
+                  <div className="reaction-wait" role="status">
+                    <Icon name="shield" size={14} />
+                    <span>Waiting on <b>{awaitingReaction.targetLabel}</b>'s reaction…</span>
+                    <button
+                      onClick={() => resolveReaction(awaitingReaction.id, { id: awaitingReaction.id, kind: "shield", acBonus: 0 })}
+                      title="Resolve without waiting"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Counterspell window. A nearby caster can counter; the caster sees a
+              "casting…" banner, then rolls a CON save if they're countered. */}
+          {(() => {
+            const off = reactions.pending.find(
+              (o) => o.kind === "counterspell" && !dismissedCounters.has(o.id) && counterspellerFor(o)
+            );
+            if (!off) return null;
+            const cst = counterspellerFor(off)!;
+            return (
+              <div className="reaction-offer" role="alertdialog" aria-label="Counterspell window">
+                <div className="reaction-offer-h">
+                  <Icon name="sparkles" size={15} /> Reaction
+                </div>
+                <p className="reaction-offer-b">
+                  <b>{off.by}</b> is casting <b>{off.sourceLabel}</b>
+                  {off.spellLevel ? <span className="reaction-offer-roll"> (level {off.spellLevel})</span> : null} — counter it with <b>{cst.label}</b>?
+                </p>
+                <div className="reaction-offer-btns">
+                  <button className="ro-take" onClick={() => doCounterspell(off)}>
+                    Counterspell <span>lvl 3</span>
+                  </button>
+                  <button
+                    className="ro-skip"
+                    onClick={() => setDismissedCounters((s) => new Set(s).add(off.id))}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Attack of Opportunity window (#101). A hostile creature left this
+              one's reach — its controller (or the DM, on an absent player's
+              behalf) may spend a reaction to strike as it goes. */}
+          {(() => {
+            const off = reactions.pending.find((o) => {
+              if (o.kind !== "opportunity") return false;
+              const reactor = tokens.find((x) => x.id === o.targetTokenId);
+              return !!reactor && (iControlToken(reactor) || isDM);
+            });
+            if (!off) return null;
+            return (
+              <div className="reaction-offer" role="alertdialog" aria-label="Attack of Opportunity">
+                <div className="reaction-offer-h">
+                  <Icon name="swords" size={15} /> Attack of Opportunity
+                </div>
+                <p className="reaction-offer-b">
+                  <b>{off.moverLabel ?? off.by}</b> is leaving <b>{off.targetLabel}</b>'s reach — use your reaction to
+                  strike with <b>{off.sourceLabel}</b>?
+                </p>
+                <div className="reaction-offer-btns">
+                  <button className="ro-take" onClick={() => runOpportunityAttack(off)}>
+                    Attack <span>{off.sourceLabel}</span>
+                  </button>
+                  <button className="ro-skip" onClick={() => reactions.respond({ id: off.id, kind: "opportunity" })}>
+                    Let them go
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {awaitingCounter && (
+            <div className="reaction-wait" role="status">
+              <Icon name="sparkles" size={14} />
+              <span>Casting <b>{awaitingCounter.spell}</b> — counterspell window…</span>
+              <button onClick={() => finishCounter(awaitingCounter.id, { counter: false })} title="Resolve without waiting">
+                Skip
+              </button>
+            </div>
+          )}
+
+          {casterCounterSave && (() => {
+            const casterTok = tokens.find((t) => t.id === casterCounterSave.casterTokenId);
+            if (!casterTok) return null;
+            return (
+              <DiceRollDialog
+                title="Constitution Saving Throw"
+                subtitle={`${casterCounterSave.by} counters ${casterCounterSave.spell}`}
+                dc={casterCounterSave.dc}
+                bonus={saveBonusOfToken(casterTok, "CON")}
+                chips={saveChips(casterTok, "CON")}
+                optionalBonuses={optionalBonusesFor("save")}
+                performRoll={(mode) => rollD20(saveBonusOfToken(casterTok, "CON"), mode)}
+                onComplete={(res) => {
+                  const held = res.total >= casterCounterSave.dc;
+                  broadcastRoll(
+                    casterTok.label,
+                    [{ label: `CON save vs Counterspell (DC ${casterCounterSave.dc}) — ${held ? "the spell holds!" : "countered!"}`, result: res }],
+                    bloomSeedFor(casterTok, held ? "normal" : "crit", held ? "holds" : "countered")
+                  );
+                  resolveCounterSave(!held);
+                }}
+                onAutoFail={() => resolveCounterSave(true)}
+              />
+            );
+          })()}
+
+          {/* The in-game HUD — bound to the selected token. Priority: a monster
+              token (statblock) → the DM monster HUD; a character token → the
+              full player HUD; anything else → a minimal identity dock. Sits in
+              the board region (right of the rail), so it never collides. */}
+          {selectedToken?.statblock && isDM && (
+            <MonsterHud
+              statblock={selectedToken.statblock}
+              name={selectedToken.label}
+              image={selectedToken.image_url}
+              hpCurrent={selectedToken.hp_current ?? selectedToken.statblock.hp}
+              hpMax={selectedToken.hp_max ?? selectedToken.statblock.hp}
+              activeTurn={init.activeToken?.id === selectedToken.id}
+              onRoll={fireRoll}
+              onAttack={(spec) => requestAttack(selectedToken.label, selectedToken.id, spec)}
+              onNote={(msg) => toast.info(msg)}
+              onMove={(label) => requestMove(selectedToken.label, selectedToken.id, label)}
+              onCounterspellCheck={(name, level) => counterspellCheck(selectedToken, selectedToken.label, name, level)}
+              economy={economyView}
+              onSpend={(w) => markEconomy(selectedToken.id, w)}
+              onEndTurn={() => void init.next()}
+              endTurnEnabled={isDM || init.activeToken?.id === selectedToken.id}
+              conditions={selectedToken.conditions ?? undefined}
+              onHp={(current) => void updateToken(selectedToken.id, { hp_current: current })}
+              hidden={selectedToken.hidden}
+              onToggleHidden={
+                isDM ? () => void setTokenHidden(selectedToken.id, !selectedToken.hidden) : undefined
+              }
+              onDeleteToken={
+                isDM
+                  ? () => {
+                      setSelectedId(null);
+                      void deleteToken(selectedToken.id);
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {/* The identity/info bar: shown whenever we're NOT showing the DM's
+              monster HUD and NOT the player's own bound HUD — i.e. a token you
+              don't control. A player selecting a DM statblock token lands here
+              too (name + owner + HP, no stats), instead of seeing nothing. */}
+          {selectedToken && !boundCharacter && !(selectedToken.statblock && isDM) && (
+            <TokenHud
+              label={selectedToken.label}
+              image={selectedToken.image_url}
+              isDM={isDM}
+              owner={
+                selectedToken.character_id
+                  ? partyOwners.ownerByCharacter.get(selectedToken.character_id) ?? null
+                  : partyOwners.dmName
+              }
+              hp={selectedToken.hp_current ?? selectedToken.statblock?.hp ?? null}
+              hpMax={selectedToken.hp_max ?? selectedToken.statblock?.hp ?? null}
+              level={selectedToken.char_level ?? null}
+              isPlayerChar={!!selectedToken.character_id}
+              hidden={selectedToken.hidden}
+              onToggleHidden={
+                isDM ? () => void setTokenHidden(selectedToken.id, !selectedToken.hidden) : undefined
+              }
+              onDeleteToken={
+                isDM
+                  ? () => {
+                      setSelectedId(null);
+                      void deleteToken(selectedToken.id);
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {boundCharacter && !selectedToken?.statblock && (
+            <TableHud
+              character={boundCharacter}
+              isDM={isDM}
+              activeTurn={init.activeToken?.id === selectedToken?.id}
+              onRoll={fireRoll}
+              onAttack={(spec) => selectedToken && requestAttack(boundCharacter.name, selectedToken.id, spec)}
+              onNote={(msg) => toast.info(msg)}
+              onMove={(label) => selectedToken && requestMove(boundCharacter.name, selectedToken.id, label)}
+              onCounterspellCheck={(name, level) =>
+                selectedToken ? counterspellCheck(selectedToken, boundCharacter.name, name, level) : Promise.resolve(false)
+              }
+              onDash={() => selectedToken && markDash(selectedToken.id)}
+              economy={economyView}
+              onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
+              onEndTurn={() => void init.next()}
+              endTurnEnabled={isDM || (!!selectedToken && init.activeToken?.id === selectedToken.id)}
+              conditions={selectedToken?.conditions ?? undefined}
+              hp={hpApi}
+              onCloseModal={() => setHudModal(null)}
+              onUpdate={(mut) => onUpdateCharacter(boundCharacter.id, mut)}
+              hidden={selectedToken?.hidden}
+              onToggleHidden={
+                isDM && selectedToken
+                  ? () => void setTokenHidden(selectedToken.id, !selectedToken.hidden)
+                  : undefined
+              }
+              onDeleteToken={
+                isDM && selectedToken
+                  ? () => {
+                      setSelectedId(null);
+                      void deleteToken(selectedToken.id);
+                    }
+                  : undefined
+              }
+            />
+          )}
+
+          {/* Region map lives on the tool rail (#128) — it's a shared world map,
+              so it opens for anyone (no bound character needed), unlike the
+              sheet-mapped modals below. */}
+          {hudModal === "map" && (
+            <RegionMapModal gameId={game.id} isDM={isDM} onClose={() => setHudModal(null)} />
+          )}
+          {/* Other game-menu modals are sheet-mapped (need a bound character). */}
+          {boundCharacter && hudModal && hudModal !== "map" && (
+            <TableModals
+              which={hudModal}
+              character={boundCharacter}
+              gameId={game.id}
+              isDM={isDM}
+              onClose={() => setHudModal(null)}
+              onUpdate={(mut) => onUpdateCharacter(boundCharacter.id, mut)}
+              onRoll={fireRoll}
+              onNote={(msg) => toast.info(msg)}
+            />
+          )}
+          {initOpen && (
+            <InitiativeTracker
+              init={init}
+              isDM={isDM}
+              rollFor={rollInitiativeFor}
+              dispositionOf={dispositionOf}
+              onToggleDisposition={toggleDisposition}
+              onClose={() => setInitOpen(false)}
+              onFocusToken={(t) => {
+                // Centre the view on the combatant whose turn it is.
+                const span = findSize(t.size).cells;
+                setPan({
+                  x: (t.x + span / 2) * CELL - width / zoom / 2,
+                  y: (t.y + span / 2) * CELL - height / zoom / 2,
+                });
+                setSelectedId(t.id);
+              }}
+            />
+          )}
+
+          {tool === "fog" && isDM && (
+            <div className="fog-panel panel">
+              <div className="fog-panel-head">Fog of War</div>
+              <label className="drawer-option" style={{ padding: "4px 0" }}>
+                <input
+                  type="checkbox"
+                  checked={fog.enabled}
+                  onChange={(e) => {
+                    void fog.setEnabled(e.target.checked).then((err) => {
+                      if (err) {
+                        toast.error(
+                          err.includes("fog")
+                            ? "Fog columns are missing — apply migration 0010_fog_of_war.sql."
+                            : err
+                        );
+                      }
+                    });
+                  }}
+                />
+                <span>Fog enabled</span>
+              </label>
+              <div className="fog-mode">
+                <button
+                  className={fogMode === "reveal" ? "active" : ""}
+                  onClick={() => setFogMode("reveal")}
+                  title="Drag to reveal the map"
+                >
+                  Reveal
+                </button>
+                <button
+                  className={fogMode === "hide" ? "active" : ""}
+                  onClick={() => setFogMode("hide")}
+                  title="Drag to cover the map again"
+                >
+                  Cover
+                </button>
+              </div>
+              <div className="fog-bulk">
+                <button className="ghost" onClick={() => fog.setAll(true, rows)}>
+                  Reveal all
+                </button>
+                <button className="ghost" onClick={() => fog.setAll(false, rows)}>
+                  Cover all
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tool === "draw" && (
+            <div className="fog-panel panel">
+              <div className="fog-panel-head">Draw</div>
+              <div className="draw-tools">
+                {([
+                  ["pen", "draw"],
+                  ["rect", "rect"],
+                  ["ellipse", "ellipse"],
+                  ["arrow", "arrow"],
+                  ["erase", "eraser"],
+                ] as const).map(([kind, icon]) => (
+                  <button
+                    key={kind}
+                    className={`draw-tool ${drawKind === kind ? "active" : ""}`}
+                    onClick={() => setDrawKind(kind)}
+                    title={kind === "erase" ? "Erase (click a drawing)" : `Draw ${kind}`}
+                    aria-label={kind}
+                  >
+                    <Icon name={icon} size={15} />
+                  </button>
+                ))}
+              </div>
+              {drawKind !== "erase" && (
+                <div className="draw-colors">
+                  {DRAW_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      className={`draw-swatch ${drawColor === c ? "active" : ""}`}
+                      style={{ background: c }}
+                      onClick={() => setDrawColor(c)}
+                      aria-label={`colour ${c}`}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="fog-bulk">
+                <button className="ghost" onClick={() => void clearDrawings(true)}>
+                  Clear mine
+                </button>
+                {isDM && (
+                  <button className="ghost" onClick={() => void clearDrawings(false)}>
+                    Clear all
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {partyOpen && (
+            <PartyTray
+              characters={characters}
+              onPlace={(ch) => {
+                void placeCharacter(ch);
+                setPartyOpen(false);
+              }}
+              onClose={() => setPartyOpen(false)}
+            />
+          )}
+
+          {/* Add-token popover floats over the board near the rail */}
+          {addOpen && (
+            <form
+              className="panel add-token-pop"
+              onSubmit={handleAdd}
+              style={{
+                position: "absolute",
+                top: 12,
+                left: 12,
+                zIndex: 10,
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+                boxShadow: "var(--shadow-lg)",
+              }}
+            >
+              <input
+                autoFocus
+                placeholder="Label (e.g. Goblin A)"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                style={{ minWidth: 180 }}
+              />
+              <div style={{ display: "flex", gap: 4 }}>
+                {COLOR_CHOICES.map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    onClick={() => setNewColor(c)}
+                    style={{
+                      width: 24,
+                      height: 24,
+                      padding: 0,
+                      borderRadius: "50%",
+                      background: c,
+                      border: newColor === c ? "2px solid var(--text)" : "1px solid var(--panel-border)",
+                    }}
+                    aria-label={`color ${c}`}
+                  />
+                ))}
+              </div>
+              <button className="primary" type="submit" style={{ fontSize: 12 }}>
+                Add
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => setAddOpen(false)}
+                style={{ fontSize: 12 }}
+              >
+                Cancel
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      <div className="table-hint">
+        {tool === "pan"
+          ? "Pan mode — drag to move the view · switch to Select to move tokens"
+          : tool === "ping"
+            ? "Ping mode — click or tap anywhere to pulse that spot for every player"
+            : tool === "ruler"
+              ? "Ruler — drag to measure · every square is 5 ft, diagonals included"
+              : tool === "fog"
+                ? `Fog — drag to ${fogMode === "reveal" ? "reveal" : "cover"} · players see black, you see through`
+                : tool === "draw"
+                  ? drawKind === "erase"
+                    ? "Erase — click a drawing to remove it"
+                    : `Draw — drag to sketch a ${drawKind} · everyone at the table sees it`
+                  : "Drag tokens · Click then Delete (or right-click) to remove · Scroll or pinch to zoom · Hold Space to pan"}
+      </div>
+
+      {rulesOpen && <RulesReference onClose={() => setRulesOpen(false)} />}
+      {rollerOpen && <DiceRoller onClose={() => setRollerOpen(false)} />}
+      {logOpen && <GameLog onClose={() => setLogOpen(false)} />}
+
+      {tokenPickerOpen && activeScene && (
+        <TokenPickerDialog
+          onPick={async (a) => {
+            const { error } = await placeTokenFromLibrary(a);
+            if (error) toast.error(error);
+            else toast.success(`${a.name} placed on the table`);
+            setTokenPickerOpen(false);
+          }}
+          onClose={() => setTokenPickerOpen(false)}
+        />
+      )}
+
+      {pickerOpen && activeScene && (
+        <MapPickerDialog
+          currentMapId={activeScene.map_id}
+          onPick={async (m) => {
+            const { error } = await applyMapToActiveScene(m);
+            if (error) toast.error(error);
+            else toast.success(`Scene background set to ${m.name}`);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {isDM && lootEditToken && (
+        <LootEditorDialog
+          tokenLabel={lootEditToken.label}
+          loot={lootEditToken.loot ?? null}
+          onSave={(loot) => void saveDmLoot(lootEditToken.id, loot)}
+          onClose={() => setLootEditTokenId(null)}
+        />
+      )}
+
+      {lootToken && (
+        <LootDialog
+          sourceName={lootToken.label}
+          loot={lootToken.loot ?? { coins: {}, items: [] }}
+          looterName={looterCharacter?.name ?? null}
+          onTakeItem={(id) => void takeLootItem(id)}
+          onTakeAll={() => void takeAllLoot()}
+          onClose={() => setLootTokenId(null)}
+        />
+      )}
+
+      {/* Player context menu on a downed DM token — Loot / Examine, anchored to
+          the tap. A transparent backdrop closes it on any outside click. */}
+      {tokenMenu && menuToken && (
+        <>
+          <div className="token-menu-backdrop" onPointerDown={() => setTokenMenu(null)} />
+          <div
+            className="token-menu"
+            style={{
+              left: Math.min(tokenMenu.x, window.innerWidth - 180),
+              top: Math.min(tokenMenu.y, window.innerHeight - 140),
+            }}
+            role="menu"
+            aria-label={`${menuToken.label} actions`}
+          >
+            <div className="token-menu-t">{menuToken.label}</div>
+            {menuToken.statblock && !tokenIsDead(menuToken) &&
+              !(menuToken.character_id && ownedCharacterIds.has(menuToken.character_id)) && (
+                <button role="menuitem" onClick={stealFromMenu}>
+                  <Icon name="dice" size={15} /> Steal
+                  <span className="token-menu-note">sleight of hand</span>
+                </button>
+              )}
+            <button
+              role="menuitem"
+              onClick={lootFromMenu}
+              disabled={!isFreeLootable(menuToken)}
+              title={isFreeLootable(menuToken) ? undefined : "Nothing left to loot"}
+            >
+              <Icon name="package" size={15} /> Loot
+              {!isFreeLootable(menuToken) && <span className="token-menu-note">looted</span>}
+            </button>
+            {menuToken.statblock && (
+              <button role="menuitem" onClick={examineFromMenu}>
+                <Icon name="eye" size={15} /> Examine
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {examineToken?.statblock && (
+        <Dialog
+          onClose={() => {
+            setExamineTokenId(null);
+            setExamineCheck(null);
+          }}
+          size="sm"
+          title={examineToken.label}
+          // Only what a character could physically observe — size + kind. No CR,
+          // AC, HP, senses, or spell list: those are the DM's to reveal (or not)
+          // through what a skill check turns up.
+          subtitle={`${examineToken.statblock.size.charAt(0).toUpperCase()}${examineToken.statblock.size.slice(1)} ${examineToken.statblock.type}`}
+        >
+          <div className="examine">
+            {examineToken.image_url && <img className="examine-pf" src={examineToken.image_url} alt="" />}
+            <p className="examine-lead">
+              You look the body over. Roll a check — the DM will tell you what you notice.
+            </p>
+            <div className="examine-checks">
+              <span className="examine-checks-l">
+                {looterCharacter ? `${looterCharacter.name} · investigate` : "Make a check"}
+              </span>
+              <div className="examine-checks-row">
+                {(["Medicine", "Investigation", "Perception", loreSkillFor(examineToken.statblock.type)] as SkillName[])
+                  .filter((s, i, a) => a.indexOf(s) === i)
+                  .map((skill) => (
+                    <button key={skill} onClick={() => examineRoll(skill)} disabled={!looterCharacter}>
+                      <Icon name="dice" size={13} /> {skill}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </Dialog>
+      )}
+
+      {/* Cinematic dice roll for an Examine skill check — no DC (the DM reads the
+          logged total and narrates what the character learns). */}
+      {examineCheck && examineToken && looterCharacter && (
+        <DiceRollDialog
+          title={`${examineCheck.skill} Check`}
+          subtitle={`${looterCharacter.name} · examining ${examineToken.label}`}
+          bonus={skillBonus(looterCharacter, examineCheck.skill)}
+          optionalBonuses={optionalBonusesFor("check")}
+          performRoll={(mode) => rollD20(skillBonus(looterCharacter, examineCheck.skill), mode)}
+          onComplete={(res) => {
+            broadcastRoll(
+              looterCharacter.name,
+              [{ label: `${examineCheck.skill} check · ${examineToken.label}`, result: res }],
+              bloomSeedFor(examineToken, "normal", String(res.total))
+            );
+            setExamineCheck(null);
+          }}
+          onAutoFail={() => setExamineCheck(null)}
+        />
+      )}
+
+      {/* Pickpocket (#131): the player rolls Sleight of Hand here, then the total
+          is checked against the mark's passive Perception. */}
+      {stealRoll && (() => {
+        const thief = tokens.find((t) => t.id === stealRoll.thiefId);
+        const target = tokens.find((t) => t.id === stealRoll.targetId);
+        const char = thief?.character_id ? characters.find((c) => c.id === thief.character_id) : undefined;
+        if (!thief || !target || !char || !target.statblock) return null;
+        const bonus = skillBonus(char, "Sleight of Hand");
+        const dc = passivePerceptionOf(target.statblock);
+        return (
+          <DiceRollDialog
+            title="Sleight of Hand"
+            subtitle={`${char.name} · pickpocketing ${target.label}`}
+            dc={dc}
+            bonus={bonus}
+            chips={skillCheckChips(char, "Sleight of Hand")}
+            optionalBonuses={optionalBonusesFor("check")}
+            performRoll={(mode) => rollD20(bonus, mode)}
+            onComplete={(res) => {
+              const success = res.total >= dc;
+              broadcastRoll(
+                char.name,
+                [{ label: `${char.name} · Sleight of Hand vs ${target.label}`, result: res }],
+                bloomSeedFor(target, "normal", String(res.total))
+              );
+              if (success) {
+                toast.success(`Lifted it clean — rolled ${res.total} vs DC ${dc}.`);
+                void openLoot(target);
+              } else {
+                toast.error(`Caught! ${target.label} felt the tug (rolled ${res.total} vs DC ${dc}).`);
+                autoStartCombatRef.current();
+              }
+              setStealRoll(null);
+            }}
+            onAutoFail={() => setStealRoll(null)}
+          />
+        );
+      })()}
+
+      {/* Saving-throw prompts — the defender rolls; the DM can roll for an
+          absent player from the override list. */}
+      {(() => {
+        const tokenOf = (id: string) => tokens.find((t) => t.id === id) ?? null;
+        const controlled = saves.pending.filter((r) => {
+          const t = tokenOf(r.targetTokenId);
+          return t && iControlToken(t);
+        });
+        const active = controlled[0] ?? saves.pending.find((r) => r.id === dmPickId) ?? null;
+        const others = isDM ? saves.pending.filter((r) => !controlled.includes(r)) : [];
+        const target = active ? tokenOf(active.targetTokenId) : null;
+        return (
+          <>
+            {active && target && (
+              <DiceRollDialog
+                title={`${ABILITY_FULL[active.ability] ?? active.ability} Saving Throw`}
+                subtitle={
+                  (!controlled.includes(active) ? `${active.targetLabel} · ` : "") +
+                  (active.repeat ? `Shake off ${active.sourceLabel}` : active.sourceLabel)
+                }
+                dc={active.dc}
+                bonus={saveBonusOfToken(target, active.ability)}
+                chips={saveChips(target, active.ability)}
+                optionalBonuses={optionalBonusesFor("save")}
+                autoFail={autoFailsSave(target.conditions ?? [], active.ability)}
+                onBehalf={!controlled.includes(active)}
+                performRoll={(mode) => rollD20(saveBonusOfToken(target, active.ability), mode)}
+                onComplete={(res) => {
+                  setDmPickId(null);
+                  applySaveOutcome(active, target, res.total >= active.dc, res);
+                }}
+                onAutoFail={() => {
+                  setDmPickId(null);
+                  resolveSaveAutoFail(active);
+                }}
+              />
+            )}
+            {others.length > 0 && (
+              <div className="save-override">
+                <div className="save-override-h">
+                  <Icon name="dice" size={13} /> Pending saves
+                </div>
+                {others.map((r) => (
+                  <button key={r.id} onClick={() => setDmPickId(r.id)}>
+                    Roll <b>{r.ability}</b> for {r.targetLabel} <span>DC {r.dc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+    </div>
+  );
+};

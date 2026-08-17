@@ -1,7 +1,29 @@
-import type { Character } from "../types/character";
+import type { Character, Feature } from "../types/character";
 import type { CharacterAPI } from "../state/useCharacter";
+import { useRules } from "../state/Rules";
+
+/** "Magic Initiate (Cleric)" → "Magic Initiate" — feats.json keys by base name. */
+const baseFeatName = (name: string) => name.replace(/\s*\(.*\)$/, "");
 
 export const FeaturesPanel = ({ character: c, api }: { character: Character; api: CharacterAPI }) => {
+  const { feats } = useRules();
+
+  // Enrich feat cards from the dataset at render time. Characters saved before
+  // the data was wired carry placeholder text ("See PHB Chapter 5") — the real
+  // summary supersedes it without needing a data migration.
+  const describe = (f: Feature): string => {
+    if (f.source !== "feat") return f.description;
+    const data = feats?.[baseFeatName(f.name)];
+    if (!data) return f.description;
+    const isPlaceholder = f.description.includes("See PHB");
+    return isPlaceholder ? data.summary : f.description;
+  };
+  const featMeta = (f: Feature): string | null => {
+    if (f.source !== "feat") return null;
+    const data = feats?.[baseFeatName(f.name)];
+    if (!data) return null;
+    return data.prerequisite ? `${data.category} · requires ${data.prerequisite}` : data.category;
+  };
   const grouped = {
     class: c.features.filter((f) => f.source === "class"),
     species: c.features.filter((f) => f.source === "species"),
@@ -47,9 +69,9 @@ export const FeaturesPanel = ({ character: c, api }: { character: Character; api
                       </span>
                     )}
                   </div>
-                  <span className="src">{f.sourceDetail}</span>
+                  <span className="src">{featMeta(f) ?? f.sourceDetail}</span>
                 </div>
-                <div className="desc">{f.description}</div>
+                <div className="desc">{describe(f)}</div>
               </div>
             ))}
           </div>

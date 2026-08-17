@@ -17,15 +17,6 @@ export const Proficiencies = ({ character: c }: { character: Character }) => {
       </div>
 
       <div className="panel">
-        <div className="panel-title">Defenses</div>
-        <div className="kv">
-          <span className="k">Resist</span><span>{c.defenses.resistances.join(", ") || "—"}</span>
-          <span className="k">Immune</span><span>{c.defenses.immunities.join(", ") || "—"}</span>
-          <span className="k">Vulnerable</span><span>{c.defenses.vulnerabilities.join(", ") || "—"}</span>
-        </div>
-      </div>
-
-      <div className="panel">
         <div className="panel-title">Carrying</div>
         <div className="kv">
           <span className="k">Weight</span>
@@ -38,3 +29,18 @@ export const Proficiencies = ({ character: c }: { character: Character }) => {
     </>
   );
 };
+
+/**
+ * Resistances / immunities / vulnerabilities. Sits at the top of the right
+ * column next to conditions in the reference, not buried in the left column.
+ */
+export const Defenses = ({ character: c }: { character: Character }) => (
+  <div className="panel">
+    <div className="panel-title">Defenses</div>
+    <div className="kv">
+      <span className="k">Resist</span><span>{c.defenses.resistances.join(", ") || "—"}</span>
+      <span className="k">Immune</span><span>{c.defenses.immunities.join(", ") || "—"}</span>
+      <span className="k">Vulnerable</span><span>{c.defenses.vulnerabilities.join(", ") || "—"}</span>
+    </div>
+  </div>
+);

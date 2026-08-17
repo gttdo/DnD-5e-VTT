@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Ability, Character, SkillName } from "../types/character";
+import { Icon } from "./ui/Icon";
 import { ABILITIES, ABILITY_FULL } from "../types/character";
 import {
   type BackgroundData,
   type ClassData,
+  type FeatData,
   type SpeciesData,
   loadBackgrounds,
   loadClasses,
+  loadFeats,
   loadSpecies,
 } from "../data/loader";
 import {
@@ -35,11 +38,13 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
   const [classes, setClasses] = useState<Record<string, ClassData> | null>(null);
   const [species, setSpeciesData] = useState<Record<string, SpeciesData> | null>(null);
   const [backgrounds, setBackgrounds] = useState<Record<string, BackgroundData> | null>(null);
+  const [feats, setFeats] = useState<Record<string, FeatData> | null>(null);
 
   useEffect(() => {
     loadClasses().then(setClasses);
     loadSpecies().then(setSpeciesData);
     loadBackgrounds().then(setBackgrounds);
+    loadFeats().then(setFeats);
   }, []);
 
   const stepIndex = STEPS.indexOf(step);
@@ -48,7 +53,7 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
 
   const finish = () => {
     if (!classes || !species || !backgrounds || !canFinish) return;
-    const c = buildCharacter(state, { classes, species, backgrounds });
+    const c = buildCharacter(state, { classes, species, backgrounds, feats: feats ?? undefined });
     onFinish(c);
   };
 
@@ -58,17 +63,23 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
       <div className="topbar">
         <div className="row" style={{ justifyContent: "space-between" }}>
           <div className="row" style={{ gap: 16 }}>
-            <button className="ghost" onClick={onCancel} title="Back to character list">
-              ← Back
+            <button
+              className="ghost"
+              onClick={onCancel}
+              title="Back to character list"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <Icon name="back" size={14} />
+              Back
             </button>
-            <h2 style={{ color: "var(--gold)", fontSize: 18 }}>Character Builder</h2>
+            <h2 style={{ color: "var(--cream)", fontSize: 18 }}>Character Builder</h2>
           </div>
           <div className="row" style={{ gap: 4 }}>
             {STEPS.map((s, i) => (
               <button
                 key={s}
                 className={`tab ${step === s ? "active" : ""}`}
-                onClick={() => setState(state) /* keep state */ || setStep(s)}
+                onClick={() => setStep(s)}
                 style={{
                   fontSize: 11,
                   opacity: i <= stepIndex || state.className ? 1 : 0.5,
@@ -109,20 +120,37 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
           <button
             disabled={stepIndex === 0}
             onClick={() => setStep(STEPS[stepIndex - 1])}
-            style={{ visibility: stepIndex === 0 ? "hidden" : "visible" }}
+            style={{
+              visibility: stepIndex === 0 ? "hidden" : "visible",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
           >
-            ← Previous
+            <Icon name="back" size={14} />
+            Previous
           </button>
           <div className="dim" style={{ fontSize: 12 }}>
             Step {stepIndex + 1} of {STEPS.length}
           </div>
           {stepIndex < STEPS.length - 1 ? (
-            <button className="primary" onClick={() => setStep(STEPS[stepIndex + 1])}>
-              Next →
+            <button
+              className="primary"
+              onClick={() => setStep(STEPS[stepIndex + 1])}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              Next
+              <Icon name="forward" size={14} />
             </button>
           ) : (
-            <button className="primary" disabled={!canFinish} onClick={finish}>
-              Create Character ✓
+            <button
+              className="primary"
+              disabled={!canFinish}
+              onClick={finish}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <Icon name="check" size={14} />
+              Create Character
             </button>
           )}
         </div>
@@ -142,7 +170,7 @@ interface StepProps {
 
 const HomeStep = ({ state, setState }: StepProps) => (
   <div className="panel">
-    <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Who Is Your Hero?</h2>
+    <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Who Is Your Hero?</h2>
     <div className="col" style={{ gap: 16 }}>
       <label className="col" style={{ gap: 4 }}>
         <span className="dim" style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase" }}>
@@ -211,7 +239,7 @@ const ClassStep = ({
 
   return (
     <div>
-      <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Choose a Class</h2>
+      <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Choose a Class</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="col" style={{ gap: 6 }}>
           {entries.map(([name, c]) => (
@@ -232,7 +260,7 @@ const ClassStep = ({
         <div className="panel">
           {selected ? (
             <div className="col" style={{ gap: 8 }}>
-              <h3 style={{ color: "var(--gold)" }}>{state.className}</h3>
+              <h3 style={{ color: "var(--cream)" }}>{state.className}</h3>
               <div className="kv">
                 <span className="k">Primary</span><span>{selected.primary_ability.join(", ")}</span>
                 <span className="k">Hit Die</span><span>d{selected.hit_die}</span>
@@ -297,7 +325,7 @@ const SpeciesStep = ({
 
   return (
     <div>
-      <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Choose Your Species</h2>
+      <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Choose Your Species</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="col" style={{ gap: 6 }}>
           {entries.map(([name, sp]) => (
@@ -318,7 +346,7 @@ const SpeciesStep = ({
         <div className="panel">
           {selected ? (
             <div className="col" style={{ gap: 10 }}>
-              <h3 style={{ color: "var(--gold)" }}>{state.species}</h3>
+              <h3 style={{ color: "var(--cream)" }}>{state.species}</h3>
               <div className="kv">
                 <span className="k">Size</span><span>{selected.size}</span>
                 <span className="k">Speed</span><span>{selected.speed} ft</span>
@@ -353,7 +381,7 @@ const BackgroundStep = ({
 
   return (
     <div>
-      <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Choose a Background</h2>
+      <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Choose a Background</h2>
       <div className="dim" style={{ marginBottom: 12, fontSize: 13 }}>
         Backgrounds grant 3 ability score bonuses (+2/+1 or three +1s),
         one Origin feat, two skill proficiencies, and a tool proficiency.
@@ -378,7 +406,7 @@ const BackgroundStep = ({
         <div className="panel">
           {selected ? (
             <div className="col" style={{ gap: 8 }}>
-              <h3 style={{ color: "var(--gold)" }}>{state.background}</h3>
+              <h3 style={{ color: "var(--cream)" }}>{state.background}</h3>
               <div className="kv">
                 <span className="k">Ability Scores</span><span>{selected.ability_scores.join(", ")}</span>
                 <span className="k">Origin Feat</span><span>{selected.feat}</span>
@@ -481,7 +509,7 @@ const AbilitiesStep = ({
 
   return (
     <div>
-      <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Determine Ability Scores</h2>
+      <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Determine Ability Scores</h2>
 
       <div className="row" style={{ gap: 8, marginBottom: 16 }}>
         {(["standard", "pointbuy", "rolled", "manual"] as const).map((m) => (
@@ -558,8 +586,13 @@ const AbilitiesStep = ({
                     ))
                   )}
                   {base !== 10 && (
-                    <button className="ghost" onClick={() => clearAbility(a)}>
-                      ✕ Clear
+                    <button
+                      className="ghost"
+                      onClick={() => clearAbility(a)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
+                      <Icon name="close" size={11} />
+                      Clear
                     </button>
                   )}
                 </div>
@@ -597,7 +630,7 @@ const EquipmentStep = ({
 
   return (
     <div>
-      <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Starting Equipment</h2>
+      <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Starting Equipment</h2>
       <div className="dim" style={{ marginBottom: 12, fontSize: 13 }}>
         Pick how your character gears up. You can always modify items later from the inventory panel.
       </div>
@@ -660,7 +693,7 @@ const ReviewStep = ({
 
   return (
     <div>
-      <h2 style={{ color: "var(--gold)", marginBottom: 16 }}>Review & Create</h2>
+      <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Review & Create</h2>
 
       {missing.length > 0 && (
         <div className="panel" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>

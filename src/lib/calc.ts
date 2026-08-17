@@ -1,5 +1,5 @@
 import type { Ability, Character, SkillName } from "../types/character";
-import { SKILLS } from "../types/character";
+import { SKILLS, ABILITY_FULL } from "../types/character";
 
 export const abilityMod = (score: number): number => Math.floor((score - 10) / 2);
 
@@ -12,6 +12,10 @@ export const abilityScore = (c: Character, a: Ability): number => {
 export const abilityModFor = (c: Character, a: Ability): number =>
   abilityMod(abilityScore(c, a));
 
+// Kept as a pure sync function rather than reading tables.json (calc is called
+// deep in render paths where async data may not be loaded yet). Verified to
+// agree with public/data/tables.json `proficiency_bonus` for all 20 levels —
+// if the table ever changes, this must change with it.
 export const proficiencyBonus = (level: number): number => {
   if (level >= 17) return 6;
   if (level >= 13) return 5;
@@ -38,6 +42,29 @@ export const skillBonus = (c: Character, skill: SkillName): number => {
   const profPart = exp ? pb * 2 : prof ? pb : 0;
   const extra = c.skillBonuses[skill] ?? 0;
   return abilityModFor(c, ability) + profPart + extra;
+};
+
+/** Break a skill check into labelled parts for the dice dialog's chip row —
+ *  ability modifier, proficiency, expertise, and any flat bonus. */
+export interface CheckChip {
+  label: string;
+  value: number;
+}
+export const skillCheckChips = (c: Character, skill: SkillName): CheckChip[] => {
+  const ability = skillAbility(skill);
+  const pb = proficiencyBonus(c.level);
+  const prof = c.skillProficiencies.includes(skill);
+  const exp = c.skillExpertise.includes(skill);
+  const extra = c.skillBonuses[skill] ?? 0;
+  const chips: CheckChip[] = [{ label: ABILITY_FULL[ability], value: abilityModFor(c, ability) }];
+  if (exp) {
+    chips.push({ label: `${skill} Proficiency`, value: pb });
+    chips.push({ label: `${skill} Expertise`, value: pb });
+  } else if (prof) {
+    chips.push({ label: `${skill} Proficiency`, value: pb });
+  }
+  if (extra) chips.push({ label: "Bonus", value: extra });
+  return chips;
 };
 
 export const passivePerception = (c: Character): number =>

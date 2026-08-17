@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Character, Condition, InventoryItem, Attack, Feature } from "../types/character";
 import { sampleCharacter } from "../data/sampleCharacter";
 import { supabase, supabaseConfigured } from "../lib/supabase";
+import { applyPlan, type LevelUpPlan } from "../lib/levelUp";
+import { applyHeal, applyDamage, applyTempHp } from "../lib/hp";
 
 export const useCharacter = (id: string | null) => {
   const [character, setCharacter] = useState<Character>(sampleCharacter);
@@ -60,6 +62,32 @@ export const useCharacter = (id: string | null) => {
     };
   }, [character, id]);
 
+  // Keep the latest character in a ref so the unmount-flush effect below can
+  // read it without re-registering its cleanup on every keystroke.
+  const characterRef = useRef(character);
+  useEffect(() => {
+    characterRef.current = character;
+  }, [character]);
+
+  // Flush any pending debounced save on unmount or on active-id change.
+  // Without this, navigating away from the sheet within 600ms of the last edit
+  // silently drops the change (the debounce useEffect's cleanup clears the
+  // timer without firing it), so the roster stays out of date.
+  useEffect(() => {
+    return () => {
+      if (!id || !supabaseConfigured) return;
+      const current = characterRef.current;
+      const serialized = JSON.stringify(current);
+      if (serialized === lastSavedSerialized.current) return;
+      // Fire-and-forget; we're on the way out.
+      void supabase
+        .from("characters")
+        .update({ name: current.name, data: current })
+        .eq("id", id);
+      lastSavedSerialized.current = serialized;
+    };
+  }, [id]);
+
   // Realtime: if this character is updated from another session, refresh.
   useEffect(() => {
     if (!id || !supabaseConfigured) return;
@@ -90,7 +118,7 @@ export const useCharacter = (id: string | null) => {
   const heal = useCallback(
     (amount: number) =>
       update((d) => {
-        d.hp.current = Math.min(d.hp.max, d.hp.current + amount);
+        d.hp = applyHeal(d.hp, amount);
         return d;
       }),
     [update]
@@ -99,11 +127,7 @@ export const useCharacter = (id: string | null) => {
   const damage = useCallback(
     (amount: number) =>
       update((d) => {
-        let remaining = amount;
-        const fromTemp = Math.min(d.hp.temp, remaining);
-        d.hp.temp -= fromTemp;
-        remaining -= fromTemp;
-        d.hp.current = Math.max(0, d.hp.current - remaining);
+        d.hp = applyDamage(d.hp, amount);
         return d;
       }),
     [update]
@@ -112,7 +136,7 @@ export const useCharacter = (id: string | null) => {
   const setTempHp = useCallback(
     (amount: number) =>
       update((d) => {
-        d.hp.temp = Math.max(d.hp.temp, amount);
+        d.hp = applyTempHp(d.hp, amount);
         return d;
       }),
     [update]
@@ -150,6 +174,66 @@ export const useCharacter = (id: string | null) => {
             ? { ...f, uses: { ...f.uses, current: f.uses.max } }
             : f
         );
+        // All spell slots return on a long rest.
+        if (d.spellcasting) d.spellcasting.slotsUsed = {};
+        return d;
+      }),
+    [update]
+  );
+
+  // ---------------- Level up ----------------
+  const applyLevelUp = useCallback(
+    (plan: LevelUpPlan) => update((d) => applyPlan(d, plan)),
+    [update]
+  );
+
+  // ---------------- Spellcasting ----------------
+  // All mutate through a normalized draft so characters saved before the
+  // spellcasting field existed work transparently.
+  const withSpellcasting = (d: Character) => {
+    if (!d.spellcasting) d.spellcasting = { known: [], prepared: [], slotsUsed: {} };
+    return d.spellcasting;
+  };
+
+  const toggleSpellKnown = useCallback(
+    (name: string) =>
+      update((d) => {
+        const sc = withSpellcasting(d);
+        if (sc.known.includes(name)) {
+          sc.known = sc.known.filter((n) => n !== name);
+          // Forgetting a spell also unprepares it.
+          sc.prepared = sc.prepared.filter((n) => n !== name);
+        } else {
+          sc.known = [...sc.known, name];
+        }
+        return d;
+      }),
+    [update]
+  );
+
+  const toggleSpellPrepared = useCallback(
+    (name: string) =>
+      update((d) => {
+        const sc = withSpellcasting(d);
+        sc.prepared = sc.prepared.includes(name)
+          ? sc.prepared.filter((n) => n !== name)
+          : [...sc.prepared, name];
+        // Preparing implies knowing.
+        if (sc.prepared.includes(name) && !sc.known.includes(name)) {
+          sc.known = [...sc.known, name];
+        }
+        return d;
+      }),
+    [update]
+  );
+
+  /** Spend (delta=+1) or recover (delta=-1) a slot of the given spell level. */
+  const adjustSlot = useCallback(
+    (level: string, delta: 1 | -1) =>
+      update((d) => {
+        const sc = withSpellcasting(d);
+        const next = Math.max(0, (sc.slotsUsed[level] ?? 0) + delta);
+        sc.slotsUsed = { ...sc.slotsUsed, [level]: next };
         return d;
       }),
     [update]
@@ -269,6 +353,29 @@ export const useCharacter = (id: string | null) => {
     [update]
   );
 
+  /** Set the sheet backdrop. Updates local state so the sheet re-renders now,
+   *  and the debounced save persists it — no dependence on the realtime echo,
+   *  which was why applying a background didn't visibly change anything. */
+  const setBackground = useCallback(
+    (url: string) =>
+      update((d) => {
+        d.bgImage = url;
+        return d;
+      }),
+    [update]
+  );
+
+  /** Set the portrait — also the character's VTT token image. Local-first like
+   *  setBackground so the avatar updates immediately. */
+  const setPortrait = useCallback(
+    (url: string) =>
+      update((d) => {
+        d.portrait = url;
+        return d;
+      }),
+    [update]
+  );
+
   const setCurrency = useCallback(
     (coin: keyof Character["currency"], value: number) =>
       update((d) => {
@@ -290,6 +397,10 @@ export const useCharacter = (id: string | null) => {
     longRest,
     toggleInspiration,
     toggleCondition,
+    applyLevelUp,
+    toggleSpellKnown,
+    toggleSpellPrepared,
+    adjustSlot,
     setFeatureUses,
     addItem,
     updateItem,
@@ -300,6 +411,8 @@ export const useCharacter = (id: string | null) => {
     addFeature,
     removeFeature,
     setName,
+    setBackground,
+    setPortrait,
     setCurrency,
   };
 };

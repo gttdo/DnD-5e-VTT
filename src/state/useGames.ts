@@ -8,6 +8,7 @@ export interface Game {
   dm_user_id: string;
   join_code: string;
   created_at: string;
+  active_scene_id: string | null;
   /** Filled in by joining game_members for the current user */
   my_role?: "player" | "dm";
   my_character_id?: string | null;
@@ -40,7 +41,9 @@ export const useGames = () => {
     // Members carry role + character_id; the join gives us the rest.
     const { data, error } = await supabase
       .from("game_members")
-      .select("role, character_id, games!inner(id, name, dm_user_id, join_code, created_at)")
+      .select(
+        "role, character_id, games!inner(id, name, dm_user_id, join_code, created_at, active_scene_id)"
+      )
       .eq("user_id", user.id);
     if (error) {
       setError(error.message);
@@ -121,17 +124,13 @@ export const useGames = () => {
   const joinByCode = useCallback(
     async (code: string, characterId: string | null): Promise<{ error: string | null }> => {
       if (!user) return { error: "Not signed in" };
-      const cleaned = code.trim().toUpperCase();
-      const { data: matches, error: rpcError } = await supabase.rpc("find_game_by_code", {
-        _code: cleaned,
+      // Go through the SECURITY DEFINER RPC — a direct upsert to game_members
+      // from the client trips RLS in a few edge cases (stale JWT, row already
+      // exists as a different role). The function centralizes the join logic.
+      const { error } = await supabase.rpc("join_game_by_code", {
+        _code: code.trim().toUpperCase(),
+        _character_id: characterId,
       });
-      if (rpcError) return { error: rpcError.message };
-      const game = matches?.[0];
-      if (!game) return { error: "No game found with that code" };
-      const { error } = await supabase.from("game_members").upsert(
-        { game_id: game.id, user_id: user.id, character_id: characterId, role: "player" },
-        { onConflict: "game_id,user_id" }
-      );
       if (error) return { error: error.message };
       await refresh();
       return { error: null };

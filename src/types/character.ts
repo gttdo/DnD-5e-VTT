@@ -61,7 +61,16 @@ export interface InventoryItem {
   properties?: string[];
   range?: string;      // e.g. "5" or "20/60"
   finesse?: boolean;
+  /** Which body slot this occupies when equipped (paper doll). Optional: older
+   *  items and untyped gear infer a slot from their type — see lib/equip. */
+  slot?: EquipSlot;
+  /** Generated/library/uploaded item art (square), shown on the inventory grid
+   *  and paper doll. Filled by the item generator (sibling of tokenSmith). */
+  art?: string;
 }
+
+/** Paper-doll equip slots. */
+export type EquipSlot = "head" | "amulet" | "chest" | "cloak" | "main" | "off" | "hands" | "boots" | "ring";
 
 export interface Attack {
   id: string;
@@ -96,10 +105,37 @@ export interface Currency {
   cp: number; sp: number; ep: number; gp: number; pp: number;
 }
 
+/**
+ * Spellcasting state. Stores spell NAMES that key into the shared dataset
+ * (public/data/spells.json) — never copies of the spell rows — so a data
+ * correction fixes every character at once.
+ *
+ * Optional on Character: existing saved characters predate it, so all
+ * consumers must tolerate `undefined` (the sheet treats that as "no spells").
+ */
+export interface Spellcasting {
+  /** Spells the character knows / has in their book. */
+  known: string[];
+  /** Subset of `known` currently prepared (classes that prepare). */
+  prepared: string[];
+  /** Slots spent per spell level ("1"–"9"). Cleared by a long rest. */
+  slotsUsed: Record<string, number>;
+  /**
+   * The spell this character is currently concentrating on (its name), or
+   * null/absent when not concentrating. Only one at a time — casting another
+   * concentration spell replaces it. Dropped on a failed CON save or when
+   * incapacitated. Lives here (JSON on the character row) so it persists and
+   * shows on the sheet; no migration needed.
+   */
+  concentratingOn?: string | null;
+}
+
 export interface Character {
   id: string;
   name: string;
   portrait?: string;
+  /** AI-generated 16:9 scene used as the sheet backdrop (falls back to class art). */
+  bgImage?: string;
   species: string;
   background: string;
   alignment?: string;
@@ -129,6 +165,7 @@ export interface Character {
   attacks: Attack[];
   inventory: InventoryItem[];
   currency: Currency;
+  spellcasting?: Spellcasting;
 
   features: Feature[];
 
