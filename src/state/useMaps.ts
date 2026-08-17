@@ -26,7 +26,7 @@ export interface NewMapInput {
 
 /**
  * The DM's personal map library. Owner-scoped (RLS enforces it). Realtime so
- * the library updates immediately when a generate-map call completes on this
+ * the library updates immediately when a generate-image call completes on this
  * or another device.
  */
 export const useMaps = () => {

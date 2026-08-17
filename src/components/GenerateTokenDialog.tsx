@@ -32,7 +32,7 @@ interface GenerateResult {
 /**
  * Token cartographer. Same architecture as GenerateMapDialog: single-shot
  * prompt template on the client, delegate the actual image gen to the
- * generate-map edge function (agnostic — takes a prompt + size + quality),
+ * generate-image edge function (agnostic — takes a prompt + size + quality),
  * always save to the token library on success.
  */
 export const GenerateTokenDialog = ({ applyToScene, onClose }: Props) => {

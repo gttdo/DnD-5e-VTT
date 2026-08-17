@@ -73,7 +73,7 @@ export const buildCharacterPortraitPrompt = (c: Character): string => {
 };
 
 /**
- * Generate a character backdrop via the generate-map edge function (which is
+ * Generate a character backdrop via the generate-image edge function (which is
  * art-agnostic). Returns the public image URL, or null on failure. The caller
  * persists it onto the character (data.bgImage).
  */
