@@ -90,7 +90,11 @@ Deno.serve(async (req) => {
   if (memErr) return json({ error: memErr.message }, 500);
   if (!membership) return json({ error: "You are not a member of this game" }, 403);
 
-  // Guard 2: the target character is actually seated at this game.
+  // Guard 2: the target character is at this table — either formally SEATED in
+  // game_members, OR present as a TOKEN on one of the game's scenes. A character
+  // on the board is unambiguously in the game, even if the player placed its
+  // token without going through the "join as this character" seat flow (which is
+  // exactly the case that used to 403 here).
   const { data: seat, error: seatErr } = await svc
     .from("game_members")
     .select("character_id")
@@ -98,7 +102,29 @@ Deno.serve(async (req) => {
     .eq("character_id", characterId)
     .maybeSingle();
   if (seatErr) return json({ error: seatErr.message }, 500);
-  if (!seat) return json({ error: "That character is not in this game" }, 403);
+
+  let atTable = !!seat;
+  if (!atTable) {
+    // Fall back to "has a token in one of this game's scenes".
+    const { data: scenes, error: sceneErr } = await svc
+      .from("scenes")
+      .select("id")
+      .eq("game_id", gameId);
+    if (sceneErr) return json({ error: sceneErr.message }, 500);
+    const sceneIds = (scenes ?? []).map((s) => s.id as string);
+    if (sceneIds.length > 0) {
+      const { data: tok, error: tokErr } = await svc
+        .from("tokens")
+        .select("id")
+        .eq("character_id", characterId)
+        .in("scene_id", sceneIds)
+        .limit(1)
+        .maybeSingle();
+      if (tokErr) return json({ error: tokErr.message }, 500);
+      atTable = !!tok;
+    }
+  }
+  if (!atTable) return json({ error: "That character is not in this game" }, 403);
 
   // Load, mutate, persist the HP inside the character's data blob.
   const { data: row, error: loadErr } = await svc

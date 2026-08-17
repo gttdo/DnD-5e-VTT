@@ -789,11 +789,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     // click (even one that drifts a pixel toward the HUD) never lifts the token.
     if (!drag.active) {
       if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
-      // Turn gate on REAL drag intent: a combatant can't move off its turn. Say
-      // why and abort the lift (a plain select-click never reaches here).
+      // Combat guard on REAL drag intent (a plain select-click never reaches
+      // here): a combatant can't move off its turn, and the DM can't move a
+      // player's token. Say why and abort the lift.
       const dt = tokens.find((tt) => tt.id === drag.id);
-      if (dt && blockedByTurn(dt)) {
-        toast.info(`It isn't ${dt.label}'s turn to move.`);
+      const block = dt ? combatMoveBlock(dt) : null;
+      if (block) {
+        toast.info(block);
         tokenDragRef.current = null;
         return;
       }
@@ -1312,8 +1314,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // their own character token or a prop/scenery token.
   // Ownership: who may move this token at all. The DM moves anything; a player
   // moves only their own character token or a prop/scenery token (no statblock,
-  // no owner). The in-combat TURN gate is applied separately, at drag lift-off
-  // (see onDragMoveRef → blockedByTurn), so a plain select-click stays quiet.
+  // no owner). The in-combat rules (turn order + hands-off players' tokens) are
+  // applied separately, at drag lift-off (see onDragMoveRef → combatMoveBlock),
+  // so a plain select-click stays quiet.
   const canMoveToken = useCallback(
     (t: Token): boolean => {
       if (t.kind === "spell") return isDM && t.area?.movable === true;
@@ -1323,21 +1326,36 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     [isDM, ownedCharacterIds]
   );
 
-  // Turn gate: once a fight is underway, a COMBATANT (any creature — PC, NPC, or
-  // monster) may only move on its OWN turn — the DM included. Scenery/props (no
-  // statblock, no character) stay freely movable for staging. No gate out of
-  // combat. Checked at real drag intent so selecting a token still works.
-  const blockedByTurn = (t: Token): boolean =>
-    init.inCombat && (!!t.character_id || !!t.statblock) && init.activeToken?.id !== t.id;
+  // In-combat movement guard — returns why a drag is disallowed (a message to
+  // show), or null if it's fine. Checked at real drag intent so selecting a token
+  // still works. Two rules, both only while a fight is underway:
+  //   1. The DM must NOT move a player's token — that's the player's job.
+  //   2. A COMBATANT (any creature) may only move on its OWN turn (DM included).
+  // Scenery/props (no statblock, no character) stay freely movable for staging.
+  const combatMoveBlock = (t: Token): string | null => {
+    if (!init.inCombat) return null;
+    if (t.character_id && !ownedCharacterIds.has(t.character_id) && isDM) {
+      return `${t.label} belongs to a player — they move their own token.`;
+    }
+    const isCombatant = !!t.character_id || !!t.statblock;
+    if (isCombatant && init.activeToken?.id !== t.id) {
+      return `It isn't ${t.label}'s turn to move.`;
+    }
+    return null;
+  };
 
-  // The HUD binds to the character the selected token represents (a plain
-  // monster token has none — its statblock HUD arrives with the bestiary).
+  // The full character HUD binds only to a token whose sheet this client OWNS —
+  // never a party member's PC seen from the DM's screen. The DM's copy of another
+  // player's sheet is stale (realtime is scoped to owned characters, useRoster),
+  // so binding it would show frozen HP after the DM damages that PC. Falling
+  // through to the read-only TokenHud instead shows the token's LIVE hp_current,
+  // which the damage path keeps current. A plain monster token has no character.
   const boundCharacter = useMemo(
     () =>
-      selectedToken?.character_id
+      selectedToken?.character_id && ownedCharacterIds.has(selectedToken.character_id)
         ? characters.find((c) => c.id === selectedToken.character_id) ?? null
         : null,
-    [selectedToken, characters]
+    [selectedToken, characters, ownedCharacterIds]
   );
 
   // Action economy (client-local, per token, per turn): Action / Bonus /
@@ -2115,11 +2133,23 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     const { error } = await supabase.functions.invoke("apply-hp", {
       body: { gameId: game.id, characterId, op, amount },
     });
-    if (error) {
-      toast.info(
-        `Rolled and logged — but auto-applying HP to another player's PC needs the apply-hp function deployed. Have them apply ${amount} by hand.`
-      );
+    if (!error) return;
+    // supabase.functions.invoke reports any non-2xx as the opaque "Edge Function
+    // returned a non-2xx status code"; the REAL reason (e.g. "That character is
+    // not in this game") is the JSON body on error.context. Dig it out so the
+    // failure is actionable instead of a blanket "deploy it" message.
+    let detail = error.message ?? "unknown error";
+    const ctx = (error as { context?: unknown }).context;
+    if (ctx && typeof (ctx as Response).json === "function") {
+      try {
+        const body = await (ctx as Response).clone().json();
+        if (body && typeof body.error === "string") detail = body.error;
+      } catch {
+        /* body wasn't JSON — keep the generic message */
+      }
     }
+    console.error("apply-hp failed:", detail);
+    toast.error(`Couldn't apply ${amount} HP to that PC — ${detail}`);
   };
 
   const applyDamageToToken = (t: Token, amount: number) => {
@@ -2128,10 +2158,20 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       const cur = t.hp_current ?? t.statblock.hp;
       void updateToken(t.id, { hp_current: Math.max(0, cur - amount) });
     } else if (t.character_id && ownsCharacter(t.character_id)) {
-      // My own character — a direct owner write is allowed by RLS.
+      // My own character — a direct owner write is allowed by RLS; the char→token
+      // mirror drops the board bar.
       onUpdateCharacter(t.character_id, (c) => ({ ...c, hp: applyDamage(c.hp, amount) }));
-    } else if (t.character_id && characters.some((x) => x.id === t.character_id)) {
-      // A party member's PC — readable but not owner-writable; go through apply-hp.
+    } else if (t.character_id) {
+      // A PC I don't own (a party member's, or one the DM is running against).
+      // NOTE: do NOT gate this on the PC being in my local `characters` — the DM's
+      // roster does NOT include players' sheets, so that gate silently swallowed
+      // hits (e.g. an Opportunity Attack the DM rolls against a player). Instead:
+      //  1) drop the token's HP bar now, so the board reflects it for everyone
+      //     immediately — even if that player's client is offline to mirror it;
+      //  2) persist to their sheet via the service-role apply-hp function
+      //     (authorized by game membership, no local sheet needed).
+      const cur = t.hp_current ?? t.hp_max ?? 0;
+      void updateToken(t.id, { hp_current: Math.max(0, cur - amount) });
       void applyHpRemote(t.character_id, "damage", amount);
     }
     // else: a plain token — logged, applied by hand.
@@ -2173,7 +2213,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       void updateToken(id, { hp_current: Math.min(max, cur + amount) });
     } else if (t.character_id && ownsCharacter(t.character_id)) {
       onUpdateCharacter(t.character_id, (c) => ({ ...c, hp: applyHeal(c.hp, amount) }));
-    } else if (t.character_id && characters.some((x) => x.id === t.character_id)) {
+    } else if (t.character_id) {
+      // Same as damage: don't gate on the local roster (the DM lacks players'
+      // sheets). Bump the token bar now and persist via apply-hp.
+      const cur = t.hp_current ?? 0;
+      const max = t.hp_max ?? cur + amount;
+      void updateToken(id, { hp_current: Math.min(max, cur + amount) });
       void applyHpRemote(t.character_id, "heal", amount);
     }
   };
@@ -2722,6 +2767,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     return { label: atk.name, attackBonus: attackBonus(c, atk), damage: dmg, damageType: atk.damageType, range: atk.range ?? "5 ft" };
   };
 
+  // The reactor's OA reach (in cells) + a display label, computed on the MOVER's
+  // client. A monster reads its own statblock (present on every client via the
+  // token). A player character reads its sheet IF this client has it — but the DM
+  // moving a monster does NOT have the players' sheets, so a PC falls back to a
+  // basic 5 ft melee. That's enough to broadcast the offer; the reactor's OWN
+  // client (which has the sheet) re-derives and runs the real attack. Without
+  // this, a hostile token leaving a PC's reach never provoked when the DM did the
+  // moving — only PC-leaves-monster worked (monsters resolve locally).
+  const oaReach = (r: Token): { cells: number; label: string } | null => {
+    const spec = oaMeleeSpec(r);
+    if (spec) return { cells: Math.max(1, Math.round((attackRangeFt(spec.range) ?? 5) / 5)), label: spec.label };
+    if (r.character_id) return { cells: 1, label: "Opportunity Attack" }; // PC sheet not on this client
+    return null; // a monster with genuinely no melee attack — no OA
+  };
+
   // On a committed move (see onDragUpRef), offer an OA to every enemy whose reach
   // the mover just LEFT — was within reach at the old cell, out of it at the new.
   // The offer is broadcast; only that enemy's controller is prompted. Enemy =
@@ -2734,9 +2794,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       if ((r.hp_current ?? 1) <= 0) continue;
       if (!areEnemies(mover, r)) continue; // only opposing dispositions provoke
       if (aggregateConditions(r.conditions ?? []).incapacitated) continue;
-      const spec = oaMeleeSpec(r);
-      if (!spec) continue;
-      const reachCells = Math.max(1, Math.round((attackRangeFt(spec.range) ?? 5) / 5));
+      const reach = oaReach(r);
+      if (!reach) continue;
+      const reachCells = reach.cells;
       if (footprintGap(r, at(oldX, oldY)) <= reachCells && footprintGap(r, at(newX, newY)) > reachCells) {
         const id = `oa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${r.id.slice(0, 4)}`;
         reactions.offer({
@@ -2745,7 +2805,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           by: mover.label,
           targetTokenId: r.id,
           targetLabel: r.label,
-          sourceLabel: spec.label,
+          sourceLabel: reach.label,
           moverTokenId: mover.id,
           moverLabel: mover.label,
         });
@@ -4098,7 +4158,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             const off = reactions.pending.find((o) => {
               if (o.kind !== "opportunity") return false;
               const reactor = tokens.find((x) => x.id === o.targetTokenId);
-              return !!reactor && (iControlToken(reactor) || isDM);
+              if (!reactor) return false;
+              // Show it to the reactor's own controller. The DM may proxy an
+              // absent player ONLY when this client can actually resolve the
+              // strike (a monster's stats are on the token; a PC's sheet is not,
+              // so a player's OA must be taken on the player's own screen).
+              return iControlToken(reactor) || (isDM && !!oaMeleeSpec(reactor));
             });
             if (!off) return null;
             return (
