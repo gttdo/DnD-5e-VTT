@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
+import { useAuth } from "../state/useAuth";
 import { useConfirm } from "../state/Confirm";
 import { TokenStudioDialog } from "./TokenStudioDialog";
 import { TokenStatSheet } from "./TokenStatSheet";
@@ -17,6 +18,7 @@ type TabKey = "monster" | "npc" | "item" | "prop" | "spell" | "other";
 
 export const TokenLibraryScreen = () => {
   const { assets, loading, deleteAsset } = useTokenAssets();
+  const { user } = useAuth();
   const { confirm } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [preview, setPreview] = useState<TokenAsset | null>(null);
@@ -186,7 +188,12 @@ export const TokenLibraryScreen = () => {
         subtitle={
           loading
             ? "Loading library…"
-            : `${assets.length} resource${assets.length === 1 ? "" : "s"} in your library.`
+            : (() => {
+                const mine = assets.filter((a) => a.owner_id === user?.id).length;
+                const premade = assets.length - mine;
+                return `${assets.length} resource${assets.length === 1 ? "" : "s"} available` +
+                  (premade > 0 ? ` · ${mine} yours, ${premade} premade` : ` in your library`) + ".";
+              })()
         }
       >
         <Button variant="primary" size="lg" icon="drama" onClick={() => setGenerateOpen(true)}>
@@ -360,39 +367,46 @@ export const TokenLibraryScreen = () => {
                 .join(" · ")
             : `${size.label} · ${a.creature_type ?? "—"}`;
           const ctGlyph = spell ? null : creatureTypeGlyph(a.creature_type);
+          // Shared premades (the seeded SRD library) are read-only to anyone but
+          // their owner — usable, but no Edit/Delete. #135
+          const owned = a.owner_id === user?.id;
           return (
             <Card
               key={a.id}
-              className="has-menu"
+              className={owned ? "has-menu" : undefined}
               onClick={() => setPreview(a)}
             >
-              <CardMenu
-                label={`Actions for ${a.name}`}
-                items={[
-                  {
-                    label: "Edit",
-                    icon: "edit",
-                    onClick: () => setEditAsset(a),
-                  },
-                  {
-                    label: "Delete",
-                    icon: "delete",
-                    danger: true,
-                    onClick: async () => {
-                      if (
-                        await confirm({
-                          title: "Delete token",
-                          message: `Delete "${a.name}"? Placed tokens on scenes keep their image but lose the link.`,
-                          confirmLabel: "Delete",
-                          danger: true,
-                        })
-                      ) {
-                        await deleteAsset(a.id);
-                      }
+              {owned ? (
+                <CardMenu
+                  label={`Actions for ${a.name}`}
+                  items={[
+                    {
+                      label: "Edit",
+                      icon: "edit",
+                      onClick: () => setEditAsset(a),
                     },
-                  },
-                ]}
-              />
+                    {
+                      label: "Delete",
+                      icon: "delete",
+                      danger: true,
+                      onClick: async () => {
+                        if (
+                          await confirm({
+                            title: "Delete token",
+                            message: `Delete "${a.name}"? Placed tokens on scenes keep their image but lose the link.`,
+                            confirmLabel: "Delete",
+                            danger: true,
+                          })
+                        ) {
+                          await deleteAsset(a.id);
+                        }
+                      },
+                    },
+                  ]}
+                />
+              ) : (
+                <span className="card-badge" title="Shared premade — from the built-in library">Premade</span>
+              )}
               <CardMedia src={a.image_url} alt={a.name} shape="circle" />
               <CardBody>
                 <CardTitle>{a.name}</CardTitle>

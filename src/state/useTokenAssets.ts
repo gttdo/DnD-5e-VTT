@@ -17,6 +17,9 @@ export interface TokenAsset {
   token_type: TokenType | null;
   /** Statblock / NPC profile / item details, keyed by token_type. */
   details: TokenDetails | null;
+  /** A shared "premade" row every account can read (the seeded SRD library).
+   *  Only the owner can edit/delete it. Optional for a pre-0031 schema. */
+  is_public?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -51,11 +54,22 @@ export const useTokenAssets = () => {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
+    // Own rows PLUS the shared premade library (is_public). The RLS read policy
+    // (0031) permits both; this widens the query to match. #135
+    let { data, error } = await supabase
       .from("token_assets")
       .select("*")
-      .eq("owner_id", user.id)
+      .or(`owner_id.eq.${user.id},is_public.eq.true`)
       .order("created_at", { ascending: false });
+    // Pre-0031 schema (migration not yet applied): no is_public column — fall
+    // back to own rows only so the library still loads during the deploy window.
+    if (error && /is_public/i.test(error.message)) {
+      ({ data, error } = await supabase
+        .from("token_assets")
+        .select("*")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false }));
+    }
     if (error) {
       setError(error.message);
       setAssets([]);

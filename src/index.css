@@ -3106,6 +3106,23 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   right: 8px;
   z-index: 2;
 }
+/* "Premade" tag on shared-library cards the viewer doesn't own (#135). */
+.card-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold, #c9a24a);
+  background: color-mix(in srgb, var(--gold, #c9a24a) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold, #c9a24a) 45%, transparent);
+  pointer-events: none;
+}
 .card-menu-trigger {
   display: grid;
   place-items: center;
