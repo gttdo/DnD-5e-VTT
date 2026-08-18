@@ -133,7 +133,7 @@ export const ChangeBackgroundDialog = ({ character: c, onClose, onApply }: Props
         {tab === "library" && (
           <div className="cbg-grid">
             {PRESETS.map((name) => {
-              const url = `/art/art/${name}.png`;
+              const url = `/art/${name}.png`;
               return (
                 <button
                   key={name}
