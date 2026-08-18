@@ -2354,13 +2354,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       }
     } else if (req.onFail === "damage") {
       const rolled = parseInt(req.damage ?? "0", 10) || 0;
-      const dmg = saved && req.onSave === "half" ? Math.floor(rolled / 2) : saved ? 0 : rolled;
-      if (dmg > 0) applyDamageToToken(target, dmg);
+      const base = saved && req.onSave === "half" ? Math.floor(rolled / 2) : saved ? 0 : rolled;
+      // Honor the target's resistance/immunity to the damage type (fire res on a
+      // Fireball, etc.) — applied here so area saves get it too, on the defender's
+      // own client.
+      const out = resolveDamage(base, req.damageType, defensesOfToken(target));
+      if (out.final > 0) applyDamageToToken(target, out.final);
       outcome = saved
         ? req.onSave === "half"
-          ? `saves — takes ${dmg} (half)`
+          ? `saves — takes ${out.final} (half)${out.note ? ` (${out.note})` : ""}`
           : "saves — unharmed"
-        : `fails — takes ${dmg}`;
+        : `fails — takes ${out.final}${out.note ? ` (${out.note})` : ""}`;
     } else if (req.onFail === "concentration") {
       // A failed save drops the held spell (owner-side write on the defender).
       if (!saved && target.character_id) {
@@ -2509,37 +2513,44 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       const diff = Math.abs(((Math.atan2(c.y - apex.y, c.x - apex.x) - dir + Math.PI) % (2 * Math.PI)) - Math.PI);
       return diff <= CONE_HALF_ANGLE;
     });
-    // RAW: one damage roll for the whole area; each caught creature saves for half
-    // (auto-rolled off its own bonus — statblock or PC sheet).
-    // RAW: one damage roll for the whole area; each caught creature saves for
-    // half. Two creatures that both fail with no resistance take the same number
-    // (correct) — the per-creature amount only diverges on a save or resistance.
+    // RAW: one damage roll for the whole area. Each caught creature then makes its
+    // OWN save on its controller's screen (a monster → the DM, a PC → that player)
+    // and takes half on a success — routed through the SAME cross-client save relay
+    // as single-target saves, instead of the caster auto-rolling everyone. (#113)
     const dmgRoll = roll(spec.damage);
     const dcTxt = spec.dc != null ? ` DC ${spec.dc}` : "";
-    const entries: RollEntry[] = [
-      { label: `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"} (${spec.save ?? "save"}${dcTxt} for half)`, result: dmgRoll },
-    ];
-    // A floating number for EACH caught creature (a bloom is one-per-roll, so we
-    // log every line in one call, then bloom each token separately).
-    const tokenBlooms: { t: Token; tone: RollTone; text: string }[] = [];
+    broadcastRoll(by, [
+      {
+        label:
+          caught.length === 0
+            ? `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"} · no creatures caught`
+            : `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"}${spec.save ? ` (${spec.save}${dcTxt} for half)` : ""}`,
+        result: dmgRoll,
+      },
+    ]);
     caught.forEach((t) => {
-      const sv = spec.save ? rollD20(saveBonusOfToken(t, spec.save)) : null;
-      const saved = sv != null && spec.dc != null && sv.total >= spec.dc;
-      const raw = saved ? Math.floor(dmgRoll.total / 2) : dmgRoll.total;
-      const out = resolveDamage(raw, spec.damageType, defensesOfToken(t));
-      applyDamageToToken(t, out.final);
-      const saveTxt = sv ? `${sv.total} vs${dcTxt} ${saved ? "save" : "fail"} — ` : "";
-      entries.push({
-        label: `${t.label} — ${saveTxt}${out.final} ${spec.damageType ?? "damage"}${out.note ? ` (${out.note})` : ""}`,
-        result: sv ?? dmgRoll,
-      });
-      tokenBlooms.push({ t, tone: saved ? "normal" : "crit", text: out.immune ? "immune" : String(out.final) });
+      if (spec.save && spec.dc != null) {
+        // Cross-client save-for-half: the target's controller rolls and applies it.
+        saves.request({
+          id: `area-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${t.id.slice(0, 4)}`,
+          by,
+          targetTokenId: t.id,
+          targetLabel: t.label,
+          ability: spec.save,
+          dc: spec.dc,
+          sourceLabel: spec.label,
+          onFail: "damage",
+          onSave: "half",
+          damage: String(dmgRoll.total),
+          damageType: spec.damageType,
+        });
+      } else {
+        // No save on this area — everything caught takes it in full.
+        const out = resolveDamage(dmgRoll.total, spec.damageType, defensesOfToken(t));
+        applyDamageToToken(t, out.final);
+        broadcastRoll("", [], bloomSeedFor(t, "crit", out.immune ? "immune" : String(out.final)));
+      }
     });
-    if (caught.length === 0) entries.push({ label: `— no creatures in the cone`, result: dmgRoll });
-    // Log the whole cone in one entry-set (no bloom)…
-    broadcastRoll(by, entries);
-    // …then a damage number over every creature it caught.
-    tokenBlooms.forEach(({ t, tone, text }) => broadcastRoll("", [], bloomSeedFor(t, tone, text)));
   };
 
   const resolveAttack = (by: string, spec: AttackSpec, target: Token, attackerId?: string) => {
