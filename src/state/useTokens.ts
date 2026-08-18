@@ -3,6 +3,7 @@ import { supabase, supabaseConfigured } from "../lib/supabase";
 import { useAuth } from "./useAuth";
 import type { MonsterStatblock, SpellAreaShape } from "../types/content";
 import type { TokenLoot } from "../lib/loot";
+import type { Ability } from "../types/character";
 
 export type TokenSize = "tiny" | "small" | "medium" | "large" | "huge" | "gargantuan";
 
@@ -26,6 +27,23 @@ export interface TokenArea {
   /** A rare relocatable area (Moonbeam, Flaming Sphere). Most area spells are
    *  fixed once placed; this flag is what lets one be moved after casting. */
   movable?: boolean;
+  /** The ONGOING effect a creature suffers for standing in this area (#126).
+   *  Frozen at cast so the caster's DC / upcast damage travel with the token.
+   *  When a combatant begins its turn inside, the DM's client demands this save
+   *  (routed to the creature's own controller via the #113 relay). Absent on
+   *  purely cosmetic areas (Darkness, Fog Cloud). */
+  effect?: {
+    /** Ability for the recurring save; absent → no save (auto-applies). */
+    save?: Ability;
+    dc?: number;
+    /** Damage dice on a failed save (e.g. "5d8"); half on a success when onSave="half". */
+    damage?: string;
+    damageType?: string;
+    /** Condition applied on a failed save (e.g. "restrained" for Web/Entangle). */
+    condition?: string;
+    /** What a SUCCESSFUL save yields for the damage — "half" or "none". */
+    onSave?: "none" | "half";
+  } | null;
 }
 
 export interface Token {

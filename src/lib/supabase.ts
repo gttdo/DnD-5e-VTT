@@ -219,7 +219,7 @@ export interface Database {
           conditions: string[] | null;
           loot: TokenLoot | null;
           kind: "prop" | "spell" | null;
-          area: { shape?: SpellAreaShape; size?: number; damageType?: string; level?: number; facing?: number; movable?: boolean } | null;
+          area: { shape?: SpellAreaShape; size?: number; damageType?: string; level?: number; facing?: number; movable?: boolean; effect?: unknown } | null;
           disposition: "hostile" | "friendly" | null;
         };
         Insert: {

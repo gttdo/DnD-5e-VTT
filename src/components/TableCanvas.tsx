@@ -163,6 +163,24 @@ const spellAreaGeom = (
       return { tag: "circle", r: u };
   }
 };
+
+/** Is point p inside the triangle a-b-c? Sign-of-cross-products test (used to
+ *  tell whether a creature stands in a cone footprint). */
+const pointInTriangle = (
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+  c: [number, number]
+): boolean => {
+  const sign = (u: [number, number], v: [number, number], w: [number, number]) =>
+    (u[0] - w[0]) * (v[1] - w[1]) - (v[0] - w[0]) * (u[1] - w[1]);
+  const d1 = sign(p, a, b);
+  const d2 = sign(p, b, c);
+  const d3 = sign(p, c, a);
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNeg && hasPos);
+};
 const DEFAULT_COLS = 30;
 const DEFAULT_ROWS = 20;
 const MIN_ZOOM = 0.3;
@@ -2476,10 +2494,25 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     if (spec.placeArea) {
       const x = Math.max(0, Math.min(cols - 1, Math.floor(aimX / CELL)));
       const y = Math.max(0, Math.min(rows - 1, Math.floor(aimY / CELL)));
+      // Freeze the ongoing effect onto the token (#126): its caster's DC + (possibly
+      // upcast) damage travel with it, so each round the save fires with the right
+      // numbers even long after the cast. Cosmetic areas (Darkness, Fog Cloud) carry
+      // none — no save, no damage, no condition.
+      const effect =
+        spec.save || spec.placeArea.damage || spec.condition
+          ? {
+              save: spec.save,
+              dc: spec.dc,
+              damage: spec.placeArea.damage,
+              damageType: spec.placeArea.damageType,
+              condition: spec.condition || undefined,
+              onSave: (spec.placeArea.damage ? "half" : "none") as "half" | "none",
+            }
+          : null;
       void addToken({
         label: spec.label,
         kind: "spell",
-        area: { shape: spec.placeArea.shape, size: spec.placeArea.size, damageType: spec.placeArea.damageType, level: spec.placeArea.level, facing: 0, movable: spec.placeArea.movable },
+        area: { shape: spec.placeArea.shape, size: spec.placeArea.size, damageType: spec.placeArea.damageType, level: spec.placeArea.level, facing: 0, movable: spec.placeArea.movable, effect },
         size: "medium",
         x,
         y,
@@ -2552,6 +2585,95 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       }
     });
   };
+
+  // Does `target`'s center fall inside the lingering `area` token's footprint?
+  // The board renders the shape rotated by `facing` about the area's origin, so
+  // we move the point into the area's UNROTATED local frame and test the base
+  // geometry — circle (sphere/emanation), rect (cube/line), or triangle (cone).
+  const tokenInArea = (target: Token, area: Token): boolean => {
+    const shape = area.area?.shape;
+    if (!shape) return false;
+    const A = centerOfToken(area);
+    const P = centerOfToken(target);
+    const rad = (-(area.area?.facing ?? 0) * Math.PI) / 180;
+    const dx = P.x - A.x;
+    const dy = P.y - A.y;
+    const lx = A.x + dx * Math.cos(rad) - dy * Math.sin(rad);
+    const ly = A.y + dx * Math.sin(rad) + dy * Math.cos(rad);
+    const g = spellAreaGeom(A.x, A.y, shape, area.area?.size ?? 20);
+    if (g.tag === "circle") return Math.hypot(lx - A.x, ly - A.y) <= g.r;
+    if (g.tag === "rect") return lx >= g.x && lx <= g.x + g.w && ly >= g.y && ly <= g.y + g.h;
+    const pts = g.points.split(" ").map((s) => s.split(",").map(Number) as [number, number]);
+    return pointInTriangle([lx, ly], pts[0], pts[1], pts[2]);
+  };
+
+  // Apply a lingering area's ongoing effect to one creature (#126). A save-backed
+  // effect is routed to the creature's OWN controller through the #113 relay (so
+  // a PC rolls their own); a no-save area auto-applies. Called only from the DM's
+  // client, which owns the area tokens.
+  const triggerAreaEffect = (area: Token, target: Token) => {
+    const eff = area.area?.effect;
+    if (!eff) return;
+    const src = area.label;
+    const rid = `aura-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${target.id.slice(0, 4)}`;
+    if (eff.condition && !eff.damage) {
+      // Condition area (Web, Entangle). An already-affected creature escapes with
+      // an action — it doesn't re-save each round — so only demand a save from a
+      // creature not yet suffering the condition.
+      if ((target.conditions ?? []).some((c) => parseCondition(c).name === eff.condition)) return;
+      if (!eff.save || eff.dc == null) return;
+      saves.request({
+        id: rid, by: src, targetTokenId: target.id, targetLabel: target.label,
+        ability: eff.save, dc: eff.dc, sourceLabel: src,
+        onFail: "condition", condition: eff.condition, onSave: "none",
+      });
+    } else if (eff.save && eff.dc != null && eff.damage) {
+      // Damage-for-half area (Wall of Fire, Moonbeam…).
+      const dmgRoll = roll(eff.damage);
+      saves.request({
+        id: rid, by: src, targetTokenId: target.id, targetLabel: target.label,
+        ability: eff.save, dc: eff.dc, sourceLabel: src,
+        onFail: "damage", onSave: eff.onSave ?? "half",
+        damage: String(dmgRoll.total), damageType: eff.damageType,
+      });
+    } else if (eff.damage) {
+      // No-save area — auto-damage (e.g. Spike Growth), applied by the DM directly.
+      const dmgRoll = roll(eff.damage);
+      const out = resolveDamage(dmgRoll.total, eff.damageType, defensesOfToken(target));
+      applyDamageToToken(target, out.final);
+      broadcastRoll(
+        src,
+        [{ label: `${target.label} — ${src}: ${out.final} ${eff.damageType ?? "damage"}${out.note ? ` (${out.note})` : ""}`, result: dmgRoll }],
+        bloomSeedFor(target, "crit", out.immune ? "immune" : String(out.final))
+      );
+    }
+  };
+
+  // #126: when a combatant BEGINS its turn standing inside a lingering area with
+  // an ongoing effect, demand its save. Only the DM's client fires it (it owns
+  // the area tokens); the save then routes to the active creature's OWN controller
+  // via the #113 relay, so a player rolls their own. Keyed by (round, token, area)
+  // so a mid-turn re-render can't double-apply — and reset when combat ends.
+  const areaEffectFiredRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!init.inCombat) {
+      areaEffectFiredRef.current.clear();
+      return;
+    }
+    if (!isDM) return;
+    const active = init.activeToken;
+    if (!active || active.kind === "prop" || active.kind === "spell" || tokenIsDowned(active)) return;
+    const turnKey = `${init.round}:${active.id}`;
+    for (const area of tokensRef.current) {
+      if (area.kind !== "spell" || !area.area?.effect || !area.area.shape) continue;
+      if (!tokenInArea(active, area)) continue;
+      const fireKey = `${turnKey}:${area.id}`;
+      if (areaEffectFiredRef.current.has(fireKey)) continue;
+      areaEffectFiredRef.current.add(fireKey);
+      triggerAreaEffect(area, active);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDM, init.inCombat, init.round, init.activeToken?.id]);
 
   const resolveAttack = (by: string, spec: AttackSpec, target: Token, attackerId?: string) => {
     // A harmful strike that reaches a target starts combat (utility casts don't).

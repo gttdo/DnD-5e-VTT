@@ -70,7 +70,7 @@ export interface AttackSpec {
   /** A LINGERING area spell (Web, Wall of Fire…): instead of a one-shot burst,
    *  the resolver drops a persistent area token at the aimed point. `movable`
    *  marks the rare relocatable areas (Moonbeam). */
-  placeArea?: { shape: SpellAreaShape; size: number; damageType?: string; level?: number; movable?: boolean };
+  placeArea?: { shape: SpellAreaShape; size: number; damageType?: string; level?: number; movable?: boolean; damage?: string };
 }
 
 /** One line for the dice log: a human label plus the raw dice result. */
