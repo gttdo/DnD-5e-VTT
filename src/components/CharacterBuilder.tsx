@@ -253,8 +253,19 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="topbar" style={{ borderTop: "1px solid var(--panel-border)", borderBottom: "none" }}>
+      {/* Footer — pinned to the viewport bottom so Previous/Next/Create stay in
+          reach without scrolling, even on a short step. */}
+      <div
+        className="topbar"
+        style={{
+          borderTop: "1px solid var(--panel-border)",
+          borderBottom: "none",
+          position: "sticky",
+          bottom: 0,
+          zIndex: 20,
+          background: "var(--bg-0)",
+        }}
+      >
         <div className="row" style={{ justifyContent: "space-between" }}>
           <button
             disabled={stepIndex === 0}
