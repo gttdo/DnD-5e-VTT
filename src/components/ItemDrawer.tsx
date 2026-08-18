@@ -4,6 +4,7 @@ import { isEquippable, isWeapon } from "../lib/attacks";
 import { attackBonus, damageBonus, formatMod, abilityModFor } from "../lib/calc";
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { useConfirm } from "../state/Confirm";
+import { itemSpellGrant } from "../lib/itemSpellGrants";
 
 /**
  * Detail drawer for one inventory item — the reference's Dagger panel.
@@ -23,6 +24,14 @@ export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
   const { confirm } = useConfirm();
   const weapon = isWeapon(item);
   const equippable = isEquippable(item);
+
+  // Item-granted spellcasting (#88): fall back to the curated SRD grant so a
+  // premade whose data is prose-only still shows its charges + spells here,
+  // matching the HUD's Items tab.
+  const grant = itemSpellGrant(item.name);
+  const charges = item.charges ?? (grant ? { max: grant.charges, current: grant.charges, recharge: grant.recharge } : undefined);
+  const grantedSpells = item.grantedSpells?.length ? item.grantedSpells : grant?.spells;
+  const spellCost = item.spellCost ?? grant?.cost;
 
   // Mirror how a derived attack would roll this weapon (finesse → best of
   // STR/DEX, ranged → DEX) so the drawer shows the numbers Actions will use.
@@ -46,11 +55,11 @@ export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
     ]);
   }
   if (item.range) rows.push(["Range", `${item.range} ft.`]);
-  if (item.charges) {
-    const rechargeTxt = item.charges.recharge
-      ? ` · recharges ${item.charges.recharge === "short" ? "on a short rest" : item.charges.recharge === "long" ? "on a long rest" : "at dawn"}`
+  if (charges) {
+    const rechargeTxt = charges.recharge
+      ? ` · recharges ${charges.recharge === "short" ? "on a short rest" : charges.recharge === "long" ? "on a long rest" : "at dawn"}`
       : "";
-    rows.push(["Charges", `${item.charges.current} / ${item.charges.max}${rechargeTxt}`]);
+    rows.push(["Charges", `${charges.current} / ${charges.max}${rechargeTxt}`]);
   }
   rows.push(["Quantity", String(item.qty)]);
   rows.push(["Weight", `${item.weight} lb${item.qty > 1 ? ` (${(item.weight * item.qty).toFixed(1)} total)` : ""}`]);
@@ -107,19 +116,19 @@ export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
         ))}
       </div>
 
-      {item.grantedSpells?.length ? (
+      {grantedSpells?.length ? (
         <>
           <div className="drawer-section-title">Spells</div>
           <p className="drawer-note">
-            {item.charges
+            {charges
               ? "Cast these from the item's charges via the Items tab in the game HUD:"
               : "This item can cast:"}
           </p>
           <div className="rules-table">
-            {item.grantedSpells.map((s) => (
+            {grantedSpells.map((s) => (
               <div className="rules-row" key={s}>
                 <span>{s}</span>
-                <span className="rules-value mono">{item.spellCost?.[s] ?? 1}⚡</span>
+                <span className="rules-value mono">{spellCost?.[s] ?? 1}⚡</span>
               </div>
             ))}
           </div>

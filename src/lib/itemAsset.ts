@@ -1,6 +1,7 @@
 import type { InventoryItem } from "../types/character";
 import type { MagicItem } from "../types/content";
 import type { TokenAsset } from "../state/useTokenAssets";
+import { itemSpellGrant } from "./itemSpellGrants";
 
 /**
  * Bridge from the token studio's item output (a `MagicItem`) to a character
@@ -80,6 +81,15 @@ export const magicItemToInventory = (m: MagicItem, art?: string): InventoryItem 
     item.charges = { max: m.charges.max, current: m.charges.max, recharge: rechargeFor(m.charges.recharge) };
   }
   if (m.attachedSpells?.length) item.grantedSpells = m.attachedSpells;
+  // The seeded SRD items keep their charges + spell only in prose, so the model
+  // above finds nothing. Fill from the curated grant table when it's a known
+  // spell-item and the source didn't already carry structured data.
+  const grant = itemSpellGrant(m.name);
+  if (grant && grant.spells.length) {
+    if (!item.charges) item.charges = { max: grant.charges, current: grant.charges, recharge: grant.recharge };
+    if (!item.grantedSpells?.length) item.grantedSpells = grant.spells;
+    if (grant.cost && !item.spellCost) item.spellCost = grant.cost;
+  }
   if (m.attunement) item.attuned = false;
   return item;
 };

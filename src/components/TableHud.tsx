@@ -4,6 +4,7 @@ import type { Character, Attack, InventoryItem, Feature } from "../types/charact
 import { resolveAttacks, damageLabel } from "../lib/attacks";
 import { skillRoll, damageRoll, saveRoll, type RollEntry, type RollTone, type AttackSpec } from "../lib/rolls";
 import { spellMech, scaleCantrip, upcastDamage, dartDamage } from "../lib/spellMechanics";
+import { itemSpellGrant } from "../lib/itemSpellGrants";
 import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } from "../lib/calc";
 import { applyDamage, applyHeal } from "../lib/hp";
 import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility } from "../lib/spellcasting";
@@ -576,16 +577,26 @@ export const TableHud = ({
     });
   };
   // Drain a magic item's charge pool by `cost` (#88). Persisted via onUpdate so it
-  // survives re-selection; refilled on the matching rest (see useCharacter).
+  // survives re-selection; refilled on the matching rest (see useCharacter). If
+  // the item has no stored pool yet (a premade whose grant came from the curated
+  // table), this first spend BAKES the pool + granted spells onto it, so the item
+  // becomes self-contained from then on.
   const spendItemCharges = (itemId: string, cost: number) => {
     if (!onUpdate) return;
     onUpdate((d) => ({
       ...d,
-      inventory: d.inventory.map((i) =>
-        i.id === itemId && i.charges
-          ? { ...i, charges: { ...i.charges, current: Math.max(0, i.charges.current - cost) } }
-          : i
-      ),
+      inventory: d.inventory.map((i) => {
+        if (i.id !== itemId) return i;
+        const g = itemSpellGrant(i.name);
+        const pool = i.charges ?? (g ? { max: g.charges, current: g.charges, recharge: g.recharge } : null);
+        if (!pool) return i;
+        return {
+          ...i,
+          charges: { ...pool, current: Math.max(0, pool.current - cost) },
+          grantedSpells: i.grantedSpells?.length ? i.grantedSpells : g?.spells,
+          spellCost: i.spellCost ?? g?.cost,
+        };
+      }),
     }));
   };
 
@@ -872,22 +883,39 @@ export const TableHud = ({
   // Fighter's Wand of Magic Missiles casts even with no spell slots.
   const spellLevelOf = (name: string): number =>
     (spells ?? []).find((s) => s.name.toLowerCase() === name.toLowerCase())?.level ?? 0;
-  const chargedItems = c.inventory.filter(
-    (i) => i.charges && i.charges.max > 0 && (i.grantedSpells?.length ?? 0) > 0
-  );
+  // Resolve an item's spell grant: its own structured fields if present, else the
+  // curated SRD table (#88) — so a premade wand whose data lives only in prose
+  // still drives the Items tab. `current` falls back to `max` until first cast.
+  const grantFor = (item: InventoryItem): { spells: string[]; max: number; current: number; recharge?: "short" | "long" | "dawn"; cost?: Record<string, number> } | null => {
+    const g = itemSpellGrant(item.name);
+    const spellsList = item.grantedSpells?.length ? item.grantedSpells : g?.spells;
+    if (!spellsList || spellsList.length === 0) return null;
+    const max = item.charges?.max ?? g?.charges ?? 0;
+    if (max <= 0) return null;
+    return {
+      spells: spellsList,
+      max,
+      current: item.charges?.current ?? max,
+      recharge: item.charges?.recharge ?? g?.recharge,
+      cost: item.spellCost ?? g?.cost,
+    };
+  };
   const castItemSpell = (item: InventoryItem, name: string) => {
-    const cost = item.spellCost?.[name] ?? 1;
-    if (!item.charges || item.charges.current < cost) {
+    const grant = grantFor(item);
+    if (!grant) return;
+    const cost = grant.cost?.[name] ?? 1;
+    if (grant.current < cost) {
       onNote(`${item.name} has no charges left.`);
       return;
     }
     const lvl = spellLevelOf(name);
     void castSpell(name, lvl, lvl, { itemId: item.id, cost });
   };
-  const itemSpellTiles: Slot[] = chargedItems.flatMap((item) =>
-    (item.grantedSpells ?? []).map((name) => {
-      const cost = item.spellCost?.[name] ?? 1;
-      const cur = item.charges?.current ?? 0;
+  const itemSpellTiles: Slot[] = c.inventory.flatMap((item) => {
+    const grant = grantFor(item);
+    if (!grant) return [] as Slot[];
+    return grant.spells.map((name) => {
+      const cost = grant.cost?.[name] ?? 1;
       const econKind = spellEconOf(name);
       const tileEcon: "action" | "bonus" | "reaction" =
         econKind === "bonus" ? "bonus" : econKind === "reaction" ? "reaction" : "action";
@@ -896,14 +924,14 @@ export const TableHud = ({
         icon: "sparkles" as IconName,
         glyph: glyphSrc(spellMech(name)?.kind === "attack" ? "attack_spell" : "action_magic"),
         name,
-        sub: `${item.name} · ${cur}⚡${cost > 1 ? ` (−${cost})` : ""}`,
+        sub: `${item.name} · ${grant.current}⚡${cost > 1 ? ` (−${cost})` : ""}`,
         kind: "common" as const,
         run: () => castItemSpell(item, name),
-        disabled: cur < cost,
+        disabled: grant.current < cost,
         econ: tileEcon,
       };
-    })
-  );
+    });
+  });
   const hasItemSpells = itemSpellTiles.length > 0;
 
   // TRAIT ACTIONS (#93): the third action slot's other half. For a caster it holds
