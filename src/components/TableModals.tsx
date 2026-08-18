@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Character, EquipSlot, InventoryItem } from "../types/character";
 import { abilityModFor } from "../lib/calc";
 import { checkRoll, damageRoll, type RollEntry, type RollTone } from "../lib/rolls";
@@ -96,7 +96,33 @@ const MigrationNote = ({ file, what }: { file: string; what: string }) => (
 // delete your own. Migration-tolerant.
 // ---------------------------------------------------------------------------
 
-const JournalModal = ({
+// Light, SAFE rich text for journal entries (#20): **bold**, *italic*, and line
+// breaks. Builds React nodes directly — never innerHTML — so a note written by
+// another player can't inject markup.
+const parseInline = (line: string): ReactNode[] => {
+  const nodes: ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let last = 0;
+  let k = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) nodes.push(line.slice(last, m.index));
+    if (m[1] != null) nodes.push(<strong key={k++}>{m[1]}</strong>);
+    else nodes.push(<em key={k++}>{m[2]}</em>);
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) nodes.push(line.slice(last));
+  return nodes;
+};
+const renderRich = (text: string): ReactNode =>
+  text.split("\n").map((line, i) => (
+    <span key={i}>
+      {i > 0 && <br />}
+      {parseInline(line)}
+    </span>
+  ));
+
+export const JournalModal = ({
   gameId,
   authorName,
   onClose,
@@ -135,7 +161,7 @@ const JournalModal = ({
               />
               <textarea
                 className="tm-jbody"
-                placeholder="A clue, a name, a debt owed…"
+                placeholder="A clue, a name, a debt owed…  (**bold**, *italic*, line breaks)"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 aria-label="Note body"
@@ -164,7 +190,7 @@ const JournalModal = ({
                         </button>
                       )}
                     </div>
-                    <p className="tm-jentry-b">{e.body}</p>
+                    <p className="tm-jentry-b">{renderRich(e.body)}</p>
                   </div>
                 ))
               )}

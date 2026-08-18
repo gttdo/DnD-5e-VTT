@@ -36,7 +36,7 @@ import { attackRangeFt, resolveAttacks } from "../lib/attacks";
 import { applyHeal, applyDamage, applyTempHp } from "../lib/hp";
 import { TableHud, TokenHud, MonsterHud } from "./TableHud";
 import { AttackCursor, CURSOR_SWING_MS, cursorSwingMs, cursorImpactMs, type CursorKind } from "./AttackCursor";
-import { TableModals, RegionMapModal, type HudModal } from "./TableModals";
+import { TableModals, RegionMapModal, JournalModal, type HudModal } from "./TableModals";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
@@ -3688,6 +3688,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <GameGlyph src="/icons/board/compass.svg" size={18} />
           </button>
           <button
+            className={`rail-tool ${hudModal === "journal" ? "active" : ""}`}
+            onClick={() => setHudModal((v) => (v === "journal" ? null : "journal"))}
+            title="Campaign journal — the party's shared log"
+            aria-label="Campaign journal"
+          >
+            <Icon name="edit" size={18} />
+          </button>
+          <button
             className={`rail-tool ${rulesOpen ? "active" : ""}`}
             onClick={() => setRulesOpen((v) => !v)}
             title="Rules reference — DCs, cover, conditions, travel"
@@ -4739,8 +4747,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           {hudModal === "map" && (
             <RegionMapModal gameId={game.id} isDM={isDM} onClose={() => setHudModal(null)} />
           )}
+          {/* The campaign journal needs only a game + an author name, so it opens
+              for anyone — including a DM with no bound character (#20). */}
+          {hudModal === "journal" && (
+            <JournalModal
+              gameId={game.id}
+              authorName={boundCharacter?.name ?? (isDM ? "DM" : "Player")}
+              onClose={() => setHudModal(null)}
+            />
+          )}
           {/* Other game-menu modals are sheet-mapped (need a bound character). */}
-          {boundCharacter && hudModal && hudModal !== "map" && (
+          {boundCharacter && hudModal && hudModal !== "map" && hudModal !== "journal" && (
             <TableModals
               which={hudModal}
               character={boundCharacter}
