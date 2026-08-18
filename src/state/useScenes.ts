@@ -10,6 +10,13 @@ export interface Scene {
   grid_cols: number;
   grid_rows: number;
   map_id: string | null;
+  /** Map-to-grid alignment (#115): the background image is drawn at this offset
+   *  (SVG board units) and uniform scale so its baked-in grid lines up with the
+   *  canonical overlay. Optional for a pre-0034 schema — defaults are 0/0/1
+   *  (fills the board 1:1, the old behavior). */
+  map_offset_x?: number;
+  map_offset_y?: number;
+  map_scale?: number;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -163,6 +170,20 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     return { error: error?.message ?? null };
   }, []);
 
+  // Grid + map-alignment layout (#115). Optimistic so the DM sees the map/grid
+  // move live while calibrating; the realtime echo confirms for everyone.
+  const updateSceneLayout = useCallback(
+    async (
+      id: string,
+      patch: Partial<Pick<Scene, "grid_cols" | "grid_rows" | "map_offset_x" | "map_offset_y" | "map_scale">>
+    ) => {
+      setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+      const { error } = await supabase.from("scenes").update(patch).eq("id", id);
+      return { error: error?.message ?? null };
+    },
+    []
+  );
+
   const deleteScene = useCallback(async (id: string) => {
     // Optimistic — the realtime DELETE echo will confirm.
     setScenes((prev) => prev.filter((s) => s.id !== id));
@@ -195,5 +216,6 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     deleteScene,
     setActiveScene,
     setSceneImageUrl,
+    updateSceneLayout,
   };
 };

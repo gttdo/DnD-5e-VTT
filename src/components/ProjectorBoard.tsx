@@ -124,11 +124,11 @@ export const ProjectorBoard = ({ gameId }: { gameId: string }) => {
           {activeScene.image_url && (
             <image
               href={activeScene.image_url}
-              x={0}
-              y={0}
-              width={width}
-              height={height}
-              preserveAspectRatio="xMidYMid slice"
+              x={activeScene.map_offset_x ?? 0}
+              y={activeScene.map_offset_y ?? 0}
+              width={width * (activeScene.map_scale ?? 1)}
+              height={height * (activeScene.map_scale ?? 1)}
+              preserveAspectRatio="xMinYMin slice"
             />
           )}
           <rect

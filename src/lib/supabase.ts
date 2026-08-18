@@ -101,6 +101,9 @@ export interface Database {
           grid_cols: number;
           grid_rows: number;
           map_id: string | null;
+          map_offset_x: number;
+          map_offset_y: number;
+          map_scale: number;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -126,6 +129,9 @@ export interface Database {
           grid_cols?: number;
           grid_rows?: number;
           map_id?: string | null;
+          map_offset_x?: number;
+          map_offset_y?: number;
+          map_scale?: number;
           in_combat?: boolean;
           round?: number;
           turn_index?: number;

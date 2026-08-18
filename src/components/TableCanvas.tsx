@@ -236,11 +236,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     setActiveScene,
     deleteScene,
     setSceneImageUrl,
+    updateSceneLayout,
   } = useScenes(game.id, game.active_scene_id);
   const cols = activeScene?.grid_cols ?? DEFAULT_COLS;
   const rows = activeScene?.grid_rows ?? DEFAULT_ROWS;
   const width = cols * CELL;
   const height = rows * CELL;
+  // Map-to-grid alignment (#115): the background image is offset + uniformly
+  // scaled so its baked grid lines up with the canonical overlay. Defaults draw
+  // it 1:1 over the board (the old behavior).
+  const mapOffsetX = activeScene?.map_offset_x ?? 0;
+  const mapOffsetY = activeScene?.map_offset_y ?? 0;
+  const mapScale = activeScene?.map_scale ?? 1;
+  const [aligning, setAligning] = useState(false);
   const { tokens, addToken, moveToken, deleteToken, setTokenHidden, updateToken, loading, error } = useTokens(
     game.id,
     activeScene?.id ?? null
@@ -3618,6 +3626,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               >
                 <Icon name="package" size={18} />
               </button>
+              {activeScene?.image_url && (
+                <button
+                  className={`rail-tool ${aligning ? "active" : ""}`}
+                  onClick={() => setAligning((v) => !v)}
+                  title="Align the map to the grid"
+                  aria-label="Align map to grid"
+                >
+                  <Icon name="grid" size={18} />
+                </button>
+              )}
             </>
           )}
           <button
@@ -3784,11 +3802,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             {activeScene?.image_url && (
               <image
                 href={activeScene.image_url}
-                x={0}
-                y={0}
-                width={width}
-                height={height}
-                preserveAspectRatio="xMidYMid slice"
+                x={mapOffsetX}
+                y={mapOffsetY}
+                width={width * mapScale}
+                height={height * mapScale}
+                preserveAspectRatio="xMinYMin slice"
                 style={{ pointerEvents: "none" }}
               />
             )}
@@ -4798,6 +4816,66 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               }}
               onClose={() => setPartyOpen(false)}
             />
+          )}
+
+          {/* Map alignment panel (#115) — DM nudges/scales the background image so
+              its baked grid lines up with the canonical overlay. Live-updates the
+              scene so the change is visible (and shared) as it's tweaked. */}
+          {aligning && isDM && activeScene && (
+            <div className="panel map-align-pop">
+              <div className="panel-title">Align map to grid</div>
+              <p className="dim" style={{ fontSize: 11, margin: "0 0 8px" }}>
+                Set the grid size, then nudge &amp; scale the map until its squares
+                match the overlay.
+              </p>
+              <div className="map-align-row">
+                <span>Columns</span>
+                <div className="map-align-stepper">
+                  <button type="button" onClick={() => void updateSceneLayout(activeScene.id, { grid_cols: Math.max(5, cols - 1) })}>−</button>
+                  <b>{cols}</b>
+                  <button type="button" onClick={() => void updateSceneLayout(activeScene.id, { grid_cols: Math.min(60, cols + 1) })}>+</button>
+                </div>
+              </div>
+              <div className="map-align-row">
+                <span>Rows</span>
+                <div className="map-align-stepper">
+                  <button type="button" onClick={() => void updateSceneLayout(activeScene.id, { grid_rows: Math.max(5, rows - 1) })}>−</button>
+                  <b>{rows}</b>
+                  <button type="button" onClick={() => void updateSceneLayout(activeScene.id, { grid_rows: Math.min(60, rows + 1) })}>+</button>
+                </div>
+              </div>
+              <label className="map-align-slider">
+                <span>Scale <em>{mapScale.toFixed(2)}×</em></span>
+                <input
+                  type="range" min={0.25} max={4} step={0.01} value={mapScale}
+                  onChange={(e) => void updateSceneLayout(activeScene.id, { map_scale: parseFloat(e.target.value) })}
+                />
+              </label>
+              <label className="map-align-slider">
+                <span>Offset X <em>{Math.round(mapOffsetX)}</em></span>
+                <input
+                  type="range" min={-width} max={width} step={1} value={mapOffsetX}
+                  onChange={(e) => void updateSceneLayout(activeScene.id, { map_offset_x: parseFloat(e.target.value) })}
+                />
+              </label>
+              <label className="map-align-slider">
+                <span>Offset Y <em>{Math.round(mapOffsetY)}</em></span>
+                <input
+                  type="range" min={-height} max={height} step={1} value={mapOffsetY}
+                  onChange={(e) => void updateSceneLayout(activeScene.id, { map_offset_y: parseFloat(e.target.value) })}
+                />
+              </label>
+              <div className="row" style={{ gap: 8, marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => void updateSceneLayout(activeScene.id, { map_offset_x: 0, map_offset_y: 0, map_scale: 1 })}
+                >
+                  Reset
+                </button>
+                <button type="button" className="primary" onClick={() => setAligning(false)}>Done</button>
+              </div>
+            </div>
           )}
 
           {/* Add-token popover floats over the board near the rail */}
