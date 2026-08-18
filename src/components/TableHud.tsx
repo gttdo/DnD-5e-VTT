@@ -527,10 +527,21 @@ export const TableHud = ({
     else dropConcentration(`failed CON save ${entry.result.total} vs DC ${dc}`);
   };
 
+  // Actions that ENTER TARGETING route through here instead of calling onAttack
+  // directly. It tags the spec with the current tile's economy and flags that
+  // targeting began — so runItem DEFERS the economy spend to target-commit
+  // (spent in TableCanvas). A cancelled attack (Esc) therefore costs nothing.
+  const enteredTargeting = useRef(false);
+  const pendingEcon = useRef<AttackSpec["econ"]>(undefined);
+  const enterTargeting = (spec: AttackSpec) => {
+    enteredTargeting.current = true;
+    onAttack({ ...spec, econ: pendingEcon.current });
+  };
+
   const doAttack = (atk: Character["attacks"][number]) => {
     const dmgBonus = damageBonus(c, atk);
     const dmgExpr = dmgBonus === 0 ? atk.damage : `${atk.damage}${dmgBonus >= 0 ? "+" : ""}${dmgBonus}`;
-    onAttack({ label: atk.name, attackBonus: attackBonus(c, atk), damage: dmgExpr, damageType: atk.damageType, range: atk.range });
+    enterTargeting({ label: atk.name, attackBonus: attackBonus(c, atk), damage: dmgExpr, damageType: atk.damageType, range: atk.range });
   };
 
   const doHide = () => {
@@ -586,7 +597,7 @@ export const TableHud = ({
     if (mech?.lingering && mech.area) {
       // Lingering area spell (Web, Wall of Fire…): aim at a point and drop a
       // persistent area token there. Save/condition are announced for the DM.
-      onAttack({
+      enterTargeting({
         label: `${name}${upTxt}`,
         attackBonus: 0,
         burst: true,
@@ -600,7 +611,7 @@ export const TableHud = ({
       // Magic Missile-style darts scale their flat bonus too (N d4 + N); others
       // scale by dice only. Auto-hit + a VFX key pass straight through to the board.
       const dmgExpr = mech.darts ? dartDamage(mech.darts, baseLevel, level) : scale(mech.damage);
-      onAttack({
+      enterTargeting({
         label: `${name}${upTxt}`,
         attackBonus: mech.autoHit ? 0 : spellAtk,
         damage: dmgExpr,
@@ -612,7 +623,7 @@ export const TableHud = ({
     } else if (mech?.kind === "save" && mech.damage && mech.burst) {
       // Aimed area/cone (Cone of Cold): go through targeting so the caster picks
       // a direction; the resolver plays the anchored burst and announces the save.
-      onAttack({
+      enterTargeting({
         label: `${name}${upTxt}`,
         attackBonus: 0,
         damage: scale(mech.damage),
@@ -632,11 +643,11 @@ export const TableHud = ({
     } else if (mech?.kind === "heal" && mech.heal) {
       const scaled = scale(mech.heal);
       const expr = spellHealMod !== 0 ? `${scaled}${spellHealMod > 0 ? "+" : ""}${spellHealMod}` : scaled;
-      onAttack({ label: `${name}${upTxt}`, attackBonus: 0, heal: expr, range });
+      enterTargeting({ label: `${name}${upTxt}`, attackBonus: 0, heal: expr, range });
     } else if (mech?.kind === "condition") {
-      onAttack({ label: name, attackBonus: 0, condition: mech.condition ?? "", save: mech.save, dc: spellDc ?? undefined, restrictType: mech.onlyType, range });
+      enterTargeting({ label: name, attackBonus: 0, condition: mech.condition ?? "", save: mech.save, dc: spellDc ?? undefined, restrictType: mech.onlyType, range });
     } else if (mech?.kind === "cleanse") {
-      onAttack({ label: name, attackBonus: 0, cleanse: mech.cures ?? [], range });
+      enterTargeting({ label: name, attackBonus: 0, cleanse: mech.cures ?? [], range });
     } else if (mech?.kind === "move") {
       onMove?.(name);
     } else {
@@ -842,8 +853,12 @@ export const TableHud = ({
   // Run an item and spend its economy (the single source of consumption).
   const runItem = (s: Slot) => {
     if (itemDisabled(s)) return;
+    enteredTargeting.current = false;
+    pendingEcon.current = s.econ;
     s.run();
-    if (s.econ) onSpend?.(s.econ);
+    // A targeted action defers its economy to target-commit (spent in
+    // TableCanvas via spec.econ); an immediate action spends it now.
+    if (s.econ && !enteredTargeting.current) onSpend?.(s.econ);
   };
 
   // Main is the default tab at the start of the token's turn; any extra main
@@ -1233,9 +1248,19 @@ export const MonsterHud = ({
   const sizeLabel = m.size.charAt(0).toUpperCase() + m.size.slice(1);
   const incap = aggregateConditions(conditions ?? []).incapacitated;
 
+  // Same deferral as the player HUD: a monster action that enters targeting tags
+  // its spec with the current tile's economy and flags targeting, so runItem
+  // defers the spend to target-commit (spent in TableCanvas).
+  const enteredTargeting = useRef(false);
+  const pendingEcon = useRef<AttackSpec["econ"]>(undefined);
+  const enterTargeting = (spec: AttackSpec) => {
+    enteredTargeting.current = true;
+    onAttack({ ...spec, econ: pendingEcon.current });
+  };
+
   const runAction = (a: NonNullable<MonsterStatblock["actions"]>[number]) => {
     if (a.attackBonus != null) {
-      onAttack({ label: a.name, attackBonus: a.attackBonus, damage: a.damage, damageType: a.damageType, range: a.reach });
+      enterTargeting({ label: a.name, attackBonus: a.attackBonus, damage: a.damage, damageType: a.damageType, range: a.reach });
     } else {
       onNote(a.text ? `${a.name} — ${a.text}` : a.name);
     }
@@ -1263,7 +1288,7 @@ export const MonsterHud = ({
     }
     const range = spellRangeOf(spellName);
     if (mech?.lingering && mech.area) {
-      onAttack({
+      enterTargeting({
         label: spellName,
         attackBonus: 0,
         burst: true,
@@ -1275,7 +1300,7 @@ export const MonsterHud = ({
       });
     } else if (mech?.kind === "attack" && mech.damage) {
       const dmgExpr = mech.darts ? dartDamage(mech.darts, mech.darts === 3 ? 1 : lvl, lvl) : mech.scales ? scaleCantrip(mech.damage, lvl) : mech.damage;
-      onAttack({
+      enterTargeting({
         label: spellName,
         attackBonus: mech.autoHit ? 0 : atk,
         damage: dmgExpr,
@@ -1285,7 +1310,7 @@ export const MonsterHud = ({
         vfx: mech.vfx,
       });
     } else if (mech?.kind === "save" && mech.damage && mech.burst) {
-      onAttack({
+      enterTargeting({
         label: spellName,
         attackBonus: 0,
         damage: mech.scales ? scaleCantrip(mech.damage, lvl) : mech.damage,
@@ -1303,11 +1328,11 @@ export const MonsterHud = ({
       onRoll([roll], { label: String(roll.result.total) });
       onNote(`${name} casts ${spellName} — ${mech.save} save${dcTxt}; ${roll.result.total} ${mech.damageType} on a failed save.`);
     } else if (mech?.kind === "heal" && mech.heal) {
-      onAttack({ label: spellName, attackBonus: 0, heal: mech.heal, range });
+      enterTargeting({ label: spellName, attackBonus: 0, heal: mech.heal, range });
     } else if (mech?.kind === "cleanse") {
-      onAttack({ label: spellName, attackBonus: 0, cleanse: mech.cures ?? [], range });
+      enterTargeting({ label: spellName, attackBonus: 0, cleanse: mech.cures ?? [], range });
     } else if (mech?.kind === "condition") {
-      onAttack({ label: spellName, attackBonus: 0, condition: mech.condition ?? "", save: mech.save, dc: dc ?? undefined, restrictType: mech.onlyType, range });
+      enterTargeting({ label: spellName, attackBonus: 0, condition: mech.condition ?? "", save: mech.save, dc: dc ?? undefined, restrictType: mech.onlyType, range });
     } else if (mech?.kind === "move") {
       onMove?.(spellName);
     } else {
@@ -1433,8 +1458,11 @@ export const MonsterHud = ({
     (!!economy && s.econ === "reaction" && economy.reaction);
   const runItem = (s: MSlot) => {
     if (itemDisabled(s)) return;
+    enteredTargeting.current = false;
+    pendingEcon.current = s.econ;
     s.run();
-    if (s.econ) onSpend?.(s.econ);
+    // Targeted actions defer to target-commit; immediate ones spend now.
+    if (s.econ && !enteredTargeting.current) onSpend?.(s.econ);
   };
 
 

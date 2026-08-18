@@ -92,6 +92,8 @@ export interface NewToken {
   kind?: TokenKind | null;
   area?: TokenArea | null;
   loot?: TokenLoot | null;
+  /** Side vs the party — baked at placement (NPC→friendly, monster→hostile). */
+  disposition?: "hostile" | "friendly" | null;
 }
 
 /**
@@ -204,6 +206,7 @@ export const useTokens = (gameId: string | null, sceneId: string | null) => {
         ...(input.kind != null ? { kind: input.kind } : {}),
         ...(input.area != null ? { area: input.area } : {}),
         ...(input.loot != null ? { loot: input.loot } : {}),
+        ...(input.disposition != null ? { disposition: input.disposition } : {}),
       });
       if (error) return { error: error.message };
       // Realtime INSERT event will populate the row; nothing else to do here.

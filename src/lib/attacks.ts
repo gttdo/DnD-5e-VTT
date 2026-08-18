@@ -96,7 +96,10 @@ export const attackRangeFt = (range?: string): number | null => {
   const slash = r.match(/(\d+)\s*\/\s*(\d+)/); // weapon normal/long → use long
   if (slash) return parseInt(slash[2], 10);
   const n = r.match(/(\d+)/); // "5", "5 ft", "60 feet", "60 feet (5 ft. Sphere)"
-  return n ? parseInt(n[1], 10) : 5;
+  const v = n ? parseInt(n[1], 10) : 5;
+  // "reach 0 ft" swarms attack creatures IN their space; on a grid two tokens
+  // can't share a cell, so treat 0 as adjacent (5 ft) or they could never hit.
+  return v === 0 ? 5 : v;
 };
 
 /** Human-readable damage. Unarmed's "1d1" convention shows as its flat total. */

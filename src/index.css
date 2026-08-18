@@ -5776,9 +5776,17 @@ button.topbar-stat {
   transform: translateX(-50%);
   z-index: 13;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: min(92%, 900px);
+}
+/* The horizontal bar (order + controls); the tray stacks under it. */
+.turn-rail-bar {
+  display: flex;
   align-items: center;
   gap: 12px;
-  max-width: min(92%, 900px);
+  max-width: 100%;
   padding: 6px 10px;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -5786,6 +5794,237 @@ button.topbar-stat {
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(6px);
 }
+/* Pre-combat: the DM's "Roll for Initiative" pill. */
+.turn-rail-begin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--candle);
+  color: var(--candle);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.turn-rail-begin:hover { background: rgba(230, 179, 76, 0.14); }
+/* DM management tray dropping under the bar. */
+.turn-rail-tray {
+  width: 320px;
+  max-width: 100%;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+}
+.turn-rail-tray-roll {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.turn-rail-tray-roll:hover { border-color: var(--candle); color: var(--text); }
+.turn-rail-tray-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.turn-rail-trow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 5px 3px 3px;
+  border-radius: var(--radius);
+  border-left: 3px solid transparent;
+}
+.turn-rail-trow.is-active { background: rgba(230, 179, 76, 0.12); }
+.turn-rail-trow.is-hostile { border-left-color: var(--ember); }
+.turn-rail-trow.is-friendly { border-left-color: #5fae5f; }
+.turn-rail-trow.is-pc { border-left-color: var(--candle); }
+.turn-rail-tinit {
+  width: 38px;
+  text-align: center;
+  padding: 3px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  flex: none;
+}
+.turn-rail-tport {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-family: var(--font-display);
+  flex: none;
+}
+.turn-rail-tname {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.turn-rail-tname:hover { color: var(--candle); }
+.turn-rail-tdisp,
+.turn-rail-tdrop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  cursor: pointer;
+  flex: none;
+}
+.turn-rail-tdisp.is-hostile { color: var(--ember); }
+.turn-rail-tdisp.is-friendly { color: #5fae5f; }
+.turn-rail-tdrop { color: var(--text-muted); }
+.turn-rail-tdrop:hover { border-color: var(--ember); color: var(--ember); }
+
+/* DM "roll the stragglers" chip in the rail. */
+.turn-rail-pending-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px dashed var(--candle);
+  background: transparent;
+  color: var(--candle);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.turn-rail-pending-btn:hover { background: rgba(230, 179, 76, 0.14); }
+
+/* A portrait whose manage-popover is open reads as selected. */
+.turn-rail-item.is-managing .turn-rail-portrait {
+  outline: 2px solid var(--candle);
+  outline-offset: 1px;
+}
+
+/* Per-combatant manage popover (click a portrait). */
+.turn-rail-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.turn-rail-pop {
+  position: relative;
+  z-index: 41;
+  width: 260px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+}
+.turn-rail-pop-head { display: flex; align-items: center; gap: 8px; }
+.turn-rail-pop-port {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 12px;
+  flex: none;
+}
+.turn-rail-pop-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.turn-rail-pop-init { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
+.turn-rail-pop-init span { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
+.turn-rail-pop-init input {
+  width: 42px;
+  text-align: center;
+  padding: 3px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.turn-rail-pop-disp { display: flex; gap: 6px; }
+.turn-rail-pop-side {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.turn-rail-pop-side.is-friendly.is-on { border-color: #5fae5f; color: #5fae5f; background: rgba(95, 174, 95, 0.12); }
+.turn-rail-pop-side.is-hostile.is-on { border-color: var(--ember); color: var(--ember); background: rgba(200, 70, 60, 0.12); }
+.turn-rail-pop-actions { display: flex; flex-direction: column; gap: 5px; }
+.turn-rail-pop-actions button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.turn-rail-pop-actions button:hover { border-color: var(--candle); }
+.turn-rail-pop-remove { color: var(--text-muted); }
+.turn-rail-pop-remove:hover { border-color: var(--ember) !important; color: var(--ember); }
+
 .turn-rail-round {
   display: flex;
   flex-direction: column;

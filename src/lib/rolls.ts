@@ -32,6 +32,11 @@ export type RollTone = "normal" | "crit" | "fumble";
 export interface AttackSpec {
   label: string;
   attackBonus: number;
+  /** The action economy this attack/spell costs. Set by the HUD so the cost is
+   *  spent on target-COMMIT (in TableCanvas), not when targeting begins — a
+   *  cancelled attack (Esc) then costs nothing. Absent for engine-built specs
+   *  (e.g. Opportunity Attacks), which handle their own economy. */
+  econ?: "action" | "bonus" | "reaction";
   damage?: string; // dice, e.g. "1d12+4"
   damageType?: string;
   /** A healing action instead of an attack — dice expr, e.g. "1d8+3". When set,

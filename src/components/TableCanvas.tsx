@@ -39,7 +39,6 @@ import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
 import { PartyTray, DRAG_MIME } from "./PartyTray";
-import { InitiativeTracker } from "./InitiativeTracker";
 import { CombatTurnRail } from "./CombatTurnRail";
 import { RulesReference } from "./RulesReference";
 import { DiceRoller } from "./DiceRoller";
@@ -234,7 +233,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
-  const [initOpen, setInitOpen] = useState(false);
+  // The combat rail shows by default (a pill out of combat for the DM, the turn
+  // rail in combat); the tool-rail hourglass hides it when it's in the way.
+  const [railHidden, setRailHidden] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   // Dice roller (input popover) + Game Log (record drawer) live on the tool
   // rail now (#132), not as floating FABs. The log button badges unseen rolls.
@@ -340,6 +341,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         ? characters.reduce((sum, c) => sum + (c.level ?? 1), 0) / characters.length
         : 1;
     const loot = container ? incidentalContainerLoot(tierForLevel(avgLevel)) : null;
+    // Bake the default side from the library type: a monster drops in hostile, an
+    // NPC friendly (the DM flips either from the combat tray). Only creatures get
+    // a disposition — props/spells/items aren't combatants. This is the ONE place
+    // that knows npc-vs-monster; the placed token can't tell them apart later.
+    const disposition: "hostile" | "friendly" | null =
+      asset.token_type === "monster" ? "hostile" : asset.token_type === "npc" ? "friendly" : null;
     return addToken({
       label: asset.name,
       image_url: asset.image_url,
@@ -351,6 +358,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       kind,
       area,
       loot,
+      disposition,
       x: Math.max(0, Math.floor(cols / 2) - Math.floor(span / 2)),
       y: Math.max(0, Math.floor(rows / 2) - Math.floor(span / 2)),
     });
@@ -937,6 +945,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       // tapped token's spot (no self/range gate — a cone is aimed, not a hit).
       if (pa.spec.burst) {
         const c = centerOfToken(t);
+        // Economy is spent on COMMIT, not when targeting began — so an aimed
+        // spell cancelled with Esc costs nothing. (#116-adjacent)
+        if (pa.spec.econ) markEconomy(pa.attackerId, pa.spec.econ);
         setPendingAttack(null);
         resolveBurst(pa.by, pa.spec, pa.attackerId, c.x, c.y);
         return;
@@ -966,6 +977,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           return;
         }
       }
+      // Valid target chosen → the action is now COMMITTED, so spend its economy
+      // here (not when the attack button was pressed). Cancelling targeting with
+      // Esc, or picking an out-of-range/invalid target, never reaches this line,
+      // so it costs nothing.
+      if (pa.spec.econ) markEconomy(pa.attackerId, pa.spec.econ);
       // Play the swing, land the blow on the impact frame, and keep the sword
       // cursor alive until the animation finishes — so the strike is visible
       // before the roll/damage appears. (AttackCursor starts its own swing on
@@ -2029,13 +2045,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     return c ? { ...c.defenses } : {};
   };
 
-  // Whose HP can this client actually write? A monster token (member-wide RLS)
-  // or one of my own characters (owner-only RLS). A plain token or another
-  // player's PC is logged and applied by hand — so no auto-damage, no reaction
-  // offer (there'd be nothing to give back).
-  const canWriteHp = (t: Token): boolean =>
-    !!t.statblock || (!!t.character_id && characters.some((x) => x.id === t.character_id));
-
   // Can this token cast Shield as a reaction, and how do we spend for it?
   //  - a linked PC: knows Shield + a persistent slot open → spend that slot;
   //  - a statblock NPC/monster: Shield in its parsed spellcasting with a slot →
@@ -2661,7 +2670,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       // change the number. Stacks correctly with resistance — the resolver
       // recomputes from the same raw roll with the reaction applied.
       const halvedOut = resolveDamage(dmgRoll.total, spec.damageType, def, { reactionHalves: true });
-      if (canWriteHp(target) && halvedOut.final < out.final) {
+      // The halve reaction belongs to the DEFENDER's controller — show it only on
+      // the client that actually runs the target, never on the attacker's screen
+      // (a player OA'ing a monster must NOT get to halve the monster's damage).
+      // NOTE: resolveAttack runs on the attacker's client, so when attacker and
+      // defender are controlled by DIFFERENT clients the prompt isn't offered at
+      // all yet — the full cross-client offer (broadcast to the defender) is a
+      // follow-up (see task). This at least stops the wrong-screen prompt.
+      if (iControlToken(target) && halvedOut.final < out.final) {
         setReaction({
           targetId: target.id,
           targetLabel: target.label,
@@ -2738,6 +2754,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const dispositionOf = (t: Token): "friendly" | "hostile" =>
     t.character_id ? "friendly" : t.disposition ?? "hostile";
   const areEnemies = (a: Token, b: Token): boolean => dispositionOf(a) !== dispositionOf(b);
+
+  // A token's board ring color, so its SIDE reads at a glance for everyone: gold
+  // for a player character, red for hostile, green for friendly. Props and spell
+  // areas aren't combatants — they keep their own assigned color.
+  const ringColorFor = (t: Token): string => {
+    if (t.kind === "prop" || t.kind === "spell") return t.color;
+    // Sides only read DURING a fight; out of combat every token keeps its own
+    // assigned color so the board isn't a wall of red/green.
+    if (!init.inCombat) return t.color;
+    if (t.character_id) return "#e6b34c"; // gold — party side
+    return dispositionOf(t) === "friendly" ? "#5fae5f" : "#d9534f"; // green / red
+  };
 
   // DM flips a creature between hostile and friendly (from the tracker). PCs are
   // always party-side, so their disposition is not editable.
@@ -3312,10 +3340,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           <div className="rail-divider" />
 
           <button
-            className={`rail-tool ${initOpen ? "active" : ""} ${init.inCombat ? "is-live" : ""}`}
-            onClick={() => setInitOpen((v) => !v)}
-            title={init.inCombat ? `Initiative — round ${init.round}` : "Initiative order"}
-            aria-label="Initiative order"
+            className={`rail-tool ${!railHidden ? "active" : ""} ${init.inCombat ? "is-live" : ""}`}
+            onClick={() => setRailHidden((v) => !v)}
+            title={
+              railHidden
+                ? "Show the combat bar"
+                : init.inCombat
+                  ? `Combat — round ${init.round} (click to hide the bar)`
+                  : "Combat — hide the bar"
+            }
+            aria-label="Toggle the combat bar"
           >
             <Icon name="swords" size={18} />
           </button>
@@ -3732,13 +3766,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                         preserveAspectRatio="xMidYMid slice"
                         clipPath={`url(#${clipId})`}
                       />
-                      <circle cx={cx} cy={cy} r={r} fill="none" stroke={t.color} strokeWidth={Math.max(2, r * 0.06)} />
+                      <circle cx={cx} cy={cy} r={r} fill="none" stroke={ringColorFor(t)} strokeWidth={Math.max(2.5, r * 0.08)} />
                     </>
                   ) : (
                     <>
-                      {/* Fixed dark stroke + initials (not --bg-0, which flips to
-                          parchment in light mode and kills contrast on the disc). */}
-                      <circle cx={cx} cy={cy} r={r} fill={t.color} stroke="#14100c" strokeWidth={2} />
+                      {/* Disc filled with the token's own color; the ring carries
+                          its SIDE (gold PC / red hostile / green friendly). */}
+                      <circle cx={cx} cy={cy} r={r} fill={t.color} stroke={ringColorFor(t)} strokeWidth={Math.max(2.5, r * 0.08)} />
                       <text
                         x={cx}
                         y={cy + r * 0.15}
@@ -4159,11 +4193,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               if (o.kind !== "opportunity") return false;
               const reactor = tokens.find((x) => x.id === o.targetTokenId);
               if (!reactor) return false;
-              // Show it to the reactor's own controller. The DM may proxy an
-              // absent player ONLY when this client can actually resolve the
-              // strike (a monster's stats are on the token; a PC's sheet is not,
-              // so a player's OA must be taken on the player's own screen).
-              return iControlToken(reactor) || (isDM && !!oaMeleeSpec(reactor));
+              // Show it to the reactor's own controller. The DM may proxy ONLY a
+              // creature it actually runs — a monster/NPC (no character_id) whose
+              // stats live on the token. A PLAYER's opportunity attack is theirs
+              // alone: never offer it to the DM, even if that sheet happens to be
+              // loaded on the DM's client.
+              return iControlToken(reactor) || (isDM && !reactor.character_id && !!oaMeleeSpec(reactor));
             });
             if (!off) return null;
             return (
@@ -4354,36 +4389,33 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onNote={(msg) => toast.info(msg)}
             />
           )}
-          {initOpen && (
-            <InitiativeTracker
-              init={init}
-              isDM={isDM}
-              rollFor={rollInitiativeFor}
-              dispositionOf={dispositionOf}
-              onToggleDisposition={toggleDisposition}
-              pendingRolls={pendingRollers.length}
-              onClose={() => setInitOpen(false)}
-              onFocusToken={(t) => {
-                // Centre the view on the combatant whose turn it is.
-                const span = findSize(t.size).cells;
-                setPan({
-                  x: (t.x + span / 2) * CELL - width / zoom / 2,
-                  y: (t.y + span / 2) * CELL - height / zoom / 2,
-                });
-                setSelectedId(t.id);
-              }}
-            />
-          )}
-
-          {/* BG3-style turn rail across the top — always visible in combat, unlike
-              the toggled side tracker. The DM drives the fight from here. */}
-          {init.inCombat && (
+          {/* The single combat surface (#146): out of combat it's the DM's
+              "Roll for Initiative" pill; in combat it's the turn rail with an
+              expandable DM management tray. Replaces the old side Initiative
+              panel. The tool-rail hourglass hides/shows it. */}
+          {(init.inCombat || isDM) && !railHidden && (
             <CombatTurnRail
+              inCombat={init.inCombat}
               order={init.order}
               activeToken={init.activeToken}
               round={init.round}
               isDM={isDM}
               pendingRolls={pendingRollers.length}
+              onBegin={() =>
+                void init.beginWithPlayerRolls(rollInitiativeFor).then((err) => {
+                  if (err)
+                    toast.error(
+                      err.includes("initiative") || err.includes("in_combat")
+                        ? "Combat columns are missing — apply migration 0008_initiative.sql."
+                        : err
+                    );
+                })
+              }
+              onRollRemaining={() =>
+                void init.rollAll(rollInitiativeFor).then((err) => {
+                  if (err) toast.error(err);
+                })
+              }
               onNext={() => void init.next()}
               onPrev={() => void init.previous()}
               onEnd={() => void init.end()}
@@ -4395,6 +4427,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 });
                 setSelectedId(t.id);
               }}
+              dispositionOf={dispositionOf}
+              onToggleDisposition={toggleDisposition}
+              onRemove={(t) => void init.setInitiative(t.id, null)}
+              onSetInitiative={(id, v) => void init.setInitiative(id, v)}
             />
           )}
 
