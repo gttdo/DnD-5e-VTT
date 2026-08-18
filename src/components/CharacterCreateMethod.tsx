@@ -102,7 +102,7 @@ export const CharacterCreateMethod = ({ onStandard, onPremade, onImport, onCance
               <p className="dim" style={{ fontSize: 13, margin: "4px 0 12px", lineHeight: 1.45 }}>
                 {m.blurb}
               </p>
-              <Button variant={m.soon ? "ghost" : "primary"} size="sm" block>
+              <Button variant={m.soon ? "ghost" : "primary"} size="sm" block style={{ marginTop: "auto" }}>
                 {m.cta}
               </Button>
             </CardBody>
