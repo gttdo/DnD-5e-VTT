@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMaps, type MapAsset } from "../state/useMaps";
+import { useAuth } from "../state/useAuth";
 import { GenerateMapDialog } from "./GenerateMapDialog";
 import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { CardMenu } from "./ui/CardMenu";
@@ -13,7 +14,8 @@ import { useConfirm } from "../state/Confirm";
  * Generate here to build up assets, then pick from library inside a game.
  */
 export const MapLibraryScreen = () => {
-  const { maps, loading, renameMap, deleteMap } = useMaps();
+  const { maps, loading, renameMap, deleteMap, setMapPublic } = useMaps();
+  const { user } = useAuth();
   const { confirm, prompt } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [preview, setPreview] = useState<MapAsset | null>(null);
@@ -27,7 +29,12 @@ export const MapLibraryScreen = () => {
         subtitle={
           loading
             ? "Loading library…"
-            : `${maps.length} map${maps.length === 1 ? "" : "s"} in your library.`
+            : (() => {
+                const mine = maps.filter((m) => m.owner_id === user?.id).length;
+                const premade = maps.length - mine;
+                return `${maps.length} map${maps.length === 1 ? "" : "s"} available` +
+                  (premade > 0 ? ` · ${mine} yours, ${premade} premade` : ` in your library`) + ".";
+              })()
         }
       >
         <Button variant="primary" size="lg" icon="palette" onClick={() => setGenerateOpen(true)}>
@@ -53,50 +60,67 @@ export const MapLibraryScreen = () => {
           gap: 16,
         }}
       >
-        {maps.map((m) => (
+        {maps.map((m) => {
+          const owned = m.owner_id === user?.id;
+          return (
           <Card
             key={m.id}
-            className="has-menu"
+            className={owned ? "has-menu" : undefined}
             onClick={() => setPreview(m)}
             title={m.prompt ?? undefined}
           >
-            <CardMenu
-              label={`Actions for ${m.name}`}
-              items={[
-                {
-                  label: "Rename",
-                  icon: "edit",
-                  onClick: async () => {
-                    const next = await prompt({ title: "Rename map", initialValue: m.name, confirmLabel: "Rename" });
-                    if (next && next.trim() && next !== m.name) await renameMap(m.id, next.trim());
-                  },
-                },
-                {
-                  label: "Delete",
-                  icon: "delete",
-                  danger: true,
-                  onClick: async () => {
-                    if (
-                      await confirm({
-                        title: "Delete map",
-                        message: `Delete "${m.name}"? Any scenes using it keep the image but lose the link.`,
-                        confirmLabel: "Delete",
-                        danger: true,
-                      })
-                    ) {
-                      await deleteMap(m.id);
-                    }
-                  },
-                },
-              ]}
-            />
+            {owned ? (
+              <>
+                {m.is_public && (
+                  <span className="card-badge is-shared" title="Published to the shared library — everyone can use it">Shared</span>
+                )}
+                <CardMenu
+                  label={`Actions for ${m.name}`}
+                  items={[
+                    {
+                      label: "Rename",
+                      icon: "edit",
+                      onClick: async () => {
+                        const next = await prompt({ title: "Rename map", initialValue: m.name, confirmLabel: "Rename" });
+                        if (next && next.trim() && next !== m.name) await renameMap(m.id, next.trim());
+                      },
+                    },
+                    {
+                      label: m.is_public ? "Remove from shared library" : "Publish to shared library",
+                      icon: m.is_public ? "remove" : "star",
+                      onClick: () => void setMapPublic(m.id, !m.is_public),
+                    },
+                    {
+                      label: "Delete",
+                      icon: "delete",
+                      danger: true,
+                      onClick: async () => {
+                        if (
+                          await confirm({
+                            title: "Delete map",
+                            message: `Delete "${m.name}"? Any scenes using it keep the image but lose the link.`,
+                            confirmLabel: "Delete",
+                            danger: true,
+                          })
+                        ) {
+                          await deleteMap(m.id);
+                        }
+                      },
+                    },
+                  ]}
+                />
+              </>
+            ) : (
+              <span className="card-badge" title="Shared premade — from the built-in library">Premade</span>
+            )}
             <CardMedia src={m.image_url} alt={m.name} aspect="3/2" />
             <CardBody>
               <CardTitle>{m.name}</CardTitle>
               <CardMeta>{[m.family, m.style].filter(Boolean).join(" · ") || "—"}</CardMeta>
             </CardBody>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {generateOpen && (

@@ -168,5 +168,13 @@ export const useTokenAssets = () => {
     return { error: error?.message ?? null };
   }, []);
 
-  return { assets, loading, error, createAsset, renameAsset, updateAsset, deleteAsset, refresh };
+  // Publish/unpublish a token to the shared library (#137). Owner-only at the DB
+  // (token_assets_owner_all). Optimistic so the badge flips instantly.
+  const setAssetPublic = useCallback(async (id: string, isPublic: boolean) => {
+    setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, is_public: isPublic } : a)));
+    const { error } = await supabase.from("token_assets").update({ is_public: isPublic }).eq("id", id);
+    return { error: error?.message ?? null };
+  }, []);
+
+  return { assets, loading, error, createAsset, renameAsset, updateAsset, deleteAsset, setAssetPublic, refresh };
 };

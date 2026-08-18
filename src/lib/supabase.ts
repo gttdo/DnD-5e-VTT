@@ -143,6 +143,7 @@ export interface Database {
           family: string | null;
           style: string | null;
           size: string | null;
+          is_public: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -155,6 +156,7 @@ export interface Database {
           family?: string | null;
           style?: string | null;
           size?: string | null;
+          is_public?: boolean;
         };
         Update: {
           name?: string;
@@ -163,6 +165,7 @@ export interface Database {
           family?: string | null;
           style?: string | null;
           size?: string | null;
+          is_public?: boolean;
         };
         Relationships: [];
       };
@@ -308,6 +311,7 @@ export interface Database {
           creature_type: string | null;
           token_type: TokenType | null;
           details: TokenDetails | null;
+          is_public: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -322,6 +326,7 @@ export interface Database {
           creature_type?: string | null;
           token_type?: TokenType | null;
           details?: TokenDetails | null;
+          is_public?: boolean;
         };
         Update: {
           name?: string;
@@ -332,6 +337,7 @@ export interface Database {
           creature_type?: string | null;
           token_type?: TokenType | null;
           details?: TokenDetails | null;
+          is_public?: boolean;
         };
         Relationships: [];
       };

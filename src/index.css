@@ -3123,6 +3123,13 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   border: 1px solid color-mix(in srgb, var(--gold, #c9a24a) 45%, transparent);
   pointer-events: none;
 }
+/* On a card you OWN, "Shared" sits left of the ⋯ menu; green to read as "live". */
+.card-badge.is-shared {
+  right: 44px;
+  color: var(--good, #4ade80);
+  background: color-mix(in srgb, var(--good, #4ade80) 16%, transparent);
+  border-color: color-mix(in srgb, var(--good, #4ade80) 45%, transparent);
+}
 .card-menu-trigger {
   display: grid;
   place-items: center;

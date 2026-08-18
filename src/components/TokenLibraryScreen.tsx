@@ -17,7 +17,7 @@ import { LibraryBanner } from "./ui/LibraryBanner";
 type TabKey = "monster" | "npc" | "item" | "prop" | "spell" | "other";
 
 export const TokenLibraryScreen = () => {
-  const { assets, loading, deleteAsset } = useTokenAssets();
+  const { assets, loading, deleteAsset, setAssetPublic } = useTokenAssets();
   const { user } = useAuth();
   const { confirm } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -377,33 +377,43 @@ export const TokenLibraryScreen = () => {
               onClick={() => setPreview(a)}
             >
               {owned ? (
-                <CardMenu
-                  label={`Actions for ${a.name}`}
-                  items={[
-                    {
-                      label: "Edit",
-                      icon: "edit",
-                      onClick: () => setEditAsset(a),
-                    },
-                    {
-                      label: "Delete",
-                      icon: "delete",
-                      danger: true,
-                      onClick: async () => {
-                        if (
-                          await confirm({
-                            title: "Delete token",
-                            message: `Delete "${a.name}"? Placed tokens on scenes keep their image but lose the link.`,
-                            confirmLabel: "Delete",
-                            danger: true,
-                          })
-                        ) {
-                          await deleteAsset(a.id);
-                        }
+                <>
+                  {a.is_public && (
+                    <span className="card-badge is-shared" title="Published to the shared library — everyone can use it">Shared</span>
+                  )}
+                  <CardMenu
+                    label={`Actions for ${a.name}`}
+                    items={[
+                      {
+                        label: "Edit",
+                        icon: "edit",
+                        onClick: () => setEditAsset(a),
                       },
-                    },
-                  ]}
-                />
+                      {
+                        label: a.is_public ? "Remove from shared library" : "Publish to shared library",
+                        icon: a.is_public ? "remove" : "star",
+                        onClick: () => void setAssetPublic(a.id, !a.is_public),
+                      },
+                      {
+                        label: "Delete",
+                        icon: "delete",
+                        danger: true,
+                        onClick: async () => {
+                          if (
+                            await confirm({
+                              title: "Delete token",
+                              message: `Delete "${a.name}"? Placed tokens on scenes keep their image but lose the link.`,
+                              confirmLabel: "Delete",
+                              danger: true,
+                            })
+                          ) {
+                            await deleteAsset(a.id);
+                          }
+                        },
+                      },
+                    ]}
+                  />
+                </>
               ) : (
                 <span className="card-badge" title="Shared premade — from the built-in library">Premade</span>
               )}

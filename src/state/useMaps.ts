@@ -11,6 +11,9 @@ export interface MapAsset {
   family: string | null;
   style: string | null;
   size: string | null;
+  /** Published to the shared library — readable by every account (#135/#137).
+   *  Optional for a pre-0032 schema. */
+  is_public?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -47,11 +50,20 @@ export const useMaps = () => {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
+    // Own maps PLUS any published to the shared library (#135). Falls back to
+    // own-only when the is_public column isn't there yet (pre-0032 deploy window).
+    let { data, error } = await supabase
       .from("maps")
       .select("*")
-      .eq("owner_id", user.id)
+      .or(`owner_id.eq.${user.id},is_public.eq.true`)
       .order("created_at", { ascending: false });
+    if (error && /is_public/i.test(error.message)) {
+      ({ data, error } = await supabase
+        .from("maps")
+        .select("*")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false }));
+    }
     if (error) {
       setError(error.message);
       setMaps([]);
@@ -136,5 +148,13 @@ export const useMaps = () => {
     return { error: error?.message ?? null };
   }, []);
 
-  return { maps, loading, error, createMap, renameMap, deleteMap, refresh };
+  // Publish/unpublish a map to the shared library (#137). Owner-only at the DB
+  // (maps_owner_all). Optimistic so the badge flips instantly.
+  const setMapPublic = useCallback(async (id: string, isPublic: boolean) => {
+    setMaps((prev) => prev.map((m) => (m.id === id ? { ...m, is_public: isPublic } : m)));
+    const { error } = await supabase.from("maps").update({ is_public: isPublic }).eq("id", id);
+    return { error: error?.message ?? null };
+  }, []);
+
+  return { maps, loading, error, createMap, renameMap, deleteMap, setMapPublic, refresh };
 };
