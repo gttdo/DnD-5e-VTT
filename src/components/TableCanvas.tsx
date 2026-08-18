@@ -2426,7 +2426,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     if (spec.damage != null) autoStartCombatRef.current();
   };
 
+  // Mirror the live turn state into refs so requestAttack (stable, []-deps, to
+  // keep the cursor from flickering) can gate on it without being re-created.
+  const inCombatRef = useRef(false);
+  const activeTurnIdRef = useRef<string | null>(null);
+  inCombatRef.current = init.inCombat;
+  activeTurnIdRef.current = activeTokenId;
+
   const requestAttack = useCallback((by: string, attackerId: string, spec: AttackSpec) => {
+    // Turn gate: once a fight is underway a creature only acts on ITS OWN turn —
+    // the DM included. (Opportunity attacks are the exception, but they go
+    // straight to resolveAttack, not through here, so they're unaffected.)
+    if (inCombatRef.current && activeTurnIdRef.current !== attackerId) {
+      toast.info("It isn't this creature's turn to act.");
+      return;
+    }
     // Pick the cursor sheet from the attack: a casting hand for spell/magical
     // attacks, a fist for unarmed strikes, a sword for everything else. Held in
     // state so it persists through the swing tail.
