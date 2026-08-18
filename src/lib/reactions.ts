@@ -11,7 +11,7 @@ import type { Character } from "../types/character";
  * Modeled on the SaveRequest pipeline — same local-first, broadcast-relay shape.
  */
 /** Which reaction an offer/response is about — the relay carries every kind. */
-export type ReactionKind = "shield" | "counterspell" | "opportunity";
+export type ReactionKind = "shield" | "counterspell" | "opportunity" | "halve";
 
 export interface ReactionOffer {
   id: string;
@@ -33,6 +33,13 @@ export interface ReactionOffer {
   // `targetTokenId` is the REACTOR whose controller answers, not the victim.
   moverTokenId?: string;
   moverLabel?: string;
+  // halve only — the damage that just landed and what it drops to if the
+  // defender spends a reaction. `targetTokenId` is the DEFENDER, whose
+  // controller answers; the attacker already applied `applied`, so taking it
+  // gives back (applied - halved) on the defender's own client.
+  applied?: number;
+  halved?: number;
+  damageType?: string;
 }
 
 export interface ReactionResponse {

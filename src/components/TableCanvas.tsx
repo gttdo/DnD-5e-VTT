@@ -2052,22 +2052,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // damage immediately, and this offer — auto-fading after a few seconds — lets
   // the resolver hand back the difference if a reaction is declared. `applied`
   // is what already landed; `halved` is what it becomes if the reaction fires.
-  const [reaction, setReaction] = useState<{
-    targetId: string;
-    targetLabel: string;
-    by: string;
-    label: string;
-    type?: string;
-    applied: number;
-    halved: number;
-  } | null>(null);
-
-  // Reaction offers are ephemeral — one window per hit, ~7s, then gone.
-  useEffect(() => {
-    if (!reaction) return;
-    const id = window.setTimeout(() => setReaction(null), 7000);
-    return () => window.clearTimeout(id);
-  }, [reaction]);
 
   const bloomSeedFor = (t: Token, tone: RollTone, text: string) => {
     const spec = findSize(t.size);
@@ -2718,23 +2702,24 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       // change the number. Stacks correctly with resistance — the resolver
       // recomputes from the same raw roll with the reaction applied.
       const halvedOut = resolveDamage(dmgRoll.total, spec.damageType, def, { reactionHalves: true });
-      // The halve reaction belongs to the DEFENDER's controller — show it only on
-      // the client that actually runs the target, never on the attacker's screen
-      // (a player OA'ing a monster must NOT get to halve the monster's damage).
-      // NOTE: resolveAttack runs on the attacker's client, so when attacker and
-      // defender are controlled by DIFFERENT clients the prompt isn't offered at
-      // all yet — the full cross-client offer (broadcast to the defender) is a
-      // follow-up (see task). This at least stops the wrong-screen prompt.
-      if (iControlToken(target) && halvedOut.final < out.final) {
-        setReaction({
-          targetId: target.id,
-          targetLabel: target.label,
+      // The halve reaction belongs to the DEFENDER's controller, not whoever
+      // resolved the attack. BROADCAST the offer (resolveAttack runs on the
+      // attacker's client); it lands in every client's pending and only the one
+      // that CONTROLS the target shows the prompt (see the halve offer render).
+      if (halvedOut.final < out.final) {
+        const rid = `halve-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${target.id.slice(0, 4)}`;
+        reactions.offer({
+          id: rid,
+          kind: "halve",
           by,
-          label: spec.label,
-          type: spec.damageType,
+          targetTokenId: target.id,
+          targetLabel: target.label,
+          sourceLabel: spec.label,
           applied: out.final,
           halved: halvedOut.final,
+          damageType: spec.damageType,
         });
+        reactionTimers.current[rid] = window.setTimeout(() => reactions.clear(rid), 7000);
       }
     }
     broadcastRoll(by, entries, bloomSeedFor(target, tone, bloomText));
@@ -2904,25 +2889,24 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     resolveAttack(`${reactor.label} (Opportunity Attack)`, spec, mover, reactor.id);
   };
 
-  // The target declares a damage-halving reaction: give back the difference and
-  // log it. Idempotent-ish — the offer is cleared immediately so a double-tap
-  // can't refund twice.
-  const applyReaction = () => {
-    const r = reaction;
-    if (!r) return;
-    setReaction(null);
-    markEconomy(r.targetId, "reaction"); // the defender spent its reaction
-    const giveBack = r.applied - r.halved;
-    if (giveBack > 0) healToken(r.targetId, giveBack);
-    const target = tokens.find((t) => t.id === r.targetId);
-    const seed = target ? bloomSeedFor(target, "normal", String(r.halved)) : undefined;
-    const detail = `reaction — halved to ${r.halved}`;
-    broadcastRoll(r.by, [
+  // The defender's controller took a broadcast halve offer: spend the reaction,
+  // give back the difference (the attacker already applied the full hit), and
+  // log it — then tear the offer down everywhere. Runs on the DEFENDER's client,
+  // which owns the target's HP, so the write is always allowed.
+  const takeHalve = (off: ReactionOffer) => {
+    reactions.clear(off.id);
+    const target = tokens.find((t) => t.id === off.targetTokenId);
+    if (!target || off.applied == null || off.halved == null) return;
+    markEconomy(target.id, "reaction"); // the defender spent its reaction
+    const giveBack = off.applied - off.halved;
+    if (giveBack > 0) healToken(target.id, giveBack);
+    const detail = `reaction — halved to ${off.halved}`;
+    broadcastRoll(off.by, [
       {
-        label: `${r.targetLabel} — reaction · ${r.label} halved to ${r.halved} ${r.type ?? "damage"}`,
-        result: { expression: "reaction", rolls: [], modifier: 0, total: r.halved, detail },
+        label: `${off.targetLabel} — reaction · ${off.sourceLabel} halved to ${off.halved} ${off.damageType ?? "damage"}`,
+        result: { expression: "reaction", rolls: [], modifier: 0, total: off.halved, detail },
       },
-    ], seed);
+    ], bloomSeedFor(target, "normal", String(off.halved)));
   };
 
   // ---- Shield reaction (defender side) --------------------------------------
@@ -4138,22 +4122,31 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             </div>
           )}
 
-          {/* Reaction offer — a just-landed hit the target can still halve. Fades
-              on its own; taking it refunds the difference to the target. */}
-          {reaction && (
-            <div className="combat-reaction" role="status">
-              <Icon name="shield" size={15} />
-              <span>
-                <b>{reaction.targetLabel}</b> took <b>{reaction.applied}</b> — halve with a reaction?
-              </span>
-              <button className="react-take" onClick={applyReaction}>
-                Halve → {reaction.halved}
-              </button>
-              <button className="react-skip" onClick={() => setReaction(null)} aria-label="Dismiss">
-                <Icon name="close" size={13} />
-              </button>
-            </div>
-          )}
+          {/* Halve offer — a just-landed hit the target can still halve. Broadcast
+              from the attacker; shown ONLY to the client that controls the target
+              (the defender's own screen). Taking it gives back the difference. */}
+          {(() => {
+            const off = reactions.pending.find((o) => {
+              if (o.kind !== "halve") return false;
+              const t = tokens.find((x) => x.id === o.targetTokenId);
+              return !!t && iControlToken(t);
+            });
+            if (!off) return null;
+            return (
+              <div className="combat-reaction" role="status">
+                <Icon name="shield" size={15} />
+                <span>
+                  <b>{off.targetLabel}</b> took <b>{off.applied}</b> — halve with a reaction?
+                </span>
+                <button className="react-take" onClick={() => takeHalve(off)}>
+                  Halve → {off.halved}
+                </button>
+                <button className="react-skip" onClick={() => reactions.clear(off.id)} aria-label="Dismiss">
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            );
+          })()}
 
           {/* Blocking reaction interrupt (Shield). The DEFENDER's controller sees
               the prompt; the ATTACKER sees a waiting banner until it resolves.
