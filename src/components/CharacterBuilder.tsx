@@ -34,11 +34,15 @@ type Step = "Home" | "Class" | "Background" | "Species" | "Abilities" | "Spells"
 interface Props {
   onCancel: () => void;
   onFinish: (c: Character) => void;
+  /** Seed the wizard (Import-from-PDF, #110) — opens pre-filled. */
+  initialState?: BuilderState;
+  /** Which step to open on (imports land on "Review" to confirm). */
+  initialStep?: Step;
 }
 
-export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
-  const [step, setStep] = useState<Step>("Home");
-  const [state, setState] = useState<BuilderState>(emptyBuilderState());
+export const CharacterBuilder = ({ onCancel, onFinish, initialState, initialStep }: Props) => {
+  const [step, setStep] = useState<Step>(initialStep ?? "Home");
+  const [state, setState] = useState<BuilderState>(() => initialState ?? emptyBuilderState());
   const [classes, setClasses] = useState<Record<string, ClassData> | null>(null);
   const [species, setSpeciesData] = useState<Record<string, SpeciesData> | null>(null);
   const [backgrounds, setBackgrounds] = useState<Record<string, BackgroundData> | null>(null);

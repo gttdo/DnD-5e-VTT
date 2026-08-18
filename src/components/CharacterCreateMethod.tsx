@@ -6,13 +6,14 @@ import { useToast } from "../state/Toast";
 /**
  * Character-creation method chooser (#110) — the fork the roster's "Create a
  * Character" now opens, mirroring D&D Beyond's four-up: build it yourself, a
- * fast guided path, claim a premade, or import a PDF sheet. Standard and Premade
- * are live; Quickbuilder and Import are staged behind a "Soon" pill until built.
+ * fast guided path, claim a premade, or import a PDF sheet. Standard, Premade,
+ * and Import are live; Quickbuilder is staged behind a "Soon" pill until built.
  */
 
 interface Props {
   onStandard: () => void;
   onPremade: () => void;
+  onImport: () => void;
   onCancel: () => void;
 }
 
@@ -55,18 +56,18 @@ const METHODS: Method[] = [
     image: "/art/login.png",
     title: "Import from PDF",
     blurb: "Upload a character sheet PDF and we'll read it into a playable character for you to review.",
-    cta: "Coming soon",
-    soon: true,
+    cta: "Import a sheet",
     isNew: true,
   },
 ];
 
-export const CharacterCreateMethod = ({ onStandard, onPremade, onCancel }: Props) => {
+export const CharacterCreateMethod = ({ onStandard, onPremade, onImport, onCancel }: Props) => {
   const toast = useToast();
 
   const run = (key: string) => {
     if (key === "standard") onStandard();
     else if (key === "premade") onPremade();
+    else if (key === "import") onImport();
     else toast.info("That method is coming soon — building it now.");
   };
 

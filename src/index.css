@@ -2387,6 +2387,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Gentle breathing pulse for in-progress states (e.g. PDF import). */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(0.94); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .screen-enter { animation: none; }
 }

@@ -82,6 +82,67 @@ export const emptyBuilderState = (): BuilderState => ({
   equipmentChoice: "A",
 });
 
+/**
+ * The shape the `parse-character-pdf` edge function returns (Import-from-PDF,
+ * #110). Class/species/background are already clamped server-side to the app's
+ * allowed values (or null when unreadable); abilities are the FINAL sheet scores.
+ */
+export interface ImportedCharacter {
+  name: string;
+  className: string | null;
+  species: string | null;
+  background: string | null;
+  alignment?: string;
+  abilities: Record<Ability, number>;
+  skillProficiencies: SkillName[];
+  cantrips: string[];
+  spells: string[];
+  confidence?: Record<string, number>;
+}
+
+/**
+ * Map an imported sheet onto a BuilderState so the wizard can open pre-filled at
+ * Review. Two reconciliations matter: (1) the PDF shows FINAL ability scores but
+ * buildCharacter re-applies the background's +2/+1, so we subtract that here to
+ * avoid double-counting; (2) skillProficiencies includes the background's own
+ * skills, which buildCharacter also re-adds, so we drop those from the class picks.
+ */
+export const importedToBuilderState = (
+  imp: ImportedCharacter,
+  backgrounds: Record<string, BackgroundData> | null
+): BuilderState => {
+  const bg = imp.background && backgrounds ? backgrounds[imp.background] : null;
+  const fulls = bg?.ability_scores ?? [];
+  const bonuses: Partial<Record<Ability, number>> = {};
+  const a0 = fulls[0] ? ABILITY_FROM_FULL[fulls[0]] : undefined;
+  const a1 = fulls[1] ? ABILITY_FROM_FULL[fulls[1]] : undefined;
+  if (a0) bonuses[a0] = (bonuses[a0] ?? 0) + 2;
+  if (a1) bonuses[a1] = (bonuses[a1] ?? 0) + 1;
+
+  const abilities = ABILITIES.reduce((acc, a) => {
+    acc[a] = Math.max(3, Math.min(20, (imp.abilities?.[a] ?? 10) - (bonuses[a] ?? 0)));
+    return acc;
+  }, {} as Record<Ability, number>);
+
+  const bgSkills = new Set<string>(bg?.skill_proficiencies ?? []);
+  const skillChoices = (imp.skillProficiencies ?? []).filter((s) => !bgSkills.has(s));
+
+  return {
+    ...emptyBuilderState(),
+    name: imp.name || "",
+    alignment: imp.alignment || "",
+    className: imp.className,
+    background: imp.background,
+    species: imp.species,
+    abilityMethod: "manual",
+    abilities,
+    skillChoices,
+    cantrips: imp.cantrips ?? [],
+    spells: imp.spells ?? [],
+    equipmentChoice: "A",
+  };
+};
+
 /** Re-roll 4d6 drop lowest, 6 times. */
 export const roll4d6DropLowest = (): number[] =>
   Array.from({ length: 6 }, () => {

@@ -3,6 +3,7 @@ import { CharacterSheet } from "./components/CharacterSheet";
 import { CharacterRoster } from "./components/CharacterRoster";
 import { CharacterBuilder } from "./components/CharacterBuilder";
 import { CharacterCreateMethod } from "./components/CharacterCreateMethod";
+import { CharacterImport } from "./components/CharacterImport";
 import { GamesScreen } from "./components/GamesScreen";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
@@ -19,11 +20,12 @@ import { useAuth } from "./state/useAuth";
 import { useToast } from "./state/Toast";
 import type { Game } from "./state/useGames";
 import type { Character } from "./types/character";
+import type { BuilderState } from "./lib/characterBuilder";
 import { Icon } from "./components/ui/Icon";
 import { generateCharacterBackground } from "./lib/classArt";
 import { supabase } from "./lib/supabase";
 
-type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "builder" | "sheet" | "table";
+type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "import" | "builder" | "sheet" | "table";
 
 // Remember the last view across reloads so refreshing lands you back where you
 // were — not always on a character sheet. Stored in localStorage (the app is
@@ -53,6 +55,8 @@ const sectionForScreen = (screen: Screen): ShellSection => {
     case "roster":
     case "sheet":
     case "builder":
+    case "create-method":
+    case "import":
       return "characters";
     case "maps":
       return "maps";
@@ -94,6 +98,9 @@ function App() {
   // Signed-in users can revisit the marketing landing via the home brand mark.
   const [showLanding, setShowLanding] = useState(false);
   const [bgDialogOpen, setBgDialogOpen] = useState(false);
+  // A BuilderState parsed from an uploaded PDF (Import-from-PDF, #110). When set,
+  // the builder opens pre-filled at Review; cleared for the from-scratch path.
+  const [importedState, setImportedState] = useState<BuilderState | null>(null);
   const api = useCharacter(activeId);
 
   // Remember the current view so a reload returns here instead of a sheet.
@@ -283,16 +290,37 @@ function App() {
 
         {!showLanding && screen === "create-method" && (
           <CharacterCreateMethod
-            onStandard={() => setScreen("builder")}
+            onStandard={() => {
+              setImportedState(null);
+              setScreen("builder");
+            }}
             onPremade={() => setScreen("roster")}
+            onImport={() => setScreen("import")}
             onCancel={() => setScreen("roster")}
+          />
+        )}
+
+        {!showLanding && screen === "import" && (
+          <CharacterImport
+            onCancel={() => setScreen("create-method")}
+            onImported={(state, notes) => {
+              setImportedState(state);
+              setScreen("builder");
+              notes.forEach((n) => toast.info(n));
+            }}
           />
         )}
 
         {!showLanding && screen === "builder" && (
           <CharacterBuilder
-            onCancel={() => setScreen("create-method")}
+            initialState={importedState ?? undefined}
+            initialStep={importedState ? "Review" : undefined}
+            onCancel={() => {
+              setImportedState(null);
+              setScreen("create-method");
+            }}
             onFinish={(c) => {
+              setImportedState(null);
               void create(c);
               select(c.id);
               setScreen("sheet");
