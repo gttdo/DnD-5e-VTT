@@ -3596,6 +3596,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           >
             <Icon name="draw" size={18} />
           </button>
+          {isDM && activeScene?.image_url && (
+            <button
+              className={`rail-tool ${aligning ? "active" : ""}`}
+              onClick={() => setAligning((v) => !v)}
+              title="Align the map to the grid"
+              aria-label="Align map to grid"
+            >
+              <Icon name="grid" size={18} />
+            </button>
+          )}
 
           <div className="rail-divider" />
 
@@ -3639,16 +3649,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               >
                 <Icon name="package" size={18} />
               </button>
-              {activeScene?.image_url && (
-                <button
-                  className={`rail-tool ${aligning ? "active" : ""}`}
-                  onClick={() => setAligning((v) => !v)}
-                  title="Align the map to the grid"
-                  aria-label="Align map to grid"
-                >
-                  <Icon name="grid" size={18} />
-                </button>
-              )}
             </>
           )}
           <button
