@@ -153,6 +153,20 @@ export const useGames = () => {
     [user, refresh]
   );
 
+  // Delete a whole campaign — DM/owner only (RLS: games_dm_all restricts it to
+  // dm_user_id). The game's scenes, tokens, and memberships all cascade away
+  // with the row (on delete cascade), so nothing is orphaned.
+  const deleteGame = useCallback(
+    async (gameId: string): Promise<{ error: string | null }> => {
+      if (!user) return { error: "Not signed in" };
+      const { error } = await supabase.from("games").delete().eq("id", gameId);
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [user, refresh]
+  );
+
   const setMyCharacter = useCallback(
     async (gameId: string, characterId: string | null): Promise<{ error: string | null }> => {
       if (!user) return { error: "Not signed in" };
@@ -175,6 +189,7 @@ export const useGames = () => {
     createGame,
     joinByCode,
     leaveGame,
+    deleteGame,
     setMyCharacter,
     refresh,
   };

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Character } from "../types/character";
 import { useGames, type Game } from "../state/useGames";
+import { useAuth } from "../state/useAuth";
 import { Card, CardBody, CardActions } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
@@ -13,7 +14,8 @@ interface Props {
 }
 
 export const GamesScreen = ({ characters, onOpenGame }: Props) => {
-  const { games, loading, error, createGame, joinByCode, leaveGame } = useGames();
+  const { games, loading, error, createGame, joinByCode, leaveGame, deleteGame } = useGames();
+  const { user } = useAuth();
   const [newName, setNewName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [joinCharacterId, setJoinCharacterId] = useState<string>("");
@@ -138,8 +140,10 @@ export const GamesScreen = ({ characters, onOpenGame }: Props) => {
           <GameCard
             key={g.id}
             game={g}
+            isOwner={g.dm_user_id === user?.id}
             onOpen={() => onOpenGame(g)}
             onLeave={() => leaveGame(g.id)}
+            onDelete={() => deleteGame(g.id)}
           />
         ))}
       </div>
@@ -149,12 +153,16 @@ export const GamesScreen = ({ characters, onOpenGame }: Props) => {
 
 const GameCard = ({
   game,
+  isOwner,
   onOpen,
   onLeave,
+  onDelete,
 }: {
   game: Game;
+  isOwner: boolean;
   onOpen: () => void;
   onLeave: () => Promise<{ error: string | null }>;
+  onDelete: () => Promise<{ error: string | null }>;
 }) => {
   const { confirm } = useConfirm();
   const [copied, setCopied] = useState(false);
@@ -233,7 +241,28 @@ const GameCard = ({
       </CardBody>
       <CardActions>
         <Button variant="primary" size="sm" block onClick={onOpen}>Open</Button>
-        {game.my_role !== "dm" && (
+        {isOwner ? (
+          // The DM owns the campaign — deleting it removes the whole thing.
+          <Button
+            variant="danger-ghost"
+            size="sm"
+            block
+            onClick={async () => {
+              if (
+                await confirm({
+                  title: "Delete campaign",
+                  message: `Delete "${game.name}"? This permanently removes the campaign and all its scenes, tokens, and player seats. This cannot be undone.`,
+                  confirmLabel: "Delete campaign",
+                  danger: true,
+                })
+              ) {
+                void onDelete();
+              }
+            }}
+          >
+            Delete
+          </Button>
+        ) : (
           <Button
             variant="danger-ghost"
             size="sm"
