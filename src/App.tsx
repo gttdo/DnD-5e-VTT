@@ -67,7 +67,7 @@ const sectionForScreen = (screen: Screen): ShellSection => {
 function App() {
   const auth = useAuth();
   const toast = useToast();
-  const { characters, ownedIds, activeId, loading: rosterLoading, create, remove, select, updateCharacter } = useRoster();
+  const { characters, ownedIds, publicIds, activeId, loading: rosterLoading, create, remove, select, updateCharacter, setCharacterPublic, cloneCharacter } = useRoster();
   // We hold the full Game (not just its id) so App doesn't need its own
   // useGames() subscription — two useGames() instances would fight for the
   // same realtime channel name and one would fail to subscribe.
@@ -229,11 +229,18 @@ function App() {
         {!showLanding && screen === "roster" && (
           <CharacterRoster
             characters={characters}
+            ownedIds={ownedIds}
+            publicIds={publicIds}
             onOpen={openSheet}
             onCreate={() => setScreen("builder")}
             onDelete={(id) => {
               void remove(id);
               if (activeId === id) setScreen("roster");
+            }}
+            onPublish={(id, pub) => void setCharacterPublic(id, pub)}
+            onClone={async (id) => {
+              const { id: newId } = await cloneCharacter(id);
+              if (newId) openSheet(newId);
             }}
           />
         )}

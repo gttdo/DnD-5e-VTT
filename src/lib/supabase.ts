@@ -49,11 +49,12 @@ export interface Database {
           owner_id: string;
           name: string;
           data: Character;
+          is_public: boolean;
           created_at: string;
           updated_at: string;
         };
-        Insert: { id?: string; owner_id: string; name: string; data: Character };
-        Update: { name?: string; data?: Character };
+        Insert: { id?: string; owner_id: string; name: string; data: Character; is_public?: boolean };
+        Update: { name?: string; data?: Character; is_public?: boolean };
         Relationships: [];
       };
       games: {

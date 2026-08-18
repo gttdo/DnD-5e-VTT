@@ -30,6 +30,9 @@ export const useRoster = () => {
   // read-only here, so the VTT routes their HP changes through the apply-hp
   // function instead of a direct (RLS-blocked) update.
   const [ownedIds, setOwnedIds] = useState<Set<string>>(new Set());
+  // Which loaded characters are published to the shared library (#135) — used to
+  // tell a "premade" (clone into your roster) apart from your own / a party PC.
+  const [publicIds, setPublicIds] = useState<Set<string>>(new Set());
   const [activeId, setActiveIdState] = useState<string | null>(() =>
     localStorage.getItem(ACTIVE_KEY)
   );
@@ -44,14 +47,32 @@ export const useRoster = () => {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
-      .from("characters")
-      .select("id, data, owner_id")
-      .order("created_at", { ascending: true });
+    type RosterRow = { id: string; data: Character; owner_id: string; is_public?: boolean };
+    let data: RosterRow[] | null = null;
+    let error: { message: string } | null = null;
+    {
+      const res = await supabase
+        .from("characters")
+        .select("id, data, owner_id, is_public")
+        .order("created_at", { ascending: true });
+      data = (res.data as RosterRow[] | null) ?? null;
+      error = res.error;
+    }
+    // Pre-0033 schema (migration not applied): no is_public column — fall back to
+    // the old projection so the roster still loads during the deploy window.
+    if (error && /is_public/i.test(error.message)) {
+      const res = await supabase
+        .from("characters")
+        .select("id, data, owner_id")
+        .order("created_at", { ascending: true });
+      data = (res.data as RosterRow[] | null) ?? null;
+      error = res.error;
+    }
     if (error) {
       setError(error.message);
       setCharacters([]);
       setOwnedIds(new Set());
+      setPublicIds(new Set());
     } else {
       // The ROW id is canonical — it's what foreign keys (tokens.character_id)
       // actually reference. Historical rows can carry a stale data.id (e.g.
@@ -62,6 +83,13 @@ export const useRoster = () => {
       );
       setOwnedIds(
         new Set((data ?? []).filter((r) => r.owner_id === user.id).map((r) => r.id as string))
+      );
+      setPublicIds(
+        new Set(
+          (data ?? [])
+            .filter((r) => (r as { is_public?: boolean }).is_public)
+            .map((r) => r.id as string)
+        )
       );
       setError(null);
     }
@@ -232,5 +260,60 @@ export const useRoster = () => {
     [activeId, select, refresh]
   );
 
-  return { characters, ownedIds, activeId, loading, error, create, remove, select, refresh, updateCharacter };
+  // Publish/unpublish one of YOUR characters to the shared library (#135/#137).
+  // Owner-only at the DB (characters_owner_all). Optimistic badge flip.
+  const setCharacterPublic = useCallback(
+    async (id: string, isPublic: boolean): Promise<{ error: string | null }> => {
+      setPublicIds((prev) => {
+        const next = new Set(prev);
+        if (isPublic) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      const { error } = await supabase.from("characters").update({ is_public: isPublic }).eq("id", id);
+      if (error) await refresh();
+      return { error: error?.message ?? null };
+    },
+    [refresh]
+  );
+
+  // Clone a premade (a public character you don't own) into your own roster: a
+  // fresh row you own, at full HP, with no lingering game state. Returns the new
+  // id. This is how a premade is "used" — a character can't be shared in place.
+  const cloneCharacter = useCallback(
+    async (id: string): Promise<{ id: string | null; error: string | null }> => {
+      if (!user) return { id: null, error: "Not signed in" };
+      const src = characters.find((c) => c.id === id);
+      if (!src) return { id: null, error: "Character not found" };
+      const newId = crypto.randomUUID();
+      const data: Character = {
+        ...structuredClone(src),
+        id: newId,
+        hp: { ...src.hp, current: src.hp.max, temp: 0 },
+      };
+      const { error } = await supabase
+        .from("characters")
+        .insert({ id: newId, owner_id: user.id, name: data.name, data });
+      if (error) return { id: null, error: error.message };
+      await refresh();
+      return { id: newId, error: null };
+    },
+    [user, characters, refresh]
+  );
+
+  return {
+    characters,
+    ownedIds,
+    publicIds,
+    activeId,
+    loading,
+    error,
+    create,
+    remove,
+    select,
+    refresh,
+    updateCharacter,
+    setCharacterPublic,
+    cloneCharacter,
+  };
 };
