@@ -3,7 +3,7 @@ import { useTokens, type Token } from "../state/useTokens";
 import { useScenes } from "../state/useScenes";
 import type { Game } from "../state/useGames";
 import { MapPickerDialog } from "./MapPickerDialog";
-import { TokenPickerDialog } from "./TokenPickerDialog";
+import { TokenPickerDialog, TOKEN_DRAG_MIME } from "./TokenPickerDialog";
 import { supabase } from "../lib/supabase";
 import type { MapAsset } from "../state/useMaps";
 import type { TokenAsset } from "../state/useTokenAssets";
@@ -331,9 +331,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     return clamp(px, py);
   };
 
-  // Place a library token asset near grid-center of the active scene. Copies
+  // Place a library token asset. A dropped `cell` (drag-drop onto the board) is
+  // honored as-is; otherwise it fans out to a free cell near grid-center. Copies
   // image, name, and 5e size onto the tokens row so scenes stay self-contained.
-  const placeTokenFromLibrary = async (asset: TokenAsset): Promise<{ error: string | null }> => {
+  const placeTokenFromLibrary = async (
+    asset: TokenAsset,
+    cell?: { x: number; y: number }
+  ): Promise<{ error: string | null }> => {
     if (!activeScene) return { error: "no active scene" };
     const span = findSize(asset.size_category).cells;
     // A monster asset carries its statblock onto the token, with its own HP, so
@@ -388,7 +392,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       area,
       loot,
       disposition,
-      ...findFreeCell(Math.floor(cols / 2) - Math.floor(span / 2), Math.floor(rows / 2) - Math.floor(span / 2), span),
+      ...(cell ?? findFreeCell(Math.floor(cols / 2) - Math.floor(span / 2), Math.floor(rows / 2) - Math.floor(span / 2), span)),
     });
   };
 
@@ -682,16 +686,32 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
   // Drop a dragged character onto the exact cell under the cursor.
   const handleDrop = (e: React.DragEvent) => {
+    const local = clientToSvg(e.clientX, e.clientY);
+    const cellAt = local ? { x: Math.floor(local.x / CELL), y: Math.floor(local.y / CELL) } : undefined;
+
+    // A library token dragged from the picker (DM only) — the whole asset rides
+    // in the payload, so place it right where it's dropped.
+    const tokenJson = e.dataTransfer.getData(TOKEN_DRAG_MIME);
+    if (tokenJson && isDM) {
+      e.preventDefault();
+      try {
+        const asset = JSON.parse(tokenJson) as TokenAsset;
+        void placeTokenFromLibrary(asset, cellAt).then((res) => {
+          if (res.error) toast.error(res.error);
+        });
+      } catch {
+        /* malformed payload — ignore */
+      }
+      return;
+    }
+
+    // A roster character dragged from the party tray.
     const id = e.dataTransfer.getData(DRAG_MIME);
     if (!id) return;
     e.preventDefault();
     const ch = characters.find((c) => c.id === id);
     if (!ch) return;
-    const local = clientToSvg(e.clientX, e.clientY);
-    void placeCharacter(
-      ch,
-      local ? { x: Math.floor(local.x / CELL), y: Math.floor(local.y / CELL) } : undefined
-    );
+    void placeCharacter(ch, cellAt);
   };
 
   // Token drag state kept in refs so pointermove doesn't rerender per frame.
@@ -3507,9 +3527,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               // don't want a browser context menu on the canvas anyway.
               e.preventDefault();
             }}
-            // Accept characters dragged out of the party tray.
+            // Accept a character (party tray) or a library token (picker) drag.
             onDragOver={(e) => {
-              if (e.dataTransfer.types.includes(DRAG_MIME)) {
+              if (e.dataTransfer.types.includes(DRAG_MIME) || e.dataTransfer.types.includes(TOKEN_DRAG_MIME)) {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "copy";
               }

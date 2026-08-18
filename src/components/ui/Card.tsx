@@ -1,4 +1,4 @@
-import type { ReactNode, CSSProperties } from "react";
+import type { ReactNode, CSSProperties, DragEvent } from "react";
 
 /**
  * Card primitive — the base surface for the roster / games / maps / tokens
@@ -28,6 +28,9 @@ interface CardProps {
   className?: string;
   style?: CSSProperties;
   title?: string;
+  /** Optional HTML drag source (e.g. drag a library token onto the board). */
+  draggable?: boolean;
+  onDragStart?: (e: DragEvent) => void;
 }
 
 export const Card = ({
@@ -38,6 +41,8 @@ export const Card = ({
   className,
   style,
   title,
+  draggable,
+  onDragStart,
 }: CardProps) => {
   const classes = [
     "ui-card",
@@ -53,6 +58,8 @@ export const Card = ({
     <div
       className={classes}
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={

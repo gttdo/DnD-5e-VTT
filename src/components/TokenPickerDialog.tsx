@@ -8,6 +8,10 @@ import { Icon, type IconName } from "./ui/Icon";
 import { GameGlyph } from "./ui/GameGlyph";
 import { tokenKindGlyph } from "../lib/boardGlyphs";
 
+/** Drag payload when a library token is dragged onto the board (the whole asset
+ *  as JSON, so the canvas can place it without loading the library itself). */
+export const TOKEN_DRAG_MIME = "application/x-vtt-token";
+
 interface Props {
   onPick: (asset: TokenAsset) => void;
   onClose: () => void;
@@ -235,7 +239,20 @@ export const TokenPickerDialog = ({ onPick, onClose }: Props) => {
               }}
             >
               {filtered.map((a) => (
-                <Card key={a.id} onClick={() => onPick(a)} title={a.prompt ?? a.name}>
+                <Card
+                  key={a.id}
+                  onClick={() => onPick(a)}
+                  title={`${a.prompt ?? a.name} — click to place, or drag onto a cell`}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(TOKEN_DRAG_MIME, JSON.stringify(a));
+                    e.dataTransfer.effectAllowed = "copy";
+                    // Step the picker aside so the board becomes a drop target.
+                    // Deferred: removing the drag source synchronously in
+                    // dragstart cancels the drag in some browsers.
+                    setTimeout(onClose, 0);
+                  }}
+                >
                   <CardMedia src={a.image_url} alt={a.name} shape="circle" />
                   <CardBody>
                     <CardTitle>{a.name}</CardTitle>
