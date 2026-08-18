@@ -603,6 +603,15 @@ const AbilitiesStep = ({
   const [rolledPool, setRolledPool] = useState<number[]>([]);
   const arrayPool = state.abilityMethod === "standard" ? unassignedPool ?? [] : rolledPool;
 
+  // Entering the step already on "Roll" (with nothing assigned) rolls a set at
+  // once, so the dice tray isn't empty and confusing.
+  useEffect(() => {
+    if (state.abilityMethod === "rolled" && rolledPool.length === 0 && ABILITIES.every((a) => state.abilities[a] === 10)) {
+      setRolledPool(roll4d6DropLowest().sort((a, b) => b - a));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const setMethod = (m: BuilderState["abilityMethod"]) => {
     setState({
       ...state,
@@ -677,16 +686,52 @@ const AbilitiesStep = ({
              "Manual"}
           </button>
         ))}
-        {state.abilityMethod === "rolled" && (
-          <button onClick={() => setRolledPool(roll4d6DropLowest().sort((a, b) => b - a))}>
-            ↻ Reroll
-          </button>
-        )}
       </div>
 
       {(state.abilityMethod === "standard" || state.abilityMethod === "rolled") && (
-        <div className="dim" style={{ marginBottom: 12, fontSize: 13 }}>
-          Pool: <span className="mono gold">{arrayPool.length > 0 ? arrayPool.join(", ") : "Empty — assign by clicking on a value below."}</span>
+        <div
+          className="panel"
+          style={{ marginBottom: 16, padding: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}
+        >
+          <span className="dim" style={{ fontSize: 13 }}>
+            {state.abilityMethod === "rolled" ? "Your rolls" : "Standard array"} — assign each to an ability:
+          </span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {arrayPool.length > 0 ? (
+              arrayPool.map((v, i) => (
+                <span
+                  key={`${v}-${i}`}
+                  className="mono"
+                  style={{
+                    minWidth: 34,
+                    textAlign: "center",
+                    padding: "4px 8px",
+                    borderRadius: 8,
+                    border: "1px solid var(--gold)",
+                    color: "var(--gold)",
+                    fontWeight: 700,
+                  }}
+                >
+                  {v}
+                </span>
+              ))
+            ) : (
+              <span className="dim" style={{ fontSize: 13, color: "var(--good, #4ade80)" }}>All assigned ✓</span>
+            )}
+          </div>
+          {state.abilityMethod === "rolled" && (
+            <button
+              onClick={() => {
+                setRolledPool(roll4d6DropLowest().sort((a, b) => b - a));
+                setState({ ...state, abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 } });
+              }}
+              style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}
+              title="Roll a fresh set of six (clears assignments)"
+            >
+              <Icon name="dice" size={14} />
+              Reroll
+            </button>
+          )}
         </div>
       )}
       {state.abilityMethod === "pointbuy" && (
@@ -729,27 +774,35 @@ const AbilitiesStep = ({
                 </div>
               )}
 
-              {(state.abilityMethod === "standard" || state.abilityMethod === "rolled") && (
-                <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                  {arrayPool.length === 0 && base === 10 ? (
-                    <span className="dim" style={{ fontSize: 11 }}>Pool empty</span>
-                  ) : (
-                    arrayPool.map((v, i) => (
-                      <button key={`${v}-${i}`} onClick={() => assignFromPool(a, v)}>{v}</button>
-                    ))
-                  )}
-                  {base !== 10 && (
-                    <button
-                      className="ghost"
-                      onClick={() => clearAbility(a)}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
-                    >
-                      <Icon name="close" size={11} />
-                      Clear
-                    </button>
-                  )}
-                </div>
-              )}
+              {(state.abilityMethod === "standard" || state.abilityMethod === "rolled") && (() => {
+                // One dropdown per ability, DDB-style: it lists this ability's
+                // current value plus every value still in the pool. Picking one
+                // assigns it (and returns the old value to the pool); "—" clears.
+                const assigned = base !== 10 ? base : null;
+                const options = Array.from(new Set([...(assigned != null ? [assigned] : []), ...arrayPool])).sort(
+                  (x, y) => y - x
+                );
+                return (
+                  <select
+                    className="mono"
+                    value={assigned ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "") clearAbility(a);
+                      else assignFromPool(a, parseInt(v, 10));
+                    }}
+                    style={{ width: "100%" }}
+                    aria-label={`Assign a score to ${ABILITY_FULL[a]}`}
+                  >
+                    <option value="">— assign a roll —</option>
+                    {options.map((v, i) => (
+                      <option key={`${v}-${i}`} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
 
               {state.abilityMethod === "manual" && (
                 <input
