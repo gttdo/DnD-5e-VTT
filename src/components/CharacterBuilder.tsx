@@ -51,6 +51,23 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
 
   const canFinish = state.name && state.className && state.background && state.species;
 
+  // Per-step completion — drives the check marks in the rail and the summary
+  // progress chip, so the builder reads like a checklist you can see through.
+  const abilitiesTouched = ABILITIES.reduce((s, a) => s + state.abilities[a], 0) !== 60;
+  const done: Record<Step, boolean> = {
+    Home: !!state.name,
+    Class: !!state.className,
+    Background: !!state.background,
+    Species: !!state.species,
+    Abilities: abilitiesTouched,
+    Equipment: true,
+    Review: !!canFinish,
+  };
+  const doneCount = STEPS.filter((s) => s !== "Review" && done[s]).length;
+  const initials = state.name
+    ? state.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("")
+    : "?";
+
   const finish = () => {
     if (!classes || !species || !backgrounds || !canFinish) return;
     const c = buildCharacter(state, { classes, species, backgrounds, feats: feats ?? undefined });
@@ -80,16 +97,90 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
                 key={s}
                 className={`tab ${step === s ? "active" : ""}`}
                 onClick={() => setStep(s)}
-                style={{
-                  fontSize: 11,
-                  opacity: i <= stepIndex || state.className ? 1 : 0.5,
-                }}
+                style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}
+                title={done[s] && s !== "Review" ? `${s} — done` : s}
               >
-                {i + 1}. {s}
+                {done[s] && s !== "Review" ? (
+                  <Icon name="check" size={11} />
+                ) : (
+                  <span style={{ opacity: 0.55 }}>{i + 1}.</span>
+                )}
+                {s}
               </button>
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Persistent character summary — who you're building, always in view. */}
+      <div
+        className="row"
+        style={{
+          gap: 12,
+          alignItems: "center",
+          padding: "10px 16px",
+          borderBottom: "1px solid var(--panel-border)",
+          background: "var(--panel)",
+        }}
+      >
+        {state.portrait ? (
+          <img
+            src={state.portrait}
+            alt=""
+            style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              background: "var(--bg-1)",
+              color: "var(--text-dim)",
+              fontFamily: "var(--font-display)",
+              fontSize: 15,
+              flexShrink: 0,
+            }}
+          >
+            {initials}
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 16,
+              color: "var(--cream)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {state.name || "Unnamed hero"}
+          </div>
+          <div className="dim" style={{ fontSize: 12 }}>
+            Level 1 · {state.species || "Species?"} · {state.className || "Class?"}
+            {state.background ? ` · ${state.background}` : ""}
+          </div>
+        </div>
+        <span
+          style={{
+            marginLeft: "auto",
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            padding: "3px 10px",
+            borderRadius: 999,
+            border: "1px solid",
+            borderColor: canFinish ? "var(--good, #4ade80)" : "var(--panel-border)",
+            color: canFinish ? "var(--good, #4ade80)" : "var(--text-dim)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {canFinish ? "Ready" : `${doneCount}/6 chosen`}
+        </span>
       </div>
 
       {/* Body */}
