@@ -32,6 +32,16 @@ const notesFor = (m: MagicItem): string | undefined => {
   return joined || undefined;
 };
 
+/** Map a library item's free-text recharge ("regains 1d6+1 charges daily at
+ *  dawn") to the sheet's coarse recharge trigger. Most magic items recharge at
+ *  dawn, so that's the default when the item has charges but no clear cue. */
+const rechargeFor = (raw?: string): "short" | "long" | "dawn" => {
+  const s = (raw ?? "").toLowerCase();
+  if (s.includes("short rest")) return "short";
+  if (s.includes("long rest")) return "long";
+  return "dawn";
+};
+
 /** A collision-resistant id without pulling in a uuid dep. */
 const newId = (): string =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -64,6 +74,13 @@ export const magicItemToInventory = (m: MagicItem, art?: string): InventoryItem 
       if (m.properties.some((p) => /finesse/i.test(p))) item.finesse = true;
     }
   }
+  // Item-granted spellcasting (#88): carry the library item's charge pool + the
+  // spells it can cast onto the inventory row so the HUD's Items tab can drive it.
+  if (m.charges && m.charges.max > 0) {
+    item.charges = { max: m.charges.max, current: m.charges.max, recharge: rechargeFor(m.charges.recharge) };
+  }
+  if (m.attachedSpells?.length) item.grantedSpells = m.attachedSpells;
+  if (m.attunement) item.attuned = false;
   return item;
 };
 

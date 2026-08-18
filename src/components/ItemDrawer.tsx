@@ -46,6 +46,12 @@ export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
     ]);
   }
   if (item.range) rows.push(["Range", `${item.range} ft.`]);
+  if (item.charges) {
+    const rechargeTxt = item.charges.recharge
+      ? ` · recharges ${item.charges.recharge === "short" ? "on a short rest" : item.charges.recharge === "long" ? "on a long rest" : "at dawn"}`
+      : "";
+    rows.push(["Charges", `${item.charges.current} / ${item.charges.max}${rechargeTxt}`]);
+  }
   rows.push(["Quantity", String(item.qty)]);
   rows.push(["Weight", `${item.weight} lb${item.qty > 1 ? ` (${(item.weight * item.qty).toFixed(1)} total)` : ""}`]);
   if (item.cost != null) rows.push(["Cost", `${item.cost} gp`]);
@@ -100,6 +106,25 @@ export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
           </div>
         ))}
       </div>
+
+      {item.grantedSpells?.length ? (
+        <>
+          <div className="drawer-section-title">Spells</div>
+          <p className="drawer-note">
+            {item.charges
+              ? "Cast these from the item's charges via the Items tab in the game HUD:"
+              : "This item can cast:"}
+          </p>
+          <div className="rules-table">
+            {item.grantedSpells.map((s) => (
+              <div className="rules-row" key={s}>
+                <span>{s}</span>
+                <span className="rules-value mono">{item.spellCost?.[s] ?? 1}⚡</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       {item.notes && (
         <>

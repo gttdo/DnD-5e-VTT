@@ -78,8 +78,13 @@ const ITEM_SHAPE = `Return this shape (a MagicItem):
   "name": string, "itemType": string, "rarity": "common"|"uncommon"|"rare"|"very rare"|"legendary"|"artifact",
   "attunement"?: boolean, "attunementNote"?: string, "description": string,
   "damage"?: string, "damageType"?: string, "properties"?: string[], "armorClass"?: string,
-  "charges"?: { "max": number, "recharge"?: string }, "weight"?: number, "cost"?: string
-}`;
+  "charges"?: { "max": number, "recharge"?: string }, "attachedSpells"?: string[],
+  "weight"?: number, "cost"?: string
+}
+For a wand/staff/ring that casts spells (e.g. Wand of Magic Missiles, Staff of Fire),
+set "charges" AND list the exact spell names it casts in "attachedSpells" — use
+canonical 5e spell names (e.g. "Magic Missile", "Fireball", "Wall of Fire") so they
+resolve against the spell dataset. Omit both for items that grant no spells.`;
 
 const shapeFor = (kind: Kind) =>
   kind === "monster" ? MONSTER_SHAPE : kind === "npc" ? NPC_SHAPE : ITEM_SHAPE;

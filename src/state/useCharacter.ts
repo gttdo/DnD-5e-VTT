@@ -158,6 +158,10 @@ export const useCharacter = (id: string | null) => {
         d.features = d.features.map((f) =>
           f.uses && f.uses.recharge === "short" ? { ...f, uses: { ...f.uses, current: f.uses.max } } : f
         );
+        // Magic items that recharge on a short rest refill their charge pool (#88).
+        d.inventory = d.inventory.map((i) =>
+          i.charges && i.charges.recharge === "short" ? { ...i, charges: { ...i.charges, current: i.charges.max } } : i
+        );
         return d;
       }),
     [update]
@@ -176,6 +180,13 @@ export const useCharacter = (id: string | null) => {
         );
         // All spell slots return on a long rest.
         if (d.spellcasting) d.spellcasting.slotsUsed = {};
+        // Magic items recharge at dawn / on a long rest — refill their pools (#88).
+        // "Regains 1dN charges" is simplified to a full refill for now.
+        d.inventory = d.inventory.map((i) =>
+          i.charges && (i.charges.recharge === "short" || i.charges.recharge === "long" || i.charges.recharge === "dawn")
+            ? { ...i, charges: { ...i.charges, current: i.charges.max } }
+            : i
+        );
         return d;
       }),
     [update]

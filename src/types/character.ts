@@ -67,6 +67,18 @@ export interface InventoryItem {
   /** Generated/library/uploaded item art (square), shown on the inventory grid
    *  and paper doll. Filled by the item generator (sibling of tokenSmith). */
   art?: string;
+  /** Item-granted spellcasting (#88): a magic item (wand, staff, ring…) that can
+   *  cast these spells — by name, keying the spell dataset + spellMechanics — from
+   *  its OWN charge pool instead of the wielder's slots. Surfaced as the HUD's
+   *  Items tab. */
+  grantedSpells?: string[];
+  /** The item's charge pool that powers `grantedSpells`. `recharge` says when it
+   *  refills to `max`: at dawn / on a long rest (both reset on a long rest), or on
+   *  a short rest. Absent recharge → never auto-refills. */
+  charges?: { max: number; current: number; recharge?: "short" | "long" | "dawn" };
+  /** Charges spent per cast, by spell name (default 1). A Staff of Fire spends 3
+   *  for Fireball, 4 for Wall of Fire — set those here; a plain wand omits it. */
+  spellCost?: Record<string, number>;
 }
 
 /** Paper-doll equip slots. */

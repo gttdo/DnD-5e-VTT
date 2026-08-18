@@ -5164,6 +5164,8 @@ button.topbar-stat {
 /* Reaction: a magenta diamond (matches the reaction-cost tracker chips). */
 .thud-rs-glyph.is-reaction i { width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; background: #c878c8; box-shadow: 0 0 6px rgba(200, 120, 200, 0.5); }
 .thud-rs-glyph.is-reaction.is-empty i { transform: rotate(45deg); background: transparent; border: 1.5px dashed var(--border-strong); box-shadow: none; }
+/* Items (#88): a gold gem — magic-item spells cast from item charges. */
+.thud-rs-glyph.is-items i { width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; background: var(--gold, #c9a24a); box-shadow: 0 0 6px rgba(201, 162, 74, 0.55); }
 .thud-rs-glyph.is-used i, .thud-rs-glyph i.is-spent { opacity: 0.22; filter: grayscale(1); box-shadow: none; }
 .thud-rs-glyph.is-empty { cursor: default; }
 .thud-rs-glyph.is-empty i { background: transparent; border: 1.5px dashed var(--border-strong); box-shadow: none; }

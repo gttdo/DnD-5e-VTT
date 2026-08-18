@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDismiss } from "../lib/useDismiss";
-import type { Character, Attack } from "../types/character";
+import type { Character, Attack, InventoryItem } from "../types/character";
 import { resolveAttacks, damageLabel } from "../lib/attacks";
 import { skillRoll, damageRoll, saveRoll, type RollEntry, type RollTone, type AttackSpec } from "../lib/rolls";
 import { spellMech, scaleCantrip, upcastDamage, dartDamage } from "../lib/spellMechanics";
@@ -87,7 +87,7 @@ export interface SlotView {
 }
 
 /** The active action-economy tab: a glyph category, or a spell level (number). */
-export type ActionTab = "main" | "bonus" | "cantrip" | "reaction" | number;
+export type ActionTab = "main" | "bonus" | "cantrip" | "reaction" | "items" | number;
 
 const NUM_WORD: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
 /** How many attacks a creature's Multiattack grants (its Main-action count).
@@ -221,6 +221,7 @@ const ResourceStrip = ({
   onSpendResource,
   hasCantrip,
   hasReactions,
+  hasItems,
   mainMax,
   activeTab,
   onSelectTab,
@@ -236,6 +237,8 @@ const ResourceStrip = ({
   hasCantrip?: boolean;
   /** Whether the creature has any reaction options (spells/OA) — enables the tab. */
   hasReactions?: boolean;
+  /** Whether the creature holds any charged magic item — enables the Items tab. */
+  hasItems?: boolean;
   /** Main actions available this turn (>1 for Multiattack / Action Surge). */
   mainMax?: number;
   /** The glyphs + slot levels act as TABS driving the action area. */
@@ -286,6 +289,18 @@ const ResourceStrip = ({
       >
         <i />
       </button>
+      {/* Items: spells cast from a magic item's charges (#88). Shown only when the
+          creature holds a charged item — a non-caster's one path to spellcasting. */}
+      {hasItems && (
+        <button
+          className={`thud-rs-glyph is-items ${activeTab === "items" ? "is-active" : ""}`}
+          onClick={() => onSelectTab?.("items")}
+          title="Magic item spells"
+          aria-label="Magic item spells"
+        >
+          <i />
+        </button>
+      )}
       {inCombat && (
         <span className="thud-rs-move" title={`Movement — ${remaining} of ${speed} ft left`}>
           <span className="thud-rs-move-bar"><i style={{ width: `${movePct}%` }} /></span>
@@ -560,16 +575,32 @@ export const TableHud = ({
       return { ...d, spellcasting: { ...sc, slotsUsed: { ...sc.slotsUsed, [lvl]: (sc.slotsUsed[lvl] ?? 0) + 1 } } };
     });
   };
+  // Drain a magic item's charge pool by `cost` (#88). Persisted via onUpdate so it
+  // survives re-selection; refilled on the matching rest (see useCharacter).
+  const spendItemCharges = (itemId: string, cost: number) => {
+    if (!onUpdate) return;
+    onUpdate((d) => ({
+      ...d,
+      inventory: d.inventory.map((i) =>
+        i.id === itemId && i.charges
+          ? { ...i, charges: { ...i.charges, current: Math.max(0, i.charges.current - cost) } }
+          : i
+      ),
+    }));
+  };
 
   // Cast a spell from the tabbed action area (replaces the popover). Routes by
   // mechanics — attack/heal/condition/move through the combat loop, save/utility
   // logged — and spends a slot for leveled spells. The casting time decides the
   // economy (routed via each tile's `econ`); here we also record what was cast
   // this turn to enforce the bonus-action spell rule.
-  const castSpell = async (name: string, level: number, baseLevel = level) => {
-    const remaining =
-      level > 0 ? (Number(slots[String(level)] ?? 0) - (c.spellcasting?.slotsUsed?.[String(level)] ?? 0)) : Infinity;
-    if (level > 0 && remaining <= 0) {
+  const castSpell = async (name: string, level: number, baseLevel = level, source?: { itemId: string; cost: number }) => {
+    // A spell cast from a magic item draws the item's own charges — no slot check,
+    // no slot spend (see below); the caller has already verified the charges.
+    const remaining = source
+      ? Infinity
+      : level > 0 ? (Number(slots[String(level)] ?? 0) - (c.spellcasting?.slotsUsed?.[String(level)] ?? 0)) : Infinity;
+    if (!source && level > 0 && remaining <= 0) {
       onNote(`No level ${level} slots left.`);
       return;
     }
@@ -580,9 +611,11 @@ export const TableHud = ({
     // by how far the slot outranks the spell's base level.
     const scale = (expr: string) =>
       mech?.scales ? scaleCantrip(expr, c.level) : upcastDamage(expr, baseLevel, level, mech?.upcast);
-    // Spend the slot + turn tracking up front — RAW, the slot is spent even if
-    // the spell is later countered.
-    if (level > 0) spendSlot(level);
+    // Spend the slot (or the item's charges) + turn tracking up front — RAW, the
+    // resource is spent even if the spell is later countered. Like a slot, an item
+    // charge is committed on cast, not on target-commit.
+    if (source) spendItemCharges(source.itemId, source.cost);
+    else if (level > 0) spendSlot(level);
     if (economy) setSpellCastTurn((s) => ({ leveled: s.leveled || level > 0, bonus: s.bonus || econKind === "bonus" }));
     // Counterspell window (leveled spells): if countered, the spell fizzles —
     // no effect, no concentration (the slot's already gone).
@@ -833,12 +866,53 @@ export const TableHud = ({
     ...reactionSpellTiles,
   ];
 
+  // ITEMS tab (#88): every magic item that carries a charge pool + granted spells
+  // becomes a row of castable tiles, spending the ITEM's charges (not the
+  // wielder's slots). This is the one action source open to non-casters — a
+  // Fighter's Wand of Magic Missiles casts even with no spell slots.
+  const spellLevelOf = (name: string): number =>
+    (spells ?? []).find((s) => s.name.toLowerCase() === name.toLowerCase())?.level ?? 0;
+  const chargedItems = c.inventory.filter(
+    (i) => i.charges && i.charges.max > 0 && (i.grantedSpells?.length ?? 0) > 0
+  );
+  const castItemSpell = (item: InventoryItem, name: string) => {
+    const cost = item.spellCost?.[name] ?? 1;
+    if (!item.charges || item.charges.current < cost) {
+      onNote(`${item.name} has no charges left.`);
+      return;
+    }
+    const lvl = spellLevelOf(name);
+    void castSpell(name, lvl, lvl, { itemId: item.id, cost });
+  };
+  const itemSpellTiles: Slot[] = chargedItems.flatMap((item) =>
+    (item.grantedSpells ?? []).map((name) => {
+      const cost = item.spellCost?.[name] ?? 1;
+      const cur = item.charges?.current ?? 0;
+      const econKind = spellEconOf(name);
+      const tileEcon: "action" | "bonus" | "reaction" =
+        econKind === "bonus" ? "bonus" : econKind === "reaction" ? "reaction" : "action";
+      return {
+        id: `item-${item.id}-${name}`,
+        icon: "sparkles" as IconName,
+        glyph: glyphSrc(spellMech(name)?.kind === "attack" ? "attack_spell" : "action_magic"),
+        name,
+        sub: `${item.name} · ${cur}⚡${cost > 1 ? ` (−${cost})` : ""}`,
+        kind: "common" as const,
+        run: () => castItemSpell(item, name),
+        disabled: cur < cost,
+        econ: tileEcon,
+      };
+    })
+  );
+  const hasItemSpells = itemSpellTiles.length > 0;
+
   // Items shown for the active tab; also what the number keys fire.
   const tabItems: Slot[] =
     actionTab === "main" ? mainActions
     : actionTab === "bonus" ? bonusActions
     : actionTab === "cantrip" ? spellTilesFor(0)
     : actionTab === "reaction" ? reactionItems
+    : actionTab === "items" ? itemSpellTiles
     : spellTilesFor(actionTab);
 
   // In combat, an item is spent-out when its economy is exhausted (main actions
@@ -1036,7 +1110,9 @@ export const TableHud = ({
                 ? "No bonus actions."
                 : actionTab === "reaction"
                   ? "No reactions available."
-                  : "No spells at this level."}
+                  : actionTab === "items"
+                    ? "No charged magic items."
+                    : "No spells at this level."}
           </span>
         )}
       </div>
@@ -1056,6 +1132,7 @@ export const TableHud = ({
           .sort((a, b) => a.level - b.level)}
         hasCantrip={spellGroups.some((g) => g.level === 0 && g.spells.length > 0)}
         hasReactions={reactionItems.length > 0}
+        hasItems={hasItemSpells}
         resources={resourceViews}
         onSpendResource={spendFeature}
         mainMax={mainMax}
@@ -1450,6 +1527,7 @@ export const MonsterHud = ({
     : actionTab === "bonus" ? bonusActions
     : actionTab === "cantrip" ? spellTilesFor(0)
     : actionTab === "reaction" ? reactionItems
+    : actionTab === "items" ? [] // monsters have no item-charge spellcasting (#88)
     : spellTilesFor(actionTab);
 
   const itemDisabled = (s: MSlot): boolean =>
