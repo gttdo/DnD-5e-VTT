@@ -1391,19 +1391,22 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
   // Who may DRAG a token (independent of speed — distance is only tracked in
   // combat, never hard-blocked). A placed SPELL area is a fixed point in the
-  // world: locked for EVERYONE (caster, players, DM) once set — the DM deletes
-  // it to remove it. The rare relocatable areas (Moonbeam, Flaming Sphere) carry
-  // area.movable and can be repositioned; for now that's DM-only until the token
-  // tracks its caster (#125). Otherwise: DM moves anything; a player moves only
-  // their own character token or a prop/scenery token.
-  // Ownership: who may move this token at all. The DM moves anything; a player
-  // moves only their own character token or a prop/scenery token (no statblock,
-  // no owner). The in-combat rules (turn order + hands-off players' tokens) are
-  // applied separately, at drag lift-off (see onDragMoveRef → combatMoveBlock),
-  // so a plain select-click stays quiet.
+  // world: locked for EVERYONE once set — the DM deletes it to remove it. The
+  // rare relocatable areas (Moonbeam, Flaming Sphere) carry area.movable and can
+  // be repositioned by the DM OR by the caster who owns it — linked via area.conc
+  // (#125) — so a player nudges their own Moonbeam each turn. (#127) Otherwise:
+  // DM moves anything; a player moves only their own character token or a
+  // prop/scenery token.
+  // The in-combat rules (turn order + hands-off players' tokens) are applied
+  // separately, at drag lift-off (see onDragMoveRef → combatMoveBlock), so a
+  // plain select-click stays quiet.
   const canMoveToken = useCallback(
     (t: Token): boolean => {
-      if (t.kind === "spell") return isDM && t.area?.movable === true;
+      if (t.kind === "spell") {
+        if (t.area?.movable !== true) return false;
+        const casterCharId = t.area?.conc?.characterId;
+        return isDM || (casterCharId != null && ownedCharacterIds.has(casterCharId));
+      }
       if (t.character_id) return isDM || ownedCharacterIds.has(t.character_id);
       return isDM || !t.statblock;
     },
