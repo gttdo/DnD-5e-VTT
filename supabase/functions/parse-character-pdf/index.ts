@@ -31,7 +31,9 @@ const SPECIES = ["Dragonborn", "Dwarf", "Elf", "Gnome", "Goliath", "Halfling", "
 const BACKGROUNDS = ["Acolyte", "Criminal", "Sage", "Soldier"];
 const SKILLS = ["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception", "History", "Insight", "Intimidation", "Investigation", "Medicine", "Nature", "Perception", "Performance", "Persuasion", "Religion", "Sleight of Hand", "Stealth", "Survival"];
 
-const SYSTEM = `You read the raw text of a Dungeons & Dragons 5e character sheet (often a D&D Beyond export or a form-fillable PDF) and return ONLY a single JSON object — no markdown, no commentary — describing that character mapped onto a fixed set of options.
+const SYSTEM = `You read the extracted contents of a Dungeons & Dragons 5e character sheet (often a D&D Beyond export or a form-fillable PDF) and return ONLY a single JSON object — no markdown, no commentary — describing that character mapped onto a fixed set of options.
+
+The input may contain a "FORM FIELDS:" section of "FieldName: value" pairs pulled from a fillable PDF's form layer — this is the AUTHORITATIVE data, use it first. Common D&D Beyond field names: CharacterName, "CLASS  LEVEL" (e.g. "Wizard 1"), RACE/SPECIES (e.g. "Rock Gnome"), BACKGROUND, STR/DEX/CON/INT/WIS/CHA (final scores), skill names with a "P"/"Prof" marker meaning proficient, and spellName0, spellName1, … (with a "=== CANTRIPS ===" / "=== 1st LEVEL ===" spellHeader marking which are cantrips vs leveled). A "SHEET TEXT:" section may follow with the visible page text.
 
 Return exactly this shape (ImportedCharacter):
 {
