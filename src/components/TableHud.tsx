@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDismiss } from "../lib/useDismiss";
-import type { Character, Attack, InventoryItem } from "../types/character";
+import type { Character, Attack, InventoryItem, Feature } from "../types/character";
 import { resolveAttacks, damageLabel } from "../lib/attacks";
 import { skillRoll, damageRoll, saveRoll, type RollEntry, type RollTone, type AttackSpec } from "../lib/rolls";
 import { spellMech, scaleCantrip, upcastDamage, dartDamage } from "../lib/spellMechanics";
@@ -274,7 +274,7 @@ const ResourceStrip = ({
         className={`thud-rs-glyph is-cantrip ${hasCantrip ? "" : "is-empty"} ${activeTab === "cantrip" ? "is-active" : ""}`}
         onClick={() => hasCantrip && onSelectTab?.("cantrip")}
         disabled={!hasCantrip}
-        title={hasCantrip ? "Cantrips" : "No cantrip / trait action"}
+        title={hasCantrip ? "Cantrips & trait actions" : "No cantrip or trait action"}
         aria-label="Cantrip or trait action"
       >
         <i />
@@ -906,11 +906,81 @@ export const TableHud = ({
   );
   const hasItemSpells = itemSpellTiles.length > 0;
 
+  // TRAIT ACTIONS (#93): the third action slot's other half. For a caster it holds
+  // cantrips; for a martial it was dead. Now a curated set of activated non-caster
+  // traits (Breath Weapon…) resolves through the SAME targeting loop as spells,
+  // and every other limited-use activated feature at least surfaces here as a
+  // one-click "use" (spend + narrate), so the slot is alive for everyone.
+  // Recognized combat traits → a full spec (routed through targeting); others → null.
+  const traitActionSpec = (name: string): Omit<AttackSpec, "econ"> | null => {
+    const n = name.toLowerCase();
+    if (n.includes("breath weapon")) {
+      // Dragonborn breath: a cone/line the whole area saves against (DEX) for half.
+      // Damage scales by tier; the element varies by ancestry, so default fire and
+      // let the DM adjust. DC is CON-based (8 + prof + CON), unlike spell DCs.
+      const dice = c.level >= 16 ? "5d6" : c.level >= 11 ? "4d6" : c.level >= 6 ? "3d6" : "2d6";
+      // Targets make a DEX save; the DC is the dragonborn's (8 + prof + CON).
+      const dc = 8 + proficiencyBonus(c.level) + abilityModFor(c, "CON");
+      return { label: name, attackBonus: 0, damage: dice, damageType: "fire", save: "DEX", dc, burst: true };
+    }
+    return null;
+  };
+  // Drop one use of a feature (no economy/special — the tile or spendFeature owns those).
+  const spendTraitUse = (id: string) => {
+    onUpdate?.((d) => ({
+      ...d,
+      features: d.features.map((x) =>
+        x.id === id && x.uses ? { ...x, uses: { ...x.uses, current: Math.max(0, x.uses.current - 1) } } : x
+      ),
+    }));
+  };
+  const useTrait = (f: Feature) => {
+    const spec = traitActionSpec(f.name);
+    if (spec) {
+      // Curated combat trait: spend the use now, resolve the effect through
+      // targeting (economy is paid on target-commit via the tile's econ).
+      spendTraitUse(f.id);
+      enterTargeting(spec);
+    } else {
+      // Generic activated feature — same path as its resource chip.
+      spendFeature(f.id);
+    }
+  };
+  const traitTiles: Slot[] = c.features
+    .filter((f) => {
+      if (!f.uses || f.uses.max <= 0) return false;
+      if (featureEcon(f.name).econ === "reaction") return false; // reactions live on the reaction tab
+      // Curated traits always show; generic ones skip pool-style resources (max>20).
+      return !!traitActionSpec(f.name) || f.uses.max <= 20;
+    })
+    .map((f) => {
+      const spec = traitActionSpec(f.name);
+      const fe = featureEcon(f.name);
+      const tileEcon: "action" | "bonus" | undefined = fe.econ === "bonus" ? "bonus" : fe.econ === "action" ? "action" : undefined;
+      const econBlocked =
+        !!economy && ((tileEcon === "action" && economy.action >= mainMax) || (tileEcon === "bonus" && economy.bonus));
+      return {
+        id: `trait-${f.id}`,
+        icon: "sparkles" as IconName,
+        glyph: glyphSrc(spec ? "attack_spell" : "action_magic"),
+        name: f.name,
+        sub: `${f.uses!.current}/${f.uses!.max}${spec?.save ? ` · ${spec.save} save` : fe.econ === "bonus" ? " · bonus" : ""}`,
+        kind: "common" as const,
+        run: () => useTrait(f),
+        disabled: incap || f.uses!.current <= 0 || econBlocked,
+        // Curated traits defer economy to target-commit via this econ; generic ones
+        // let spendFeature pay, so they carry no tile econ (avoids a double-spend).
+        econ: spec ? tileEcon : undefined,
+      };
+    });
+  const hasThirdSlot =
+    spellGroups.some((g) => g.level === 0 && g.spells.length > 0) || traitTiles.length > 0;
+
   // Items shown for the active tab; also what the number keys fire.
   const tabItems: Slot[] =
     actionTab === "main" ? mainActions
     : actionTab === "bonus" ? bonusActions
-    : actionTab === "cantrip" ? spellTilesFor(0)
+    : actionTab === "cantrip" ? [...spellTilesFor(0), ...traitTiles]
     : actionTab === "reaction" ? reactionItems
     : actionTab === "items" ? itemSpellTiles
     : spellTilesFor(actionTab);
@@ -1130,7 +1200,7 @@ export const TableHud = ({
           }))
           .filter((s) => Number.isFinite(s.level) && s.level > 0 && s.max > 0)
           .sort((a, b) => a.level - b.level)}
-        hasCantrip={spellGroups.some((g) => g.level === 0 && g.spells.length > 0)}
+        hasCantrip={hasThirdSlot}
         hasReactions={reactionItems.length > 0}
         hasItems={hasItemSpells}
         resources={resourceViews}
