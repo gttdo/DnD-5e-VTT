@@ -97,8 +97,9 @@ const SPRITES: Record<CursorKind, Sprite> = {
 };
 
 // Shared: source→screen scale (keeps art a consistent size across sheets) and
-// the click sequence + per-frame duration.
-const SCALE = 64 / 220;
+// the click sequence + per-frame duration. The numerator is the on-screen art
+// size in px — kept modest so the cursor reads as a pointer, not a giant sprite.
+const SCALE = 44 / 220;
 const IDLE_FRAME = 0;
 /** One-shot on click: wind-up → charge → impact → recover → settle to idle. */
 const CLICK_FRAMES = [1, 2, 3, 4, 5, 6, 7, IDLE_FRAME];
