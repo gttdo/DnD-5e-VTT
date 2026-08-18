@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CharacterSheet } from "./components/CharacterSheet";
 import { CharacterRoster } from "./components/CharacterRoster";
 import { CharacterBuilder } from "./components/CharacterBuilder";
+import { CharacterCreateMethod } from "./components/CharacterCreateMethod";
 import { GamesScreen } from "./components/GamesScreen";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
@@ -22,7 +23,7 @@ import { Icon } from "./components/ui/Icon";
 import { generateCharacterBackground } from "./lib/classArt";
 import { supabase } from "./lib/supabase";
 
-type Screen = "roster" | "games" | "maps" | "tokens" | "builder" | "sheet" | "table";
+type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "builder" | "sheet" | "table";
 
 // Remember the last view across reloads so refreshing lands you back where you
 // were — not always on a character sheet. Stored in localStorage (the app is
@@ -232,7 +233,7 @@ function App() {
             ownedIds={ownedIds}
             publicIds={publicIds}
             onOpen={openSheet}
-            onCreate={() => setScreen("builder")}
+            onCreate={() => setScreen("create-method")}
             onDelete={(id) => {
               void remove(id);
               if (activeId === id) setScreen("roster");
@@ -280,9 +281,17 @@ function App() {
           </>
         )}
 
+        {!showLanding && screen === "create-method" && (
+          <CharacterCreateMethod
+            onStandard={() => setScreen("builder")}
+            onPremade={() => setScreen("roster")}
+            onCancel={() => setScreen("roster")}
+          />
+        )}
+
         {!showLanding && screen === "builder" && (
           <CharacterBuilder
-            onCancel={() => setScreen("roster")}
+            onCancel={() => setScreen("create-method")}
             onFinish={(c) => {
               void create(c);
               select(c.id);
