@@ -245,10 +245,23 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // Map-to-grid alignment (#115): the background image is offset + uniformly
   // scaled so its baked grid lines up with the canonical overlay. Defaults draw
   // it 1:1 over the board (the old behavior).
-  const mapOffsetX = activeScene?.map_offset_x ?? 0;
-  const mapOffsetY = activeScene?.map_offset_y ?? 0;
-  const mapScale = activeScene?.map_scale ?? 1;
+  const sceneOffsetX = activeScene?.map_offset_x ?? 0;
+  const sceneOffsetY = activeScene?.map_offset_y ?? 0;
+  const sceneScale = activeScene?.map_scale ?? 1;
   const [aligning, setAligning] = useState(false);
+  // Live transform during a drag/zoom of the map — applied to the render
+  // immediately and committed to the scene on release (drag) or after a short
+  // idle (wheel), so aligning stays smooth without a DB write per pointer move.
+  const [mapLive, setMapLive] = useState<{ x: number; y: number; scale: number } | null>(null);
+  const mapDragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const mapZoomCommitRef = useRef<number | undefined>(undefined);
+  // 2-click calibrate: the DM clicks two opposite corners of ONE printed grid
+  // square; we scale + offset so that square becomes one overlay cell.
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibPt, setCalibPt] = useState<{ x: number; y: number } | null>(null);
+  const mapOffsetX = mapLive?.x ?? sceneOffsetX;
+  const mapOffsetY = mapLive?.y ?? sceneOffsetY;
+  const mapScale = mapLive?.scale ?? sceneScale;
   const { tokens, addToken, moveToken, deleteToken, setTokenHidden, updateToken, loading, error } = useTokens(
     game.id,
     activeScene?.id ?? null
@@ -4302,6 +4315,90 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 {b.text}
               </text>
             ))}
+
+            {/* Map-alignment layer (#115): while the DM is aligning, this
+                transparent rect sits on TOP of the board and grabs all input so
+                you can drag the map to move it, scroll to zoom it (cursor-
+                anchored), or click two opposite corners of one printed square to
+                auto-calibrate. Committed to the scene on release / after idle. */}
+            {aligning && isDM && activeScene?.image_url && (
+              <>
+                <rect
+                  width={width}
+                  height={height}
+                  fill="transparent"
+                  style={{ pointerEvents: "all", cursor: calibrating ? "crosshair" : "grab" }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    const p = clientToSvg(e.clientX, e.clientY);
+                    if (!p || !activeScene) return;
+                    if (calibrating) {
+                      if (!calibPt) { setCalibPt(p); return; }
+                      const p1 = calibPt;
+                      const side = (Math.abs(p.x - p1.x) + Math.abs(p.y - p1.y)) / 2;
+                      setCalibPt(null);
+                      setCalibrating(false);
+                      if (side < 4) return; // too close to be a real cell
+                      const m = CELL / side;
+                      const tlx = Math.min(p1.x, p.x);
+                      const tly = Math.min(p1.y, p.y);
+                      const gx = Math.round(tlx / CELL) * CELL;
+                      const gy = Math.round(tly / CELL) * CELL;
+                      void updateSceneLayout(activeScene.id, {
+                        map_scale: sceneScale * m,
+                        map_offset_x: gx - (tlx - sceneOffsetX) * m,
+                        map_offset_y: gy - (tly - sceneOffsetY) * m,
+                      });
+                      return;
+                    }
+                    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+                    mapDragRef.current = { sx: p.x, sy: p.y, ox: mapOffsetX, oy: mapOffsetY };
+                    setMapLive({ x: mapOffsetX, y: mapOffsetY, scale: mapScale });
+                  }}
+                  onPointerMove={(e) => {
+                    const d = mapDragRef.current;
+                    if (!d) return;
+                    const p = clientToSvg(e.clientX, e.clientY);
+                    if (!p) return;
+                    setMapLive((prev) => ({ x: d.ox + (p.x - d.sx), y: d.oy + (p.y - d.sy), scale: prev?.scale ?? sceneScale }));
+                  }}
+                  onPointerUp={() => {
+                    if (!mapDragRef.current) return;
+                    mapDragRef.current = null;
+                    setMapLive((cur) => {
+                      if (cur && activeScene) void updateSceneLayout(activeScene.id, { map_offset_x: cur.x, map_offset_y: cur.y, map_scale: cur.scale });
+                      return null;
+                    });
+                  }}
+                  onWheel={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!activeScene) return;
+                    const p = clientToSvg(e.clientX, e.clientY);
+                    if (!p) return;
+                    const factor = e.deltaY < 0 ? 1.04 : 1 / 1.04;
+                    setMapLive((prev) => {
+                      const s = prev?.scale ?? sceneScale;
+                      const ox = prev?.x ?? sceneOffsetX;
+                      const oy = prev?.y ?? sceneOffsetY;
+                      const ns = Math.max(0.25, Math.min(6, s * factor));
+                      const r = ns / s;
+                      return { scale: ns, x: p.x - (p.x - ox) * r, y: p.y - (p.y - oy) * r };
+                    });
+                    window.clearTimeout(mapZoomCommitRef.current);
+                    mapZoomCommitRef.current = window.setTimeout(() => {
+                      setMapLive((cur) => {
+                        if (cur && activeScene) void updateSceneLayout(activeScene.id, { map_scale: cur.scale, map_offset_x: cur.x, map_offset_y: cur.y });
+                        return null;
+                      });
+                    }, 300);
+                  }}
+                />
+                {calibrating && calibPt && (
+                  <circle cx={calibPt.x} cy={calibPt.y} r={5} fill="none" stroke="var(--candle)" strokeWidth={2} style={{ pointerEvents: "none" }} />
+                )}
+              </>
+            )}
           </svg>
 
           {/* Animated attack cursor (sword / fist) — stays alive through the swing tail. */}
@@ -4825,8 +4922,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <div className="panel map-align-pop">
               <div className="panel-title">Align map to grid</div>
               <p className="dim" style={{ fontSize: 11, margin: "0 0 8px" }}>
-                Set the grid size, then nudge &amp; scale the map until its squares
-                match the overlay.
+                {calibrating
+                  ? calibPt
+                    ? "Now click the OPPOSITE corner of that same square."
+                    : "Click one corner of a printed grid square on the map."
+                  : "Drag the map to move it, scroll to zoom. Or calibrate: click two opposite corners of one printed square."}
               </p>
               <div className="map-align-row">
                 <span>Columns</span>
@@ -4847,24 +4947,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               <label className="map-align-slider">
                 <span>Scale <em>{mapScale.toFixed(2)}×</em></span>
                 <input
-                  type="range" min={0.25} max={4} step={0.01} value={mapScale}
+                  type="range" min={0.25} max={6} step={0.01} value={mapScale}
                   onChange={(e) => void updateSceneLayout(activeScene.id, { map_scale: parseFloat(e.target.value) })}
                 />
               </label>
-              <label className="map-align-slider">
-                <span>Offset X <em>{Math.round(mapOffsetX)}</em></span>
-                <input
-                  type="range" min={-width} max={width} step={1} value={mapOffsetX}
-                  onChange={(e) => void updateSceneLayout(activeScene.id, { map_offset_x: parseFloat(e.target.value) })}
-                />
-              </label>
-              <label className="map-align-slider">
-                <span>Offset Y <em>{Math.round(mapOffsetY)}</em></span>
-                <input
-                  type="range" min={-height} max={height} step={1} value={mapOffsetY}
-                  onChange={(e) => void updateSceneLayout(activeScene.id, { map_offset_y: parseFloat(e.target.value) })}
-                />
-              </label>
+              <button
+                type="button"
+                className={calibrating ? "primary" : ""}
+                style={{ width: "100%", marginTop: 4 }}
+                onClick={() => { setCalibrating((v) => !v); setCalibPt(null); }}
+              >
+                {calibrating ? "Cancel calibrate" : "Calibrate a cell"}
+              </button>
               <div className="row" style={{ gap: 8, marginTop: 10 }}>
                 <button
                   type="button"
@@ -4873,7 +4967,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 >
                   Reset
                 </button>
-                <button type="button" className="primary" onClick={() => setAligning(false)}>Done</button>
+                <button type="button" className="primary" onClick={() => { setAligning(false); setCalibrating(false); setCalibPt(null); }}>Done</button>
               </div>
             </div>
           )}
