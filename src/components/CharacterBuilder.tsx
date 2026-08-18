@@ -366,11 +366,21 @@ const HomeStep = ({ state, setState }: StepProps) => (
   </div>
 );
 
+// Per-class accent for the monogram badges — a splash of identity in lieu of
+// full class art (which we don't ship). Falls back to gold for anything new.
+const CLASS_COLOR: Record<string, string> = {
+  Barbarian: "#c0392b", Bard: "#a855f7", Cleric: "#eab308", Druid: "#4ade80",
+  Fighter: "#94a3b8", Monk: "#38bdf8", Paladin: "#f59e0b", Ranger: "#22c55e",
+  Rogue: "#64748b", Sorcerer: "#ef4444", Warlock: "#7c3aed", Wizard: "#3b82f6",
+};
+
 const ClassStep = ({
   state, setState, data,
 }: StepProps & { data: Record<string, ClassData> | null }) => {
+  const [q, setQ] = useState("");
   if (!data) return <div className="panel">Loading classes…</div>;
-  const entries = Object.entries(data);
+  const needle = q.trim().toLowerCase();
+  const entries = Object.entries(data).filter(([name]) => name.toLowerCase().includes(needle));
   const selected = state.className ? data[state.className] : null;
 
   // "any" (Bard) means pick from the whole skill list — surface all of them
@@ -394,20 +404,60 @@ const ClassStep = ({
     <div>
       <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Choose a Class</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="col" style={{ gap: 6 }}>
-          {entries.map(([name, c]) => (
-            <button
-              key={name}
-              className={state.className === name ? "primary" : ""}
-              onClick={() => setState({ ...state, className: name, skillChoices: [] })}
-              style={{ textAlign: "left", padding: "10px 14px" }}
-            >
-              <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700 }}>{name}</div>
-              <div className="dim" style={{ fontSize: 11 }}>
-                d{c.hit_die} HP · {c.primary_ability.join("/")} · {c.complexity}
-              </div>
-            </button>
-          ))}
+        <div className="col" style={{ gap: 8 }}>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search classes…"
+            aria-label="Search classes"
+            style={{ width: "100%" }}
+          />
+          {entries.length === 0 && <div className="dim" style={{ fontSize: 12, padding: 8 }}>No classes match “{q}”.</div>}
+          {entries.map(([name, c]) => {
+            const on = state.className === name;
+            const color = CLASS_COLOR[name] ?? "var(--gold)";
+            return (
+              <button
+                key={name}
+                onClick={() => setState({ ...state, className: name, skillChoices: [] })}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderColor: on ? color : undefined,
+                  background: on ? `color-mix(in srgb, ${color} 14%, transparent)` : undefined,
+                }}
+              >
+                <span
+                  style={{
+                    flexShrink: 0,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    display: "grid",
+                    placeItems: "center",
+                    fontFamily: "Cinzel, serif",
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color,
+                    background: `color-mix(in srgb, ${color} 18%, transparent)`,
+                    border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
+                  }}
+                >
+                  {name[0]}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: "Cinzel, serif", fontWeight: 700, color: on ? "var(--cream)" : undefined }}>{name}</span>
+                  <span className="dim" style={{ fontSize: 11 }}>
+                    d{c.hit_die} · {c.primary_ability.join("/")} · {c.complexity}
+                    {c.caster !== "none" ? " · caster" : ""}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="panel">
@@ -472,28 +522,66 @@ const ClassStep = ({
 const SpeciesStep = ({
   state, setState, data,
 }: StepProps & { data: Record<string, SpeciesData> | null }) => {
+  const [q, setQ] = useState("");
   if (!data) return <div className="panel">Loading species…</div>;
-  const entries = Object.entries(data);
+  const needle = q.trim().toLowerCase();
+  const entries = Object.entries(data).filter(([name]) => name.toLowerCase().includes(needle));
   const selected = state.species ? data[state.species] : null;
 
   return (
     <div>
       <h2 style={{ color: "var(--cream)", marginBottom: 16 }}>Choose Your Species</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="col" style={{ gap: 6 }}>
-          {entries.map(([name, sp]) => (
-            <button
-              key={name}
-              className={state.species === name ? "primary" : ""}
-              onClick={() => setState({ ...state, species: name })}
-              style={{ textAlign: "left", padding: "10px 14px" }}
-            >
-              <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700 }}>{name}</div>
-              <div className="dim" style={{ fontSize: 11 }}>
-                {sp.size} · {sp.speed} ft · {sp.creature_type}
-              </div>
-            </button>
-          ))}
+        <div className="col" style={{ gap: 8 }}>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search species…"
+            aria-label="Search species"
+            style={{ width: "100%" }}
+          />
+          {entries.length === 0 && <div className="dim" style={{ fontSize: 12, padding: 8 }}>No species match “{q}”.</div>}
+          {entries.map(([name, sp]) => {
+            const on = state.species === name;
+            return (
+              <button
+                key={name}
+                onClick={() => setState({ ...state, species: name })}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderColor: on ? "var(--gold)" : undefined,
+                  background: on ? "color-mix(in srgb, var(--gold) 14%, transparent)" : undefined,
+                }}
+              >
+                <span
+                  style={{
+                    flexShrink: 0,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    display: "grid",
+                    placeItems: "center",
+                    fontFamily: "Cinzel, serif",
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color: "var(--gold)",
+                    background: "color-mix(in srgb, var(--gold) 16%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--gold) 45%, transparent)",
+                  }}
+                >
+                  {name[0]}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: "Cinzel, serif", fontWeight: 700, color: on ? "var(--cream)" : undefined }}>{name}</span>
+                  <span className="dim" style={{ fontSize: 11 }}>{sp.size} · {sp.speed} ft · {sp.creature_type}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="panel">
