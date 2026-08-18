@@ -302,7 +302,36 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     return { error: linkErr?.message ?? null };
   };
 
-  // Place a library token asset at grid-center of the active scene. Copies
+  // The first cell at/around a preferred spot whose footprint doesn't overlap an
+  // existing creature or prop — so placing token after token fans them out
+  // instead of stacking them all on grid-center. Spell area markers don't block.
+  // Spirals outward by Chebyshev rings; falls back to the preferred cell if the
+  // board is packed.
+  const findFreeCell = (px: number, py: number, span: number): { x: number; y: number } => {
+    const clamp = (x: number, y: number) => ({
+      x: Math.min(Math.max(0, x), Math.max(0, cols - span)),
+      y: Math.min(Math.max(0, y), Math.max(0, rows - span)),
+    });
+    const free = (x: number, y: number) =>
+      !tokens.some((o) => {
+        if (o.kind === "spell") return false;
+        const os = findSize(o.size).cells;
+        return x < o.x + os && x + span > o.x && y < o.y + os && y + span > o.y;
+      });
+    const maxR = Math.max(cols, rows);
+    for (let r = 0; r <= maxR; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // ring perimeter only
+          const { x, y } = clamp(px + dx, py + dy);
+          if (free(x, y)) return { x, y };
+        }
+      }
+    }
+    return clamp(px, py);
+  };
+
+  // Place a library token asset near grid-center of the active scene. Copies
   // image, name, and 5e size onto the tokens row so scenes stay self-contained.
   const placeTokenFromLibrary = async (asset: TokenAsset): Promise<{ error: string | null }> => {
     if (!activeScene) return { error: "no active scene" };
@@ -359,8 +388,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       area,
       loot,
       disposition,
-      x: Math.max(0, Math.floor(cols / 2) - Math.floor(span / 2)),
-      y: Math.max(0, Math.floor(rows / 2) - Math.floor(span / 2)),
+      ...findFreeCell(Math.floor(cols / 2) - Math.floor(span / 2), Math.floor(rows / 2) - Math.floor(span / 2), span),
     });
   };
 
@@ -624,8 +652,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     cell?: { x: number; y: number }
   ): Promise<void> => {
     if (!activeScene) return;
-    const x = cell ? cell.x : Math.floor(cols / 2);
-    const y = cell ? cell.y : Math.floor(rows / 2);
+    // A dropped cell is honored as-is; a plain "place" fans out to a free cell
+    // near centre so PCs don't stack.
+    const { x, y } = cell ?? findFreeCell(Math.floor(cols / 2), Math.floor(rows / 2), 1);
     const { error } = await addToken({
       label: ch.name,
       image_url: ch.portrait ?? null,
@@ -1267,8 +1296,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     await addToken({
       label,
       color: newColor,
-      x: Math.floor(cols / 2),
-      y: Math.floor(rows / 2),
+      ...findFreeCell(Math.floor(cols / 2), Math.floor(rows / 2), 1),
     });
     setNewLabel("");
     setAddOpen(false);
