@@ -3,6 +3,7 @@ import type { CharacterAPI } from "../state/useCharacter";
 import { isEquippable, isWeapon } from "../lib/attacks";
 import { attackBonus, damageBonus, formatMod, abilityModFor } from "../lib/calc";
 import { SheetDrawer } from "./ui/SheetDrawer";
+import { useConfirm } from "../state/Confirm";
 
 /**
  * Detail drawer for one inventory item — the reference's Dagger panel.
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
+  const { confirm } = useConfirm();
   const weapon = isWeapon(item);
   const equippable = isEquippable(item);
 
@@ -65,8 +67,15 @@ export const ItemDrawer = ({ character: c, item, api, onClose }: Props) => {
           )}
           <button
             className="ghost"
-            onClick={() => {
-              if (confirm(`Remove ${item.name} from your inventory?`)) {
+            onClick={async () => {
+              if (
+                await confirm({
+                  title: "Remove item",
+                  message: `Remove ${item.name} from your inventory?`,
+                  confirmLabel: "Remove",
+                  danger: true,
+                })
+              ) {
                 api.removeItem(item.id);
                 onClose();
               }

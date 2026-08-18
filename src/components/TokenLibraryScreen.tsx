@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
+import { useConfirm } from "../state/Confirm";
 import { TokenStudioDialog } from "./TokenStudioDialog";
 import { TokenStatSheet } from "./TokenStatSheet";
 import { Icon, type IconName } from "./ui/Icon";
@@ -16,6 +17,7 @@ type TabKey = "monster" | "npc" | "item" | "prop" | "spell" | "other";
 
 export const TokenLibraryScreen = () => {
   const { assets, loading, deleteAsset } = useTokenAssets();
+  const { confirm } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [preview, setPreview] = useState<TokenAsset | null>(null);
   const [editAsset, setEditAsset] = useState<TokenAsset | null>(null);
@@ -378,9 +380,12 @@ export const TokenLibraryScreen = () => {
                     danger: true,
                     onClick: async () => {
                       if (
-                        confirm(
-                          `Delete "${a.name}"? Placed tokens on scenes keep their image but lose the link.`
-                        )
+                        await confirm({
+                          title: "Delete token",
+                          message: `Delete "${a.name}"? Placed tokens on scenes keep their image but lose the link.`,
+                          confirmLabel: "Delete",
+                          danger: true,
+                        })
                       ) {
                         await deleteAsset(a.id);
                       }

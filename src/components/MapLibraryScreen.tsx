@@ -6,6 +6,7 @@ import { CardMenu } from "./ui/CardMenu";
 import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
 import { LibraryBanner } from "./ui/LibraryBanner";
+import { useConfirm } from "../state/Confirm";
 
 /**
  * Top-level "Maps" screen. The DM's map library, decoupled from any game.
@@ -13,6 +14,7 @@ import { LibraryBanner } from "./ui/LibraryBanner";
  */
 export const MapLibraryScreen = () => {
   const { maps, loading, renameMap, deleteMap } = useMaps();
+  const { confirm, prompt } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [preview, setPreview] = useState<MapAsset | null>(null);
 
@@ -65,7 +67,7 @@ export const MapLibraryScreen = () => {
                   label: "Rename",
                   icon: "edit",
                   onClick: async () => {
-                    const next = prompt("Rename map:", m.name);
+                    const next = await prompt({ title: "Rename map", initialValue: m.name, confirmLabel: "Rename" });
                     if (next && next.trim() && next !== m.name) await renameMap(m.id, next.trim());
                   },
                 },
@@ -75,9 +77,12 @@ export const MapLibraryScreen = () => {
                   danger: true,
                   onClick: async () => {
                     if (
-                      confirm(
-                        `Delete "${m.name}"? Any scenes using it keep the image but lose the link.`
-                      )
+                      await confirm({
+                        title: "Delete map",
+                        message: `Delete "${m.name}"? Any scenes using it keep the image but lose the link.`,
+                        confirmLabel: "Delete",
+                        danger: true,
+                      })
                     ) {
                       await deleteMap(m.id);
                     }

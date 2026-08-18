@@ -4,6 +4,7 @@ import { CardMenu } from "./ui/CardMenu";
 import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
 import { LibraryBanner } from "./ui/LibraryBanner";
+import { useConfirm } from "../state/Confirm";
 
 interface Props {
   characters: Character[];
@@ -12,7 +13,9 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-export const CharacterRoster = ({ characters, onOpen, onCreate, onDelete }: Props) => (
+export const CharacterRoster = ({ characters, onOpen, onCreate, onDelete }: Props) => {
+  const { confirm } = useConfirm();
+  return (
   <div className="screen-enter" style={{ padding: 24 }}>
     <LibraryBanner
       image="/art/paladin.png"
@@ -65,8 +68,16 @@ export const CharacterRoster = ({ characters, onOpen, onCreate, onDelete }: Prop
                     label: "Delete",
                     icon: "delete",
                     danger: true,
-                    onClick: () => {
-                      if (confirm(`Delete ${c.name}? This cannot be undone.`)) onDelete(c.id);
+                    onClick: async () => {
+                      if (
+                        await confirm({
+                          title: "Delete character",
+                          message: `Delete ${c.name}? This cannot be undone.`,
+                          confirmLabel: "Delete",
+                          danger: true,
+                        })
+                      )
+                        onDelete(c.id);
                     },
                   },
                 ]}
@@ -112,4 +123,5 @@ export const CharacterRoster = ({ characters, onOpen, onCreate, onDelete }: Prop
       </div>
     )}
   </div>
-);
+  );
+};

@@ -11,6 +11,7 @@ import { findSize } from "../lib/tokenSmith";
 import { Icon } from "./ui/Icon";
 import { GameGlyph } from "./ui/GameGlyph";
 import { useToast } from "../state/Toast";
+import { useConfirm } from "../state/Confirm";
 import { useInitiative } from "../state/useInitiative";
 import { usePings } from "../state/usePings";
 import { usePartyOwners } from "../state/usePartyOwners";
@@ -208,6 +209,7 @@ const initialsOf = (label: string): string => {
 export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpdateCharacter }: Props) => {
   const isDM = game.my_role === "dm";
   const toast = useToast();
+  const { confirm, prompt } = useConfirm();
   const {
     scenes,
     activeScene,
@@ -3184,7 +3186,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   <span
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (confirm(`Delete scene "${s.name}"? Its tokens will be lost.`)) {
+                      if (
+                        await confirm({
+                          title: "Delete scene",
+                          message: `Delete "${s.name}"? Its tokens will be lost.`,
+                          confirmLabel: "Delete",
+                          danger: true,
+                        })
+                      ) {
                         await deleteScene(s.id);
                       }
                     }}
@@ -3227,12 +3236,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               <button
                 className="ghost"
                 onClick={async () => {
-                  const name = prompt("New scene name?", `Scene ${scenes.length + 1}`);
+                  setScenesOpen(false);
+                  const name = await prompt({
+                    title: "New scene",
+                    subtitle: "Give it a name",
+                    initialValue: `Scene ${scenes.length + 1}`,
+                    confirmLabel: "Create scene",
+                  });
                   if (!name) return;
                   const { scene, error } = await createScene(name);
                   if (scene) await setActiveScene(scene.id);
                   if (error) toast.error(error);
-                  setScenesOpen(false);
                 }}
                 style={{ fontSize: 12 }}
               >

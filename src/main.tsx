@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ToastProvider } from './state/Toast.tsx'
+import { ConfirmProvider } from './state/Confirm.tsx'
 import { ThemeProvider, applyThemeAttribute } from './state/Theme.tsx'
 import { RulesProvider } from './state/Rules.tsx'
 
@@ -18,9 +19,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <ToastProvider>
-        <RulesProvider>
-          <App />
-        </RulesProvider>
+        <ConfirmProvider>
+          <RulesProvider>
+            <App />
+          </RulesProvider>
+        </ConfirmProvider>
       </ToastProvider>
     </ThemeProvider>
   </StrictMode>,

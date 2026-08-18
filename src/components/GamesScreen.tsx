@@ -5,6 +5,7 @@ import { Card, CardBody, CardActions } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
 import { LibraryBanner } from "./ui/LibraryBanner";
+import { useConfirm } from "../state/Confirm";
 
 interface Props {
   characters: Character[];
@@ -155,6 +156,7 @@ const GameCard = ({
   onOpen: () => void;
   onLeave: () => Promise<{ error: string | null }>;
 }) => {
+  const { confirm } = useConfirm();
   const [copied, setCopied] = useState(false);
   const copy = () => {
     void navigator.clipboard.writeText(game.join_code);
@@ -236,8 +238,10 @@ const GameCard = ({
             variant="danger-ghost"
             size="sm"
             block
-            onClick={() => {
-              if (confirm(`Leave "${game.name}"?`)) void onLeave();
+            onClick={async () => {
+              if (await confirm({ title: "Leave game", message: `Leave "${game.name}"?`, confirmLabel: "Leave", danger: true })) {
+                void onLeave();
+              }
             }}
           >
             Leave

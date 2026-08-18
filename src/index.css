@@ -6233,3 +6233,28 @@ button.topbar-stat {
   border-radius: var(--radius);
   border: 1px solid var(--border);
 }
+
+/* Shared confirm / prompt dialog (replaces browser confirm()/prompt()). */
+.confirm { display: flex; flex-direction: column; gap: 16px; }
+.confirm-msg { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); }
+.confirm-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: 15px;
+}
+.confirm-input:focus { outline: none; border-color: var(--candle); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-danger {
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--ember);
+  background: var(--ember);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.confirm-danger:hover { filter: brightness(1.08); }
