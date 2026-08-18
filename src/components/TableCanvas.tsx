@@ -22,6 +22,7 @@ import { aggregateConditions, autoFailsSave, conditionName, parseCondition } fro
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
 import { useReactions } from "../state/useReactions";
+import { useCombatSignal } from "../state/useCombatSignal";
 import { type ReactionOffer, type ReactionResponse, lowestOpenSlot, lowestOpenSlotAtLeast, knowsShield, knowsCounterspell } from "../lib/reactions";
 import { useRules } from "../state/Rules";
 import { casterClass, slotsFor, spellSaveDC } from "../lib/spellcasting";
@@ -1369,6 +1370,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const reactionResolveRef = useRef<(resp: ReactionResponse) => void>(() => {});
   const [awaitingReaction, setAwaitingReaction] = useState<{ id: string; targetLabel: string } | null>(null);
   const reactions = useReactions(game.id, (resp) => reactionResolveRef.current(resp));
+  // Cross-client combat start (#76): a player's first harmful blow can't roll
+  // initiative (DM-only), so it fires this signal and the DM's client runs the
+  // ritual. The handler is assigned later (needs init/rollInitiativeFor) and read
+  // through a ref so the channel never resubscribes.
+  const beginCombatRitualRef = useRef<() => void>(() => {});
+  const combatSignal = useCombatSignal(game.id, () => beginCombatRitualRef.current());
   // Counterspell window (caster side): per-open-window promise resolver + caster
   // token + spell, a timeout, the "casting…" banner, and — after a counter — the
   // caster's own CON save. Reactor "No" clicks are dismissed locally (a decline
@@ -2426,23 +2433,33 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const doubleDmg = (expr: string) =>
     expr.replace(/^(\d+)d(\d+)/i, (_, n: string, s: string) => `${parseInt(n, 10) * 2}d${s}`);
 
+  // The actual combat-start ritual — DM-only (only the DM may write in_combat +
+  // roll the table's initiative). Monsters/NPCs auto-roll; player tokens are left
+  // blank so each player is prompted to roll on their own client. Runs both on
+  // the DM's own first blow and when a player's blow relays a start signal.
+  beginCombatRitualRef.current = () => {
+    if (!isDM || init.inCombat) return;
+    if (combatTokens.length < 2) return; // nothing to order against
+    void init.beginWithPlayerRolls(rollInitiativeFor).then((err) => {
+      if (err) toast.error(`Couldn't start combat: ${err}`);
+      else toast.success("Combat begins — roll for initiative!");
+    });
+  };
+
   // Auto-start combat on the first HARMFUL blow that actually LANDS ON A TARGET
   // — not the moment the action button is pressed. Held in a ref so the memoized
   // requestAttack (empty deps, to keep the cursor stable) always calls the latest
-  // closure over init/isDM rather than a stale one. Only the DM can roll
-  // initiative for the whole table (RLS), so player attacks just resolve; the
-  // DM's first strike kicks the fight off for everyone. Called from the target-
-  // resolution path (resolveAttack / resolveBurst), gated on the action dealing
-  // damage — so a utility cast (Charm Person, a heal, a restoration) never
-  // triggers a fight on its own.
+  // closure over init/isDM rather than a stale one. The DM starts the ritual
+  // directly; a PLAYER (who can't write initiative) relays a start signal to the
+  // DM's client instead. Called from the target-resolution path (resolveAttack /
+  // resolveBurst), gated on the action dealing damage — so a utility cast (Charm
+  // Person, a heal, a restoration) never triggers a fight on its own.
   const autoStartCombatRef = useRef<() => void>(() => {});
   autoStartCombatRef.current = () => {
-    if (init.inCombat || !isDM) return;
+    if (init.inCombat) return;
     if (combatTokens.length < 2) return; // nothing to order against
-    void init.rollAll(rollInitiativeFor).then((err) => {
-      if (err) toast.error(`Couldn't start combat: ${err}`);
-      else toast.success("Combat begins — initiative rolled for the table.");
-    });
+    if (isDM) beginCombatRitualRef.current();
+    else combatSignal.requestStart();
   };
   // A harmful action = one that deals damage (attacks, Magic Missile, a cone…).
   // Save-or-condition control (Charm/Hold Person), heals, and restorations don't
