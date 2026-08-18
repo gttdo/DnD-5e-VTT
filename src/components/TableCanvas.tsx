@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTokens, type Token } from "../state/useTokens";
+import { useTokens, isTokenDowned, type Token } from "../state/useTokens";
 import { useScenes } from "../state/useScenes";
 import type { Game } from "../state/useGames";
 import { MapPickerDialog } from "./MapPickerDialog";
@@ -453,7 +453,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const pendingRollers = useMemo(
     () =>
       init.inCombat
-        ? combatTokens.filter((t) => t.initiative == null && t.kind !== "prop" && t.kind !== "spell")
+        ? combatTokens.filter((t) => t.initiative == null && t.kind !== "prop" && t.kind !== "spell" && !isTokenDowned(t))
         : [],
     [init.inCombat, combatTokens]
   );

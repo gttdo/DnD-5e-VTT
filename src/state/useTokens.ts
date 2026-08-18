@@ -98,6 +98,16 @@ export interface Token {
   disposition?: "hostile" | "friendly" | null;
 }
 
+/** HP-based "downed": a statblock creature or a PC token already at 0 HP. Uses
+ *  only the token's own mirrored fields (no character roster), so it's safe to
+ *  call from initiative logic that doesn't have the sheets. A token with no HP
+ *  data at all (plain art/prop) is never downed. */
+export const isTokenDowned = (t: Token): boolean => {
+  if (t.statblock) return (t.hp_current ?? t.statblock.hp) <= 0;
+  if (t.hp_current != null) return t.hp_current <= 0;
+  return false;
+};
+
 export interface NewToken {
   label: string;
   x?: number;

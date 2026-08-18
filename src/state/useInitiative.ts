@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { supabase } from "../lib/supabase";
-import type { Token } from "./useTokens";
+import { isTokenDowned, type Token } from "./useTokens";
 import type { Scene } from "./useScenes";
 import { activeAt, advanceTurn, initiativeOrder } from "../lib/initiative";
 
@@ -64,8 +64,11 @@ export const useInitiative = (scene: Scene | null, tokens: Token[]): UseInitiati
     async (rollFor: (t: Token) => number): Promise<string | null> => {
       // Only fills blanks — a DM who has already set a boss's initiative by hand
       // shouldn't have it overwritten by "roll for everyone". Loose == null also
-      // catches undefined (pre-migration rows). Props and spell areas never roll.
-      const pending = tokens.filter((t) => t.initiative == null && t.kind !== "prop" && t.kind !== "spell");
+      // catches undefined (pre-migration rows). Props and spell areas never roll,
+      // and a creature already at 0 HP stays out of the fight.
+      const pending = tokens.filter(
+        (t) => t.initiative == null && t.kind !== "prop" && t.kind !== "spell" && !isTokenDowned(t)
+      );
       const results = await Promise.all(
         pending.map((t) => supabase.from("tokens").update({ initiative: rollFor(t) }).eq("id", t.id))
       );
@@ -85,7 +88,7 @@ export const useInitiative = (scene: Scene | null, tokens: Token[]): UseInitiati
       // its controller gets a "Roll for initiative" prompt on their own client
       // (see TableCanvas). Props/spell areas never roll. Only fills blanks.
       const auto = tokens.filter(
-        (t) => t.initiative == null && !t.character_id && t.kind !== "prop" && t.kind !== "spell"
+        (t) => t.initiative == null && !t.character_id && t.kind !== "prop" && t.kind !== "spell" && !isTokenDowned(t)
       );
       const results = await Promise.all(
         auto.map((t) => supabase.from("tokens").update({ initiative: rollFor(t) }).eq("id", t.id))
