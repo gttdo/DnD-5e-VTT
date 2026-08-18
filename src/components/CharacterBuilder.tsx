@@ -26,6 +26,7 @@ import {
   spellAllotment,
 } from "../lib/characterBuilder";
 import { spellsForClass } from "../lib/spellcasting";
+import { startingKitSummary } from "../lib/startingEquipment";
 import { abilityMod } from "../lib/calc";
 
 type Step = "Home" | "Class" | "Background" | "Species" | "Abilities" | "Spells" | "Equipment" | "Review";
@@ -755,18 +756,27 @@ const EquipmentStep = ({
       </div>
 
       <div className="col" style={{ gap: 10 }}>
-        {bg && (
-          <label className={`panel ${state.equipmentChoice === "A" ? "" : ""}`} style={{ cursor: "pointer", borderColor: state.equipmentChoice === "A" ? "var(--accent)" : undefined }}>
-            <div className="row" style={{ gap: 12 }}>
+        {cls && (
+          <label className="panel" style={{ cursor: "pointer", borderColor: state.equipmentChoice !== "gold" ? "var(--accent)" : undefined }}>
+            <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
               <input
                 type="radio"
                 name="eq"
-                checked={state.equipmentChoice === "A"}
+                checked={state.equipmentChoice !== "gold"}
                 onChange={() => setState({ ...state, equipmentChoice: "A" })}
+                style={{ marginTop: 3 }}
               />
               <div>
-                <div style={{ fontWeight: 600 }}>Background Equipment Pack</div>
-                <div className="dim" style={{ fontSize: 12 }}>{bg.equipment}</div>
+                <div style={{ fontWeight: 600 }}>{state.className} starting equipment</div>
+                <div className="dim" style={{ fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>
+                  {startingKitSummary(state.className).join(" · ") || "A ready-to-play kit."}
+                </div>
+                <div className="dim" style={{ fontSize: 11, marginTop: 4, color: "var(--good, #4ade80)" }}>
+                  Your weapon comes equipped — ready in Actions from turn one.
+                </div>
+                {bg?.equipment && (
+                  <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>Plus your {state.background} kit: {bg.equipment}</div>
+                )}
               </div>
             </div>
           </label>

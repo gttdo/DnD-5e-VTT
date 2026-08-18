@@ -8,6 +8,7 @@ import type {
 import { ABILITIES } from "../types/character";
 import type { BackgroundData, ClassData, SpeciesData } from "../data/loader";
 import { abilityMod } from "./calc";
+import { startingInventory } from "./startingEquipment";
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8] as const;
 
@@ -214,7 +215,10 @@ export const buildCharacter = (
     defenses: { resistances: [], immunities: [], vulnerabilities: [] },
 
     attacks: [],
-    inventory: [],
+    // Real starting gear (#110): the "gold" option gives coin to shop with; any
+    // other choice materializes the class kit — a primary weapon comes in
+    // equipped, so it lands in the character's Actions right away.
+    inventory: state.equipmentChoice === "gold" ? [] : startingInventory(state.className),
     // Level-1 spellcasting from the Spells step (casters only). Everything the
     // character has starts available; prepared casters can re-prepare on the
     // sheet. Cantrips + level-1 picks both live in `known`. (#110)
