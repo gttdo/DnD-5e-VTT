@@ -7,10 +7,12 @@ import {
   type ClassData,
   type FeatData,
   type SpeciesData,
+  type SpellData,
   loadBackgrounds,
   loadClasses,
   loadFeats,
   loadSpecies,
+  loadSpells,
 } from "../data/loader";
 import {
   type BuilderState,
@@ -21,11 +23,12 @@ import {
   POINT_BUY_BUDGET,
   roll4d6DropLowest,
   STANDARD_ARRAY,
+  spellAllotment,
 } from "../lib/characterBuilder";
+import { spellsForClass } from "../lib/spellcasting";
 import { abilityMod } from "../lib/calc";
 
-const STEPS = ["Home", "Class", "Background", "Species", "Abilities", "Equipment", "Review"] as const;
-type Step = typeof STEPS[number];
+type Step = "Home" | "Class" | "Background" | "Species" | "Abilities" | "Spells" | "Equipment" | "Review";
 
 interface Props {
   onCancel: () => void;
@@ -39,17 +42,37 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
   const [species, setSpeciesData] = useState<Record<string, SpeciesData> | null>(null);
   const [backgrounds, setBackgrounds] = useState<Record<string, BackgroundData> | null>(null);
   const [feats, setFeats] = useState<Record<string, FeatData> | null>(null);
+  const [spellData, setSpellData] = useState<SpellData[] | null>(null);
 
   useEffect(() => {
     loadClasses().then(setClasses);
     loadSpecies().then(setSpeciesData);
     loadBackgrounds().then(setBackgrounds);
     loadFeats().then(setFeats);
+    loadSpells().then(setSpellData);
   }, []);
 
-  const stepIndex = STEPS.indexOf(step);
+  // A Spells step slots in after Abilities only for classes that cast at level 1.
+  const allot = spellAllotment(state.className);
+  const isCaster = !!allot;
+  const steps = useMemo<Step[]>(
+    () =>
+      isCaster
+        ? ["Home", "Class", "Background", "Species", "Abilities", "Spells", "Equipment", "Review"]
+        : ["Home", "Class", "Background", "Species", "Abilities", "Equipment", "Review"],
+    [isCaster]
+  );
+  // If the active step vanished (e.g. switched to a non-caster class while on
+  // Spells), fall back to Class so navigation stays valid.
+  useEffect(() => {
+    if (!steps.includes(step)) setStep("Class");
+  }, [steps, step]);
 
-  const canFinish = state.name && state.className && state.background && state.species;
+  const stepIndex = Math.max(0, steps.indexOf(step));
+
+  const spellsComplete =
+    !isCaster || (state.cantrips.length >= (allot?.cantrips ?? 0) && state.spells.length >= (allot?.spells ?? 0));
+  const canFinish = !!(state.name && state.className && state.background && state.species && spellsComplete);
 
   // Per-step completion — drives the check marks in the rail and the summary
   // progress chip, so the builder reads like a checklist you can see through.
@@ -60,10 +83,12 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
     Background: !!state.background,
     Species: !!state.species,
     Abilities: abilitiesTouched,
+    Spells: spellsComplete,
     Equipment: true,
     Review: !!canFinish,
   };
-  const doneCount = STEPS.filter((s) => s !== "Review" && done[s]).length;
+  const doneCount = steps.filter((s) => s !== "Review" && done[s]).length;
+  const totalPicks = steps.length - 1;
   const initials = state.name
     ? state.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("")
     : "?";
@@ -92,7 +117,7 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
             <h2 style={{ color: "var(--cream)", fontSize: 18 }}>Character Builder</h2>
           </div>
           <div className="row" style={{ gap: 4 }}>
-            {STEPS.map((s, i) => (
+            {steps.map((s, i) => (
               <button
                 key={s}
                 className={`tab ${step === s ? "active" : ""}`}
@@ -179,7 +204,7 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
             whiteSpace: "nowrap",
           }}
         >
-          {canFinish ? "Ready" : `${doneCount}/6 chosen`}
+          {canFinish ? "Ready" : `${doneCount}/${totalPicks} chosen`}
         </span>
       </div>
 
@@ -191,6 +216,9 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
           {step === "Background" && <BackgroundStep state={state} setState={setState} data={backgrounds} />}
           {step === "Species" && <SpeciesStep state={state} setState={setState} data={species} />}
           {step === "Abilities" && <AbilitiesStep state={state} setState={setState} backgrounds={backgrounds} />}
+          {step === "Spells" && allot && (
+            <SpellsStep state={state} setState={setState} spellData={spellData} className={state.className} allot={allot} />
+          )}
           {step === "Equipment" && <EquipmentStep state={state} setState={setState} classes={classes} backgrounds={backgrounds} />}
           {step === "Review" && (
             <ReviewStep
@@ -210,7 +238,7 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
         <div className="row" style={{ justifyContent: "space-between" }}>
           <button
             disabled={stepIndex === 0}
-            onClick={() => setStep(STEPS[stepIndex - 1])}
+            onClick={() => setStep(steps[stepIndex - 1])}
             style={{
               visibility: stepIndex === 0 ? "hidden" : "visible",
               display: "inline-flex",
@@ -222,12 +250,12 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
             Previous
           </button>
           <div className="dim" style={{ fontSize: 12 }}>
-            Step {stepIndex + 1} of {STEPS.length}
+            Step {stepIndex + 1} of {steps.length}
           </div>
-          {stepIndex < STEPS.length - 1 ? (
+          {stepIndex < steps.length - 1 ? (
             <button
               className="primary"
-              onClick={() => setStep(STEPS[stepIndex + 1])}
+              onClick={() => setStep(steps[stepIndex + 1])}
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               Next
@@ -762,6 +790,93 @@ const EquipmentStep = ({
           </label>
         )}
       </div>
+    </div>
+  );
+};
+
+// ---- Spells (casters only) --------------------------------------------------
+const SpellsStep = ({
+  state,
+  setState,
+  spellData,
+  className,
+  allot,
+}: StepProps & {
+  spellData: SpellData[] | null;
+  className: string | null;
+  allot: { cantrips: number; spells: number; prepares: boolean };
+}) => {
+  const list = useMemo(
+    () => (spellData && className ? spellsForClass(spellData, className) : []),
+    [spellData, className]
+  );
+  const cantrips = list.filter((s) => s.level === 0);
+  const lvl1 = list.filter((s) => s.level === 1);
+
+  const toggle = (key: "cantrips" | "spells", name: string, max: number) => {
+    setState((st) => {
+      const cur = st[key];
+      if (cur.includes(name)) return { ...st, [key]: cur.filter((n) => n !== name) };
+      if (cur.length >= max) return st; // at the cap — ignore extra picks
+      return { ...st, [key]: [...cur, name] };
+    });
+  };
+
+  const section = (key: "cantrips" | "spells", title: string, cap: number, items: SpellData[]) => {
+    const picked = state[key];
+    return (
+      <div style={{ marginBottom: 20 }}>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <h3 style={{ color: "var(--cream)", fontSize: 15 }}>{title}</h3>
+          <span className="dim mono" style={{ fontSize: 12, color: picked.length >= cap ? "var(--good, #4ade80)" : undefined }}>
+            {picked.length} / {cap}
+          </span>
+        </div>
+        {items.length === 0 ? (
+          <div className="dim" style={{ fontSize: 13 }}>No options in the dataset for this class.</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+            {items.map((sp) => {
+              const on = picked.includes(sp.name);
+              const full = !on && picked.length >= cap;
+              return (
+                <button
+                  key={sp.name}
+                  className={`feature-card ${on ? "selected" : ""}`}
+                  onClick={() => toggle(key, sp.name, cap)}
+                  disabled={full}
+                  style={{
+                    textAlign: "left",
+                    opacity: full ? 0.45 : 1,
+                    borderColor: on ? "var(--gold)" : undefined,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Icon name={on ? "check" : "sparkles"} size={14} />
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: "block", color: "var(--cream)", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sp.name}</span>
+                    <span className="dim" style={{ fontSize: 11 }}>{sp.school}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="panel">
+      <h2 style={{ color: "var(--cream)", marginBottom: 4 }}>Choose Your Spells</h2>
+      <p className="dim" style={{ fontSize: 13, marginBottom: 16 }}>
+        {className} · pick {allot.cantrips} cantrip{allot.cantrips === 1 ? "" : "s"} and {allot.spells} level-1 spell{allot.spells === 1 ? "" : "s"}.
+        {allot.prepares ? " You can re-prepare spells later from the character sheet." : ""}
+      </p>
+      {section("cantrips", "Cantrips", allot.cantrips, cantrips)}
+      {section("spells", "Level 1 Spells", allot.spells, lvl1)}
     </div>
   );
 };

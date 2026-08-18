@@ -42,9 +42,30 @@ export interface BuilderState {
   abilities: Record<Ability, number>;
   /** Skills the player picked from the class's skill list */
   skillChoices: SkillName[];
+  /** Cantrips + level-1 spells chosen (by name) for a caster at level 1. */
+  cantrips: string[];
+  spells: string[];
   /** "A", "B", or "gold" — depends on class */
   equipmentChoice: "A" | "B" | "gold";
 }
+
+/**
+ * Level-1 spell allotment per class (2014 SRD). Only the classes that actually
+ * cast at level 1 appear — half-casters (Paladin, Ranger) get no spells until
+ * level 2, and third-casters key off a subclass, so both are omitted. `prepares`
+ * marks the prepared casters (their starting picks are a loadout the player can
+ * re-prepare later on the sheet, not a fixed "known" list).
+ */
+export const SPELL_ALLOTMENT: Record<string, { cantrips: number; spells: number; prepares: boolean }> = {
+  Bard: { cantrips: 2, spells: 4, prepares: false },
+  Cleric: { cantrips: 3, spells: 2, prepares: true },
+  Druid: { cantrips: 2, spells: 2, prepares: true },
+  Sorcerer: { cantrips: 4, spells: 2, prepares: false },
+  Warlock: { cantrips: 2, spells: 2, prepares: false },
+  Wizard: { cantrips: 3, spells: 6, prepares: true },
+};
+export const spellAllotment = (className: string | null) =>
+  className ? SPELL_ALLOTMENT[className] ?? null : null;
 
 export const emptyBuilderState = (): BuilderState => ({
   name: "",
@@ -55,6 +76,8 @@ export const emptyBuilderState = (): BuilderState => ({
   abilityMethod: "standard",
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
   skillChoices: [],
+  cantrips: [],
+  spells: [],
   equipmentChoice: "A",
 });
 
@@ -192,6 +215,17 @@ export const buildCharacter = (
 
     attacks: [],
     inventory: [],
+    // Level-1 spellcasting from the Spells step (casters only). Everything the
+    // character has starts available; prepared casters can re-prepare on the
+    // sheet. Cantrips + level-1 picks both live in `known`. (#110)
+    spellcasting: SPELL_ALLOTMENT[state.className]
+      ? {
+          known: [...state.cantrips, ...state.spells],
+          prepared: [...state.cantrips, ...state.spells],
+          slotsUsed: {},
+          concentratingOn: null,
+        }
+      : undefined,
     currency:
       state.equipmentChoice === "gold"
         ? { cp: 0, sp: 0, ep: 0, gp: cls.starting_gold, pp: 0 }
