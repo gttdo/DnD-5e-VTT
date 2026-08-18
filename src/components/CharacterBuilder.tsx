@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Ability, Character, SkillName } from "../types/character";
 import { Icon } from "./ui/Icon";
-import { ABILITIES, ABILITY_FULL } from "../types/character";
+import { ABILITIES, ABILITY_FULL, SKILLS } from "../types/character";
 import {
   type BackgroundData,
   type ClassData,
@@ -73,17 +73,29 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
 
   const spellsComplete =
     !isCaster || (state.cantrips.length >= (allot?.cantrips ?? 0) && state.spells.length >= (allot?.spells ?? 0));
-  const canFinish = !!(state.name && state.className && state.background && state.species && spellsComplete);
+  // Skills: the player must pick the class's full quota. Abilities: they must
+  // have actually assigned scores (not the untouched all-10 default).
+  const skillQuota = state.className && classes ? classes[state.className]?.skill_choices.count ?? 0 : 0;
+  const skillsComplete = !state.className || state.skillChoices.length >= skillQuota;
+  const abilitiesComplete = ABILITIES.reduce((s, a) => s + state.abilities[a], 0) !== 60;
+  const canFinish = !!(
+    state.name &&
+    state.className &&
+    state.background &&
+    state.species &&
+    spellsComplete &&
+    skillsComplete &&
+    abilitiesComplete
+  );
 
   // Per-step completion — drives the check marks in the rail and the summary
   // progress chip, so the builder reads like a checklist you can see through.
-  const abilitiesTouched = ABILITIES.reduce((s, a) => s + state.abilities[a], 0) !== 60;
   const done: Record<Step, boolean> = {
     Home: !!state.name,
-    Class: !!state.className,
+    Class: !!state.className && skillsComplete,
     Background: !!state.background,
     Species: !!state.species,
-    Abilities: abilitiesTouched,
+    Abilities: abilitiesComplete,
     Spells: spellsComplete,
     Equipment: true,
     Review: !!canFinish,
@@ -229,6 +241,13 @@ export const CharacterBuilder = ({ onCancel, onFinish }: Props) => {
               backgrounds={backgrounds}
               onFinish={finish}
               canFinish={!!canFinish}
+              extraMissing={[
+                ...(state.className && !skillsComplete
+                  ? [`${skillQuota - state.skillChoices.length} more skill${skillQuota - state.skillChoices.length === 1 ? "" : "s"}`]
+                  : []),
+                ...(!abilitiesComplete ? ["Ability scores"] : []),
+                ...(isCaster && !spellsComplete ? ["Spells"] : []),
+              ]}
             />
           )}
         </div>
@@ -343,9 +362,12 @@ const ClassStep = ({
   const entries = Object.entries(data);
   const selected = state.className ? data[state.className] : null;
 
-  const skillList = selected?.skill_choices.list === "any"
-    ? null
-    : (selected?.skill_choices.list ?? null);
+  // "any" (Bard) means pick from the whole skill list — surface all of them
+  // instead of the old "coming soon" stub.
+  const skillList =
+    selected?.skill_choices.list === "any"
+      ? SKILLS.map((s) => s.name)
+      : (selected?.skill_choices.list ?? null);
 
   const toggleSkill = (s: string) => {
     if (!selected) return;
@@ -892,7 +914,7 @@ const SpellsStep = ({
 };
 
 const ReviewStep = ({
-  state, classes, species, backgrounds, onFinish, canFinish,
+  state, classes, species, backgrounds, onFinish, canFinish, extraMissing,
 }: {
   state: BuilderState;
   classes: Record<string, ClassData> | null;
@@ -900,12 +922,14 @@ const ReviewStep = ({
   backgrounds: Record<string, BackgroundData> | null;
   onFinish: () => void;
   canFinish: boolean;
+  extraMissing: string[];
 }) => {
   const missing: string[] = [];
   if (!state.name) missing.push("Name");
   if (!state.className) missing.push("Class");
   if (!state.background) missing.push("Background");
   if (!state.species) missing.push("Species");
+  missing.push(...extraMissing);
 
   return (
     <div>
