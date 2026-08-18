@@ -601,7 +601,7 @@ export const TableHud = ({
         label: `${name}${upTxt}`,
         attackBonus: 0,
         burst: true,
-        placeArea: { shape: mech.area.shape, size: mech.area.size, damageType: mech.damageType, level, movable: mech.movable, damage: mech.damage },
+        placeArea: { shape: mech.area.shape, size: mech.area.size, damageType: mech.damageType, level, movable: mech.movable, damage: mech.damage, concSpell: isConc(name) ? name : undefined },
         save: mech.save,
         dc: spellDc ?? undefined,
         condition: mech.condition,
@@ -1292,6 +1292,8 @@ export const MonsterHud = ({
         label: spellName,
         attackBonus: 0,
         burst: true,
+        // Monster caster: no character sheet → no concentration link (#125); the
+        // DM removes monster areas by hand.
         placeArea: { shape: mech.area.shape, size: mech.area.size, damageType: mech.damageType, level: lvl, movable: mech.movable, damage: mech.damage },
         save: mech.save,
         dc: dc ?? undefined,

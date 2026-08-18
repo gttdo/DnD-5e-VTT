@@ -44,6 +44,11 @@ export interface TokenArea {
     /** What a SUCCESSFUL save yields for the damage — "half" or "none". */
     onSave?: "none" | "half";
   } | null;
+  /** Concentration link (#125): the caster's character + the spell that sustains
+   *  this area. When that character stops concentrating on this spell, the
+   *  caster's own client removes the token. Absent on non-concentration areas
+   *  (Grease) and monster-cast areas (the DM removes those by hand). */
+  conc?: { characterId: string; spell: string } | null;
 }
 
 export interface Token {

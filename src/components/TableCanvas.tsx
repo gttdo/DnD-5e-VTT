@@ -2509,10 +2509,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onSave: (spec.placeArea.damage ? "half" : "none") as "half" | "none",
             }
           : null;
+      // Concentration link (#125): tie a concentration area to the caster's
+      // character so their own client tears it down when they stop concentrating.
+      // Only for a character caster (monsters' areas are removed by the DM).
+      const casterCharId = attackerId ? tokens.find((t) => t.id === attackerId)?.character_id ?? null : null;
+      const conc =
+        spec.placeArea.concSpell && casterCharId
+          ? { characterId: casterCharId, spell: spec.placeArea.concSpell }
+          : null;
       void addToken({
         label: spec.label,
         kind: "spell",
-        area: { shape: spec.placeArea.shape, size: spec.placeArea.size, damageType: spec.placeArea.damageType, level: spec.placeArea.level, facing: 0, movable: spec.placeArea.movable, effect },
+        area: { shape: spec.placeArea.shape, size: spec.placeArea.size, damageType: spec.placeArea.damageType, level: spec.placeArea.level, facing: 0, movable: spec.placeArea.movable, effect, conc },
         size: "medium",
         x,
         y,
@@ -2674,6 +2682,24 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDM, init.inCombat, init.round, init.activeToken?.id]);
+
+  // #125: tear down a concentration area when its caster stops concentrating on
+  // it. Only the caster's OWN client acts — it holds the character's live
+  // concentration state, and any game member may delete the token. The `!ch`
+  // guard skips until the sheet has loaded, so a not-yet-synced character can't
+  // nuke a freshly placed area.
+  useEffect(() => {
+    for (const area of tokens) {
+      const conc = area.area?.conc;
+      if (!conc || area.kind !== "spell") continue;
+      if (!ownedCharacterIds.has(conc.characterId)) continue;
+      const ch = characters.find((c) => c.id === conc.characterId);
+      if (!ch) continue;
+      if ((ch.spellcasting?.concentratingOn ?? null) !== conc.spell) {
+        void deleteToken(area.id);
+      }
+    }
+  }, [tokens, characters, ownedCharacterIds, deleteToken]);
 
   const resolveAttack = (by: string, spec: AttackSpec, target: Token, attackerId?: string) => {
     // A harmful strike that reaches a target starts combat (utility casts don't).

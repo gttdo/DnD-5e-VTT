@@ -70,7 +70,11 @@ export interface AttackSpec {
   /** A LINGERING area spell (Web, Wall of Fire…): instead of a one-shot burst,
    *  the resolver drops a persistent area token at the aimed point. `movable`
    *  marks the rare relocatable areas (Moonbeam). */
-  placeArea?: { shape: SpellAreaShape; size: number; damageType?: string; level?: number; movable?: boolean; damage?: string };
+  placeArea?: { shape: SpellAreaShape; size: number; damageType?: string; level?: number; movable?: boolean; damage?: string;
+    /** The BARE spell name (no upcast suffix) when this area needs concentration —
+     *  matched against the caster's `concentratingOn` to auto-remove it (#125).
+     *  Absent for non-concentration areas. */
+    concSpell?: string };
 }
 
 /** One line for the dice log: a human label plus the raw dice result. */
