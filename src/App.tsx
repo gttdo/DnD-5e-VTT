@@ -4,6 +4,7 @@ import { CharacterRoster } from "./components/CharacterRoster";
 import { CharacterBuilder } from "./components/CharacterBuilder";
 import { CharacterCreateMethod } from "./components/CharacterCreateMethod";
 import { CharacterImport } from "./components/CharacterImport";
+import { CharacterQuickBuild } from "./components/CharacterQuickBuild";
 import { GamesScreen } from "./components/GamesScreen";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
@@ -25,7 +26,7 @@ import { Icon } from "./components/ui/Icon";
 import { generateCharacterBackground } from "./lib/classArt";
 import { supabase } from "./lib/supabase";
 
-type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "import" | "builder" | "sheet" | "table";
+type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "quick" | "import" | "builder" | "sheet" | "table";
 
 // Remember the last view across reloads so refreshing lands you back where you
 // were — not always on a character sheet. Stored in localStorage (the app is
@@ -57,6 +58,7 @@ const sectionForScreen = (screen: Screen): ShellSection => {
     case "builder":
     case "create-method":
     case "import":
+    case "quick":
       return "characters";
     case "maps":
       return "maps";
@@ -295,8 +297,19 @@ function App() {
               setScreen("builder");
             }}
             onPremade={() => setScreen("roster")}
+            onQuick={() => setScreen("quick")}
             onImport={() => setScreen("import")}
             onCancel={() => setScreen("roster")}
+          />
+        )}
+
+        {!showLanding && screen === "quick" && (
+          <CharacterQuickBuild
+            onCancel={() => setScreen("create-method")}
+            onBuilt={(state) => {
+              setImportedState(state);
+              setScreen("builder");
+            }}
           />
         )}
 
