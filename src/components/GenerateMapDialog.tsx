@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useMaps, type MapAsset } from "../state/useMaps";
 import { Dialog } from "./ui/Dialog";
 import { Icon } from "./ui/Icon";
+import { GenerationProgress } from "./ui/GenerationProgress";
 import {
   STYLE_PRESETS,
   SIZE_PRESETS,
@@ -343,12 +344,12 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
             >
               {busy ? "Generating…" : "Generate map"}
             </button>
-            {busy && (
-              <span className="dim" style={{ fontSize: 12 }}>
-                Painting your battle map… don't close this window.
-              </span>
-            )}
           </div>
+          {busy && (
+            <div style={{ marginTop: 12 }}>
+              <GenerationProgress aspect={size.replace("x", " / ")} maxWidth={360} />
+            </div>
+          )}
         </>
       )}
 

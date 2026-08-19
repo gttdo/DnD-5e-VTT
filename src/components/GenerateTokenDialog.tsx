@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
 import { Dialog } from "./ui/Dialog";
+import { GenerationProgress } from "./ui/GenerationProgress";
 import {
   TOKEN_SIZES,
   CREATURE_TYPES,
@@ -220,12 +221,12 @@ export const GenerateTokenDialog = ({ applyToScene, onClose }: Props) => {
               >
                 {busy ? "Generating…" : "Generate token"}
               </button>
-              {busy && (
-                <span className="dim" style={{ fontSize: 12 }}>
-                  Sculpting your creature… don't close this window.
-                </span>
-              )}
             </div>
+            {busy && (
+              <div style={{ marginTop: 12 }}>
+                <GenerationProgress aspect="1 / 1" maxWidth={200} />
+              </div>
+            )}
           </>
         )}
 
