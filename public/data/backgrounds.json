@@ -1,30 +1,226 @@
 {
-  "Acolyte": {
-    "ability_scores": ["Intelligence", "Wisdom", "Charisma"],
-    "feat": "Magic Initiate (Cleric)",
-    "skill_proficiencies": ["Insight", "Religion"],
-    "tool_proficiency": "Calligrapher's Supplies",
-    "equipment": "(A) Calligrapher's Supplies, prayer book, Holy Symbol, 10 sheets of parchment, robe, 8 GP — or (B) 50 GP"
-  },
-  "Criminal": {
-    "ability_scores": ["Dexterity", "Constitution", "Intelligence"],
-    "feat": "Alert",
-    "skill_proficiencies": ["Sleight of Hand", "Stealth"],
-    "tool_proficiency": "Thieves' Tools",
-    "equipment": "(A) 2 Daggers, Thieves' Tools, Crowbar, dark common clothes with hood, 16 GP — or (B) 50 GP"
-  },
-  "Sage": {
-    "ability_scores": ["Constitution", "Intelligence", "Wisdom"],
-    "feat": "Magic Initiate (Wizard)",
-    "skill_proficiencies": ["Arcana", "History"],
-    "tool_proficiency": "Calligrapher's Supplies",
-    "equipment": "(A) Quarterstaff, Calligrapher's Supplies, history book, 8 sheets of parchment, robe, 8 GP — or (B) 50 GP"
-  },
-  "Soldier": {
-    "ability_scores": ["Strength", "Dexterity", "Constitution"],
-    "feat": "Savage Attacker",
-    "skill_proficiencies": ["Athletics", "Intimidation"],
-    "tool_proficiency": "Choose one Gaming Set",
-    "equipment": "(A) Spear, Shortbow, 20 Arrows, Gaming Set, Healer's Kit, traveler's clothes, 14 GP — or (B) 50 GP"
-  }
+ "Acolyte": {
+  "ability_scores": [
+   "Intelligence",
+   "Wisdom",
+   "Charisma"
+  ],
+  "feat": "Magic Initiate (Cleric)",
+  "skill_proficiencies": [
+   "Insight",
+   "Religion"
+  ],
+  "tool_proficiency": "Calligrapher's Supplies",
+  "equipment": "(A) Calligrapher's Supplies, prayer book, Holy Symbol, 10 sheets of parchment, robe, 8 GP — or (B) 50 GP"
+ },
+ "Artisan": {
+  "ability_scores": [
+   "Strength",
+   "Dexterity",
+   "Intelligence"
+  ],
+  "feat": "Crafter",
+  "skill_proficiencies": [
+   "Investigation",
+   "Persuasion"
+  ],
+  "tool_proficiency": "Choose one kind of Artisan's Tools",
+  "equipment": "(A) Artisan's Tools (same as above), 2 Pouches, traveler's clothes, 32 GP — or (B) 50 GP"
+ },
+ "Charlatan": {
+  "ability_scores": [
+   "Dexterity",
+   "Constitution",
+   "Charisma"
+  ],
+  "feat": "Skilled",
+  "skill_proficiencies": [
+   "Deception",
+   "Sleight of Hand"
+  ],
+  "tool_proficiency": "Forgery Kit",
+  "equipment": "(A) Forgery Kit, costume, fine clothes, 15 GP — or (B) 50 GP"
+ },
+ "Criminal": {
+  "ability_scores": [
+   "Dexterity",
+   "Constitution",
+   "Intelligence"
+  ],
+  "feat": "Alert",
+  "skill_proficiencies": [
+   "Sleight of Hand",
+   "Stealth"
+  ],
+  "tool_proficiency": "Thieves' Tools",
+  "equipment": "(A) 2 Daggers, Thieves' Tools, Crowbar, dark common clothes with hood, 16 GP — or (B) 50 GP"
+ },
+ "Entertainer": {
+  "ability_scores": [
+   "Strength",
+   "Dexterity",
+   "Charisma"
+  ],
+  "feat": "Musician",
+  "skill_proficiencies": [
+   "Acrobatics",
+   "Performance"
+  ],
+  "tool_proficiency": "Choose one Musical Instrument",
+  "equipment": "(A) Musical Instrument (same as above), 2 Costumes, Mirror, Perfume, traveler's clothes, 11 GP — or (B) 50 GP"
+ },
+ "Farmer": {
+  "ability_scores": [
+   "Strength",
+   "Constitution",
+   "Wisdom"
+  ],
+  "feat": "Tough",
+  "skill_proficiencies": [
+   "Animal Handling",
+   "Nature"
+  ],
+  "tool_proficiency": "Carpenter's Tools",
+  "equipment": "(A) Sickle, Carpenter's Tools, Healer's Kit, Iron Pot, Shovel, traveler's clothes, 30 GP — or (B) 50 GP"
+ },
+ "Guard": {
+  "ability_scores": [
+   "Strength",
+   "Intelligence",
+   "Wisdom"
+  ],
+  "feat": "Alert",
+  "skill_proficiencies": [
+   "Athletics",
+   "Perception"
+  ],
+  "tool_proficiency": "Choose one Gaming Set",
+  "equipment": "(A) Spear, Light Crossbow, 20 Bolts, Gaming Set, Hooded Lantern, Manacles, traveler's clothes, 12 GP — or (B) 50 GP"
+ },
+ "Guide": {
+  "ability_scores": [
+   "Dexterity",
+   "Constitution",
+   "Wisdom"
+  ],
+  "feat": "Magic Initiate (Druid)",
+  "skill_proficiencies": [
+   "Stealth",
+   "Survival"
+  ],
+  "tool_proficiency": "Cartographer's Tools",
+  "equipment": "(A) Shortbow, 20 Arrows, Cartographer's Tools, Bedroll, traveler's clothes, Tent, 3 GP — or (B) 50 GP"
+ },
+ "Hermit": {
+  "ability_scores": [
+   "Constitution",
+   "Wisdom",
+   "Charisma"
+  ],
+  "feat": "Healer",
+  "skill_proficiencies": [
+   "Medicine",
+   "Religion"
+  ],
+  "tool_proficiency": "Herbalism Kit",
+  "equipment": "(A) Quarterstaff, Herbalism Kit, Bedroll, book of philosophy, Lamp, 3 flasks of Oil, traveler's clothes, 16 GP — or (B) 50 GP"
+ },
+ "Merchant": {
+  "ability_scores": [
+   "Constitution",
+   "Intelligence",
+   "Charisma"
+  ],
+  "feat": "Lucky",
+  "skill_proficiencies": [
+   "Animal Handling",
+   "Persuasion"
+  ],
+  "tool_proficiency": "Navigator's Tools",
+  "equipment": "(A) Navigator's Tools, 2 Pouches, traveler's clothes, 22 GP — or (B) 50 GP"
+ },
+ "Noble": {
+  "ability_scores": [
+   "Strength",
+   "Intelligence",
+   "Charisma"
+  ],
+  "feat": "Skilled",
+  "skill_proficiencies": [
+   "History",
+   "Persuasion"
+  ],
+  "tool_proficiency": "Choose one Gaming Set",
+  "equipment": "(A) Gaming Set, fine clothes, Perfume, 29 GP — or (B) 50 GP"
+ },
+ "Sage": {
+  "ability_scores": [
+   "Constitution",
+   "Intelligence",
+   "Wisdom"
+  ],
+  "feat": "Magic Initiate (Wizard)",
+  "skill_proficiencies": [
+   "Arcana",
+   "History"
+  ],
+  "tool_proficiency": "Calligrapher's Supplies",
+  "equipment": "(A) Quarterstaff, Calligrapher's Supplies, history book, 8 sheets of parchment, robe, 8 GP — or (B) 50 GP"
+ },
+ "Sailor": {
+  "ability_scores": [
+   "Strength",
+   "Dexterity",
+   "Wisdom"
+  ],
+  "feat": "Tavern Brawler",
+  "skill_proficiencies": [
+   "Acrobatics",
+   "Perception"
+  ],
+  "tool_proficiency": "Navigator's Tools",
+  "equipment": "(A) Dagger, Navigator's Tools, 50 ft. Rope, traveler's clothes, 20 GP — or (B) 50 GP"
+ },
+ "Scribe": {
+  "ability_scores": [
+   "Dexterity",
+   "Intelligence",
+   "Wisdom"
+  ],
+  "feat": "Skilled",
+  "skill_proficiencies": [
+   "Investigation",
+   "Perception"
+  ],
+  "tool_proficiency": "Calligrapher's Supplies",
+  "equipment": "(A) Calligrapher's Supplies, fine clothes, Lamp, 3 flasks of Oil, 12 sheets of parchment, 23 GP — or (B) 50 GP"
+ },
+ "Soldier": {
+  "ability_scores": [
+   "Strength",
+   "Dexterity",
+   "Constitution"
+  ],
+  "feat": "Savage Attacker",
+  "skill_proficiencies": [
+   "Athletics",
+   "Intimidation"
+  ],
+  "tool_proficiency": "Choose one Gaming Set",
+  "equipment": "(A) Spear, Shortbow, 20 Arrows, Gaming Set, Healer's Kit, traveler's clothes, 14 GP — or (B) 50 GP"
+ },
+ "Wayfarer": {
+  "ability_scores": [
+   "Dexterity",
+   "Wisdom",
+   "Charisma"
+  ],
+  "feat": "Lucky",
+  "skill_proficiencies": [
+   "Insight",
+   "Stealth"
+  ],
+  "tool_proficiency": "Thieves' Tools",
+  "equipment": "(A) 2 Daggers, Thieves' Tools, Gaming Set, Bedroll, 2 Pouches, traveler's clothes, 16 GP — or (B) 50 GP"
+ }
 }

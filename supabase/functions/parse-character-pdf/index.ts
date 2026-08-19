@@ -28,7 +28,7 @@ const CORS_HEADERS: Record<string, string> = {
 
 const CLASSES = ["Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Monk", "Paladin", "Ranger", "Rogue", "Sorcerer", "Warlock", "Wizard"];
 const SPECIES = ["Dragonborn", "Dwarf", "Elf", "Gnome", "Goliath", "Halfling", "Human", "Orc", "Tiefling"];
-const BACKGROUNDS = ["Acolyte", "Criminal", "Sage", "Soldier"];
+const BACKGROUNDS = ["Acolyte", "Artisan", "Charlatan", "Criminal", "Entertainer", "Farmer", "Guard", "Guide", "Hermit", "Merchant", "Noble", "Sage", "Sailor", "Scribe", "Soldier", "Wayfarer"];
 const SKILLS = ["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception", "History", "Insight", "Intimidation", "Investigation", "Medicine", "Nature", "Perception", "Performance", "Persuasion", "Religion", "Sleight of Hand", "Stealth", "Survival"];
 
 const SYSTEM = `You read the extracted contents of a Dungeons & Dragons 5e character sheet (often a D&D Beyond export or a form-fillable PDF) and return ONLY a single JSON object — no markdown, no commentary — describing that character mapped onto a fixed set of options.
@@ -53,7 +53,7 @@ Return exactly this shape (ImportedCharacter):
 
 Rules:
 - You MUST pick the single CLOSEST allowed value for className, species, and background even if the sheet's exact wording differs (e.g. "High Elf" -> "Elf", "Folk Hero" -> "Soldier", "Wild Magic Sorcerer" -> "Sorcerer"). Never invent a value outside the allowed lists, and NEVER leave className/species/background null — always output the closest allowed value and use the confidence score to flag a weak match.
-- BACKGROUND is tricky: D&D Beyond exports frequently leave the dedicated "BACKGROUND" field BLANK. Infer it from other cues — a "Background Feature" trait name, background-granted skill/tool proficiencies or equipment, a "Feature: <name>" line, or any background name mentioned anywhere in the text — then map that to the closest of ${JSON.stringify(BACKGROUNDS)}. Only if there is truly no signal at all, still output your best guess with a low confidence.
+- BACKGROUND: read the "BACKGROUND" field if present; some exports leave it blank, so also infer it from a "Background Feature" trait name, background-granted proficiencies/equipment, or any background name in the text. Map older/variant names to the closest 2024 background, e.g. "Guild Artisan"/"Guild Merchant" -> "Artisan", "Folk Hero" -> "Farmer", "Outlander" -> "Guide", "Urchin" -> "Wayfarer", "Pirate" -> "Sailor", "Knight" -> "Noble", "Spy" -> "Criminal", "Gladiator" -> "Entertainer". Never leave it null; use low confidence when the match is loose.
 - "abilities" are the FINAL ability scores shown on the sheet (including any racial/background/ASI bonuses), each an integer 1-30. If a score is missing, use 10.
 - For skills: if a "PROFICIENT SKILLS:" line is present, copy it verbatim. Otherwise include only skills actually marked proficient, mapped to the exact spellings in the allowed list. Never mark a skill proficient just because it has a modifier value.
 - cantrips and spells: list only spells the character knows/has prepared, using canonical names (e.g. "Fire Bolt", "Cure Wounds"). Empty arrays for non-casters or if none are legible.
