@@ -1,12 +1,23 @@
+import { useEffect, useState } from "react";
 import type { Character, Feature } from "../types/character";
 import type { CharacterAPI } from "../state/useCharacter";
 import { useRules } from "../state/Rules";
+import { loadSpecies, type SpeciesData } from "../data/loader";
+import { applyLineage } from "../lib/lineage";
+import { useToast } from "../state/Toast";
 
 /** "Magic Initiate (Cleric)" → "Magic Initiate" — feats.json keys by base name. */
 const baseFeatName = (name: string) => name.replace(/\s*\(.*\)$/, "");
 
 export const FeaturesPanel = ({ character: c, api }: { character: Character; api: CharacterAPI }) => {
   const { feats } = useRules();
+  const toast = useToast();
+  // Species data (for the lineage chooser) isn't in useRules — load it here.
+  const [speciesData, setSpeciesData] = useState<Record<string, SpeciesData> | null>(null);
+  useEffect(() => {
+    void loadSpecies().then(setSpeciesData);
+  }, []);
+  const sp = speciesData?.[c.species] ?? null;
 
   // Enrich feat cards from the dataset at render time. Characters saved before
   // the data was wired carry placeholder text ("See PHB Chapter 5") — the real
@@ -42,6 +53,33 @@ export const FeaturesPanel = ({ character: c, api }: { character: Character; api
 
   return (
     <div>
+      {sp?.lineages && (
+        <div>
+          <div className="panel-title" style={{ marginTop: 12 }}>{sp.lineage_label ?? "Lineage"}</div>
+          <div className="feature-card" style={{ display: "grid", gap: 8 }}>
+            <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>
+              {c.lineage
+                ? `Current: ${c.lineage}. Choose another to re-derive its traits, darkvision, resistances, and innate spells.`
+                : "This species has a lineage — choose one to gain its traits, darkvision, resistances, and innate spells."}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {Object.keys(sp.lineages).map((name) => (
+                <button
+                  key={name}
+                  className={c.lineage === name ? "primary" : ""}
+                  style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600 }}
+                  onClick={() => {
+                    api.update((d) => applyLineage(d, sp, name));
+                    toast.success(`${c.species} lineage set to ${name}.`);
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {sections.map(([label, list]) =>
         list.length > 0 ? (
           <div key={label}>
