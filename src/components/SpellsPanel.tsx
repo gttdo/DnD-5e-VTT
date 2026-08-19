@@ -10,7 +10,7 @@ import {
   spellSaveDC,
   spellsForClass,
 } from "../lib/spellcasting";
-import { formatMod } from "../lib/calc";
+import { formatMod, abilityModFor, proficiencyBonus } from "../lib/calc";
 import { rollD20 } from "../lib/dice";
 import { useDiceLog } from "../state/DiceLog";
 import { SpellDrawer } from "./SpellDrawer";
@@ -44,20 +44,37 @@ export const SpellsPanel = ({ character: c, api }: { character: Character; api: 
 
   const caster = casterClass(c, classes);
   const sc = c.spellcasting ?? { known: [], prepared: [], slotsUsed: {} };
+  // Innate lineage spells (#148) — may not be class spells, and a non-caster can
+  // have them, so they're merged into the list and given their own DC/ability.
+  const innate = c.spellcasting?.innate ?? null;
+  const innateNames = useMemo(() => new Set(innate?.spells ?? []), [innate]);
 
   const classSpells = useMemo(
     () => (spells && caster ? spellsForClass(spells, caster.name) : []),
     [spells, caster]
   );
 
+  // Class list plus any innate spells not already in it, resolved to dataset rows.
+  const allSpells = useMemo(() => {
+    if (!spells) return classSpells;
+    const seen = new Set(classSpells.map((s) => s.name));
+    const extra = innate
+      ? innate.spells
+          .filter((n) => !seen.has(n))
+          .map((n) => spells.find((s) => s.name === n))
+          .filter((s): s is SpellData => !!s)
+      : [];
+    return [...classSpells, ...extra].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+  }, [classSpells, innate, spells]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return classSpells.filter((s) => {
+    return allSpells.filter((s) => {
       if (filter === "known" && !sc.known.includes(s.name)) return false;
       if (q && !s.name.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [classSpells, filter, query, sc.known]);
+  }, [allSpells, filter, query, sc.known]);
 
   const byLevel = useMemo(() => {
     const groups = new Map<number, typeof visible>();
@@ -68,7 +85,7 @@ export const SpellsPanel = ({ character: c, api }: { character: Character; api: 
     return [...groups.entries()].sort((a, b) => a[0] - b[0]);
   }, [visible]);
 
-  if (!caster) {
+  if (!caster && !innate) {
     return (
       <div className="dim center" style={{ padding: "24px 12px", fontStyle: "italic", fontFamily: "var(--font-story)" }}>
         {c.classes[0]?.name ?? "This class"} does not cast spells.
@@ -76,10 +93,20 @@ export const SpellsPanel = ({ character: c, api }: { character: Character; api: 
     );
   }
 
-  const slots = slotsFor(caster.caster, caster.level, tables);
-  const dc = spellSaveDC(c, caster.name);
-  const atk = spellAttackBonus(c, caster.name);
-  const ability = castingAbility(caster.name);
+  const slots = caster ? slotsFor(caster.caster, caster.level, tables) : {};
+  // Casting stats come from the class when there is one, else from the innate
+  // lineage ability (a non-caster Drow still has a real save DC). #148
+  const ability = caster ? castingAbility(caster.name) : innate?.ability ?? null;
+  const dc = caster
+    ? spellSaveDC(c, caster.name)
+    : innate
+      ? 8 + proficiencyBonus(c.level) + abilityModFor(c, innate.ability)
+      : null;
+  const atk = caster
+    ? spellAttackBonus(c, caster.name)
+    : innate
+      ? proficiencyBonus(c.level) + abilityModFor(c, innate.ability)
+      : null;
 
   const rollSpellAttack = (spellName: string) => {
     if (atk === null) return;
@@ -141,7 +168,7 @@ export const SpellsPanel = ({ character: c, api }: { character: Character; api: 
             Known ({sc.known.length})
           </button>
           <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>
-            All {caster.name} ({classSpells.length})
+            {caster ? `All ${caster.name}` : "All"} ({allSpells.length})
           </button>
         </div>
         <input
@@ -187,6 +214,7 @@ export const SpellsPanel = ({ character: c, api }: { character: Character; api: 
                       {s.name}
                     </button>
                     {level > 0 && prepared && <span className="spell-tag">Prepared</span>}
+                    {innateNames.has(s.name) && <span className="spell-tag">Innate</span>}
                   </div>
                   <div className="spell-meta">
                     {s.casting_time} · {s.range} · {s.components} · {s.duration}

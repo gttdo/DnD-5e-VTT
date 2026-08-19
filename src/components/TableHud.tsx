@@ -463,14 +463,18 @@ export const TableHud = ({
   // level. Crucially this is NOT gated on a caster CLASS — a Githyanki Fighter
   // casts Mage Hand from their race, a Magic Initiate feat grants a cantrip, etc.
   // Any spell in known/prepared surfaces; leveled ones only get slot pips if the
-  // character actually has slots. For innate casters the spell attack/DC falls
-  // back to proficiency + their best mental ability (races vary; a good default).
+  // character actually has slots. For a non-caster with innate lineage spells
+  // (#148) we use the species' chosen casting ability; otherwise fall back to the
+  // best mental ability (a reasonable default for other innate-spell sources).
   const bestMentalMod = Math.max(abilityModFor(c, "INT"), abilityModFor(c, "WIS"), abilityModFor(c, "CHA"));
-  const spellAtk = caster ? spellAttackBonus(c, caster.name) ?? 0 : proficiencyBonus(c.level) + bestMentalMod;
-  const spellDc = caster ? spellSaveDC(c, caster.name) : 8 + proficiencyBonus(c.level) + bestMentalMod;
+  const innateMod = c.spellcasting?.innate?.ability
+    ? abilityModFor(c, c.spellcasting.innate.ability)
+    : bestMentalMod;
+  const spellAtk = caster ? spellAttackBonus(c, caster.name) ?? 0 : proficiencyBonus(c.level) + innateMod;
+  const spellDc = caster ? spellSaveDC(c, caster.name) : 8 + proficiencyBonus(c.level) + innateMod;
   const spellHealMod = caster
     ? (castingAbility(caster.name) ? abilityModFor(c, castingAbility(caster.name)!) : 0)
-    : bestMentalMod;
+    : innateMod;
   const spellGroups = useMemo(() => {
     const names = c.spellcasting?.prepared?.length
       ? c.spellcasting.prepared
