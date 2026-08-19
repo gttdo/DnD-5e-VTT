@@ -91,3 +91,23 @@ export const generateCharacterBackground = async (
   const payload = data as { image_url?: string; error?: string };
   return { url: payload?.image_url ?? null, error: payload?.error ?? null };
 };
+
+/**
+ * Generate a SQUARE bust portrait for a character avatar. Distinct from the
+ * background generator, which produces a wide 1536×1024 scene — that larger
+ * landscape render at high quality overran the edge function's ~150s budget and
+ * left the Change-avatar dialog spinning forever. A 1024×1024 square matches the
+ * (working) Token Studio path and completes in time.
+ */
+export const generateCharacterPortrait = async (
+  c: Character,
+  promptOverride?: string
+): Promise<{ url: string | null; error: string | null }> => {
+  const prompt = promptOverride?.trim() || buildCharacterPortraitPrompt(c);
+  const { data, error } = await supabase.functions.invoke("generate-image", {
+    body: { prompt, size: "1024x1024", quality: "high" },
+  });
+  if (error) return { url: null, error: error.message };
+  const payload = data as { image_url?: string; error?: string };
+  return { url: payload?.image_url ?? null, error: payload?.error ?? null };
+};

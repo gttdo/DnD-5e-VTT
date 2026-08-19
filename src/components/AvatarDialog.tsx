@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { Character } from "../types/character";
 import { supabase } from "../lib/supabase";
-import { buildCharacterPortraitPrompt, generateCharacterBackground } from "../lib/classArt";
+import { buildCharacterPortraitPrompt, generateCharacterPortrait } from "../lib/classArt";
 import { cropToSquareAvatar, MIN_AVATAR_PX } from "../lib/image";
 import { useTokenAssets } from "../state/useTokenAssets";
 import { useToast } from "../state/Toast";
@@ -36,11 +36,17 @@ export const AvatarDialog = ({ character: c, onClose, onApply }: Props) => {
   const generate = async () => {
     setGenerating(true);
     setCandidate(null);
-    // Square 1:1 so it reads as a token, not a wide scene.
-    const { url, error } = await generateCharacterBackground(c, prompt);
-    setGenerating(false);
-    if (url) setCandidate(url);
-    else toast.error(error ? `Couldn't generate: ${error}` : "Couldn't generate a portrait.");
+    try {
+      // Square 1:1 so it reads as a token, not a wide scene.
+      const { url, error } = await generateCharacterPortrait(c, prompt);
+      if (url) setCandidate(url);
+      else toast.error(error ? `Couldn't generate: ${error}` : "Couldn't generate a portrait.");
+    } catch (e) {
+      // Never leave the button spinning if the request throws/times out.
+      toast.error(e instanceof Error ? `Couldn't generate: ${e.message}` : "Couldn't generate a portrait.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const upload = async (file: File) => {
