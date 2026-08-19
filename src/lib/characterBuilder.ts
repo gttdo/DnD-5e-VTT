@@ -7,7 +7,7 @@ import type {
 } from "../types/character";
 import { ABILITIES } from "../types/character";
 import type { BackgroundData, ClassData, SpeciesData } from "../data/loader";
-import { abilityMod } from "./calc";
+import { abilityMod, proficiencyBonus } from "./calc";
 import { startingInventory } from "./startingEquipment";
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8] as const;
@@ -292,6 +292,28 @@ export const buildCharacter = (
     description:
       featData?.summary ?? `Origin feat from ${state.background} background. See PHB Chapter 5.`,
   });
+
+  // Activated lineage/ancestry traits → limited-use features so the combat HUD
+  // surfaces them as spendable trait tiles (#148 slice 3). Both refresh on a Long
+  // Rest, Proficiency Bonus times (PB = 2 at level 1).
+  const pb = proficiencyBonus(1);
+  if (state.species === "Dragonborn" && lin?.damage_type) {
+    // Fold the ancestry's damage type into the Breath Weapon name so the HUD's
+    // trait spec (which keys off the name) rolls the right element, and give it
+    // its PB/long-rest uses so it appears as a tile.
+    const bw = features.find((f) => f.name === "Breath Weapon");
+    if (bw) {
+      bw.name = `Breath Weapon (${lin.damage_type})`;
+      bw.uses = { max: pb, current: pb, recharge: "long" };
+    }
+  }
+  if (state.species === "Goliath" && lin?.traits) {
+    // The chosen giant boon (Cloud's Jaunt, Fire's Burn…) becomes a spendable use.
+    const boonNames = new Set(lin.traits.map((t) => t.name));
+    for (const f of features) {
+      if (boonNames.has(f.name)) f.uses = { max: pb, current: pb, recharge: "long" };
+    }
+  }
 
   // Combine tool/language profs
   const tools = new Set<string>([...cls.tools]);

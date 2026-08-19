@@ -948,12 +948,13 @@ export const TableHud = ({
     const n = name.toLowerCase();
     if (n.includes("breath weapon")) {
       // Dragonborn breath: a cone/line the whole area saves against (DEX) for half.
-      // Damage scales by tier; the element varies by ancestry, so default fire and
-      // let the DM adjust. DC is CON-based (8 + prof + CON), unlike spell DCs.
+      // Damage scales by tier; the element comes from the draconic ancestry, which
+      // buildCharacter folds into the name as "Breath Weapon (Fire)" (#148). DC is
+      // CON-based (8 + prof + CON), unlike spell DCs.
       const dice = c.level >= 16 ? "5d6" : c.level >= 11 ? "4d6" : c.level >= 6 ? "3d6" : "2d6";
-      // Targets make a DEX save; the DC is the dragonborn's (8 + prof + CON).
+      const el = name.match(/\(([^)]+)\)/)?.[1]?.toLowerCase() ?? "fire";
       const dc = 8 + proficiencyBonus(c.level) + abilityModFor(c, "CON");
-      return { label: name, attackBonus: 0, damage: dice, damageType: "fire", save: "DEX", dc, burst: true };
+      return { label: name, attackBonus: 0, damage: dice, damageType: el, save: "DEX", dc, burst: true };
     }
     return null;
   };
