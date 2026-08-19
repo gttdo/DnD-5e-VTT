@@ -52,7 +52,8 @@ Return exactly this shape (ImportedCharacter):
 }
 
 Rules:
-- You MUST pick the single CLOSEST allowed value for className, species, and background even if the sheet's exact wording differs (e.g. "High Elf" -> "Elf", "Folk Hero" -> "Soldier", "Wild Magic Sorcerer" -> "Sorcerer"). Never invent a value outside the allowed lists. Use the confidence scores to flag weak matches (a background with no clean match gets low confidence).
+- You MUST pick the single CLOSEST allowed value for className, species, and background even if the sheet's exact wording differs (e.g. "High Elf" -> "Elf", "Folk Hero" -> "Soldier", "Wild Magic Sorcerer" -> "Sorcerer"). Never invent a value outside the allowed lists, and NEVER leave className/species/background null — always output the closest allowed value and use the confidence score to flag a weak match.
+- BACKGROUND is tricky: D&D Beyond exports frequently leave the dedicated "BACKGROUND" field BLANK. Infer it from other cues — a "Background Feature" trait name, background-granted skill/tool proficiencies or equipment, a "Feature: <name>" line, or any background name mentioned anywhere in the text — then map that to the closest of ${JSON.stringify(BACKGROUNDS)}. Only if there is truly no signal at all, still output your best guess with a low confidence.
 - "abilities" are the FINAL ability scores shown on the sheet (including any racial/background/ASI bonuses), each an integer 1-30. If a score is missing, use 10.
 - For skills: if a "PROFICIENT SKILLS:" line is present, copy it verbatim. Otherwise include only skills actually marked proficient, mapped to the exact spellings in the allowed list. Never mark a skill proficient just because it has a modifier value.
 - cantrips and spells: list only spells the character knows/has prepared, using canonical names (e.g. "Fire Bolt", "Cure Wounds"). Empty arrays for non-casters or if none are legible.
