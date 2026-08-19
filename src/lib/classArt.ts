@@ -73,6 +73,21 @@ export const buildCharacterPortraitPrompt = (c: Character): string => {
 };
 
 /**
+ * supabase.functions.invoke() collapses any non-2xx into the opaque "Edge
+ * Function returned a non-2xx status code". The real reason (e.g. "openai 400:
+ * content policy", a timeout) is JSON in the response body on error.context —
+ * dig it out so failures are actionable, not mysterious.
+ */
+const readFnError = async (error: unknown): Promise<string> => {
+  const ctx = (error as { context?: Response } | null)?.context;
+  if (ctx && typeof ctx.json === "function") {
+    const body = await ctx.json().catch(() => null);
+    if (body && typeof body.error === "string") return body.error;
+  }
+  return error instanceof Error ? error.message : "generation failed";
+};
+
+/**
  * Generate a character backdrop via the generate-image edge function (which is
  * art-agnostic). Returns the public image URL, or null on failure. The caller
  * persists it onto the character (data.bgImage).
@@ -91,17 +106,18 @@ export const generateCharacterBackground = async (
   const { data, error } = await supabase.functions.invoke("generate-image", {
     body: { prompt, size: "1536x1024", quality: "medium" },
   });
-  if (error) return { url: null, error: error.message };
+  if (error) return { url: null, error: await readFnError(error) };
   const payload = data as { image_url?: string; error?: string };
   return { url: payload?.image_url ?? null, error: payload?.error ?? null };
 };
 
 /**
- * Generate a SQUARE bust portrait for a character avatar. Distinct from the
- * background generator, which produces a wide 1536×1024 scene — that larger
- * landscape render at high quality overran the edge function's ~150s budget and
- * left the Change-avatar dialog spinning forever. A 1024×1024 square matches the
- * (working) Token Studio path and completes in time.
+ * Generate a SQUARE bust portrait for a character avatar. Square 1024×1024 (not
+ * the background generator's wide 1536×1024 scene) and "medium" quality: a
+ * high-quality gpt-image render can exceed Supabase's ~150s platform wall-clock,
+ * which kills the function before it returns — the connection then hangs with no
+ * error (the Change-avatar dialog spun forever). Medium reliably completes in
+ * time, the right call for a token-sized image.
  */
 export const generateCharacterPortrait = async (
   c: Character,
@@ -109,9 +125,9 @@ export const generateCharacterPortrait = async (
 ): Promise<{ url: string | null; error: string | null }> => {
   const prompt = promptOverride?.trim() || buildCharacterPortraitPrompt(c);
   const { data, error } = await supabase.functions.invoke("generate-image", {
-    body: { prompt, size: "1024x1024", quality: "high" },
+    body: { prompt, size: "1024x1024", quality: "medium" },
   });
-  if (error) return { url: null, error: error.message };
+  if (error) return { url: null, error: await readFnError(error) };
   const payload = data as { image_url?: string; error?: string };
   return { url: payload?.image_url ?? null, error: payload?.error ?? null };
 };
