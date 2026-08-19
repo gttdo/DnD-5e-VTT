@@ -25,7 +25,7 @@ export const CharacterSheet = ({ character, api }: { character: Character; api: 
       style={{ backgroundImage: `url(${classArtFor(character)})` }}
     >
       <div className="sheet-bg-scrim" aria-hidden="true" />
-      <div className="sheet-inner">
+      <div className="sheet-inner statblock-skin">
         {isPhone ? (
           <MobileSheet character={character} api={api} onEditAvatar={() => setAvatarOpen(true)} />
         ) : (
