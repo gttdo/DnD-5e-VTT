@@ -94,6 +94,7 @@ export interface ImportedCharacter {
   name: string;
   className: string | null;
   species: string | null;
+  lineage?: string | null;
   background: string | null;
   alignment?: string;
   abilities: Record<Ability, number>;
@@ -137,6 +138,7 @@ export const importedToBuilderState = (
     className: imp.className,
     background: imp.background,
     species: imp.species,
+    lineage: imp.lineage ?? null,
     abilityMethod: "manual",
     abilities,
     skillChoices,

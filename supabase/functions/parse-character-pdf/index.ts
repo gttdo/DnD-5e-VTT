@@ -31,6 +31,15 @@ const SPECIES = ["Dragonborn", "Dwarf", "Elf", "Gnome", "Goliath", "Halfling", "
 const BACKGROUNDS = ["Acolyte", "Artisan", "Charlatan", "Criminal", "Entertainer", "Farmer", "Guard", "Guide", "Hermit", "Merchant", "Noble", "Sage", "Sailor", "Scribe", "Soldier", "Wayfarer"];
 const SKILLS = ["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Deception", "History", "Insight", "Intimidation", "Investigation", "Medicine", "Nature", "Perception", "Performance", "Persuasion", "Religion", "Sleight of Hand", "Stealth", "Survival"];
 
+// Subrace/lineage options per species (#148), for preserving the PDF's subrace.
+const LINEAGES: Record<string, string[]> = {
+  Elf: ["Drow", "High Elf", "Wood Elf"],
+  Gnome: ["Forest Gnome", "Rock Gnome"],
+  Tiefling: ["Abyssal", "Chthonic", "Infernal"],
+  Dragonborn: ["Black", "Blue", "Brass", "Bronze", "Copper", "Gold", "Green", "Red", "Silver", "White"],
+  Goliath: ["Cloud's Jaunt", "Fire's Burn", "Frost's Chill", "Hill's Tumble", "Stone's Endurance", "Storm's Thunder"],
+};
+
 const SYSTEM = `You read the extracted contents of a Dungeons & Dragons 5e character sheet (often a D&D Beyond export or a form-fillable PDF) and return ONLY a single JSON object — no markdown, no commentary — describing that character mapped onto a fixed set of options.
 
 The input may begin with a "PROFICIENT SKILLS:" line — a comma-separated list already resolved to canonical skill names. When present, "skillProficiencies" MUST be exactly that list (do not add or drop any based on the numeric skill modifiers, which are present for every skill regardless of proficiency).
@@ -42,6 +51,7 @@ Return exactly this shape (ImportedCharacter):
   "name": string,
   "className": one of ${JSON.stringify(CLASSES)},
   "species": one of ${JSON.stringify(SPECIES)},
+  "lineage"?: the subrace/lineage/ancestry when the species has one, else null,
   "background": one of ${JSON.stringify(BACKGROUNDS)},
   "alignment"?: string,
   "abilities": { "STR": number, "DEX": number, "CON": number, "INT": number, "WIS": number, "CHA": number },
@@ -53,6 +63,7 @@ Return exactly this shape (ImportedCharacter):
 
 Rules:
 - You MUST pick the single CLOSEST allowed value for className, species, and background even if the sheet's exact wording differs (e.g. "Wild Magic Sorcerer" -> "Sorcerer"). Never invent a value outside the allowed lists, and NEVER leave className/species/background null — always output the closest allowed value and use the confidence score to flag a weak match.
+- LINEAGE: after choosing the base species, also output the subrace/lineage if the sheet names one, using these exact options per species — Elf: ["Drow","High Elf","Wood Elf"]; Gnome: ["Forest Gnome","Rock Gnome"]; Tiefling: ["Abyssal","Chthonic","Infernal"]; Dragonborn: a dragon color ["Black","Blue","Brass","Bronze","Copper","Gold","Green","Red","Silver","White"] (e.g. "Red Dragonborn" -> "Red"); Goliath: map the giant type to its boon (Cloud->"Cloud's Jaunt", Fire->"Fire's Burn", Frost->"Frost's Chill", Hill->"Hill's Tumble", Stone->"Stone's Endurance", Storm->"Storm's Thunder"). Map legacies too (a Tiefling's "Infernal Legacy" -> "Infernal"). If the species has no subrace or none is named, use null.
 - SPECIES: map any subrace/lineage to its base species. Elf lineages ("Drow", "High Elf", "Wood Elf", "Eladrin", "Sea Elf", "Shadar-kai") -> "Elf". Dwarf ("Hill Dwarf", "Mountain Dwarf", "Duergar") -> "Dwarf". Gnome ("Rock Gnome", "Forest Gnome", "Deep Gnome", "Svirfneblin") -> "Gnome". Halfling ("Lightfoot", "Stout", "Ghostwise") -> "Halfling". Tiefling (any lineage/legacy) -> "Tiefling". "Half-Orc" -> "Orc". "Half-Elf" -> "Elf". For a species with no clean match (e.g. "Aasimar", "Tabaxi", "Warforged"), pick the nearest allowed option with low confidence.
 - BACKGROUND: read the "BACKGROUND" field if present; some exports leave it blank, so also infer it from a "Background Feature" trait name, background-granted proficiencies/equipment, or any background name in the text. Map older/variant names to the closest 2024 background, e.g. "Guild Artisan"/"Guild Merchant" -> "Artisan", "Folk Hero" -> "Farmer", "Outlander" -> "Guide", "Urchin" -> "Wayfarer", "Pirate" -> "Sailor", "Knight" -> "Noble", "Spy" -> "Criminal", "Gladiator" -> "Entertainer". Never leave it null; use low confidence when the match is loose.
 - "abilities" are the FINAL ability scores shown on the sheet (including any racial/background/ASI bonuses), each an integer 1-30. If a score is missing, use 10.
@@ -147,10 +158,18 @@ Deno.serve(async (req) => {
     ? (parsed.spells as unknown[]).filter((s): s is string => typeof s === "string")
     : [];
 
+  const species = pickEnum(parsed.species, SPECIES, "species");
+  // Keep the subrace only if it's a valid option for the chosen species.
+  const lineage =
+    species && typeof parsed.lineage === "string" && (LINEAGES[species] ?? []).includes(parsed.lineage)
+      ? parsed.lineage
+      : null;
+
   const character = {
     name: typeof parsed.name === "string" ? parsed.name.slice(0, 80) : "",
     className: pickEnum(parsed.className, CLASSES, "class"),
-    species: pickEnum(parsed.species, SPECIES, "species"),
+    species,
+    lineage,
     background: pickEnum(parsed.background, BACKGROUNDS, "background"),
     alignment: typeof parsed.alignment === "string" ? parsed.alignment.slice(0, 40) : "",
     abilities,
