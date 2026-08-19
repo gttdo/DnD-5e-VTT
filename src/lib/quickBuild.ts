@@ -66,6 +66,67 @@ export const CLASS_SPECIES: Record<string, string> = {
 const FALLBACK_PRIORITY: Ability[] = ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
 
 /**
+ * Iconic level-1 starter loadouts per caster class — so a quick build hands new
+ * players the spells they'd actually reach for (Fire Bolt, Magic Missile, Shield)
+ * instead of the alphabetically-first ones. Ordered by preference; the picker
+ * takes those present in the SRD dataset and tops up from the class list if a
+ * loadout runs short, so the allotment is always filled.
+ */
+const RECOMMENDED_SPELLS: Record<string, { cantrips: string[]; spells: string[] }> = {
+  Bard: {
+    cantrips: ["Vicious Mockery", "Minor Illusion", "Mage Hand", "Prestidigitation"],
+    spells: ["Healing Word", "Faerie Fire", "Charm Person", "Dissonant Whispers", "Thunderwave", "Cure Wounds"],
+  },
+  Cleric: {
+    cantrips: ["Sacred Flame", "Guidance", "Spare the Dying", "Light", "Thaumaturgy"],
+    spells: ["Cure Wounds", "Guiding Bolt", "Bless", "Healing Word", "Shield of Faith"],
+  },
+  Druid: {
+    cantrips: ["Produce Flame", "Shillelagh", "Guidance", "Druidcraft", "Thorn Whip"],
+    spells: ["Cure Wounds", "Faerie Fire", "Entangle", "Thunderwave", "Goodberry"],
+  },
+  Sorcerer: {
+    cantrips: ["Fire Bolt", "Ray of Frost", "Prestidigitation", "Mage Hand", "Minor Illusion", "Light", "Shocking Grasp"],
+    spells: ["Magic Missile", "Shield", "Chromatic Orb", "Burning Hands", "Thunderwave", "Mage Armor"],
+  },
+  Warlock: {
+    cantrips: ["Eldritch Blast", "Chill Touch", "Mage Hand", "Prestidigitation", "Minor Illusion"],
+    spells: ["Hex", "Charm Person", "Witch Bolt", "Armor of Agathys"],
+  },
+  Wizard: {
+    cantrips: ["Fire Bolt", "Ray of Frost", "Mage Hand", "Prestidigitation", "Minor Illusion", "Light"],
+    spells: ["Magic Missile", "Shield", "Mage Armor", "Burning Hands", "Sleep", "Detect Magic", "Thunderwave", "Chromatic Orb", "Feather Fall"],
+  },
+};
+
+/**
+ * Pick `count` spell names: take the preferred (iconic) ones that actually exist
+ * in `available`, in order, then top up with any remaining available spells so the
+ * allotment is always filled even if a preferred spell isn't in the dataset.
+ */
+const pickSpells = (available: string[], preferred: string[], count: number): string[] => {
+  const byKey = new Map(available.map((n) => [n.toLowerCase(), n]));
+  const chosen: string[] = [];
+  const used = new Set<string>();
+  const take = (name: string) => {
+    const key = name.toLowerCase();
+    if (used.has(key)) return;
+    used.add(key);
+    chosen.push(name);
+  };
+  for (const p of preferred) {
+    if (chosen.length >= count) break;
+    const match = byKey.get(p.toLowerCase());
+    if (match) take(match);
+  }
+  for (const n of available) {
+    if (chosen.length >= count) break;
+    take(n);
+  }
+  return chosen.slice(0, count);
+};
+
+/**
  * Build a complete level-1 BuilderState from a class + species. Deterministic —
  * the same inputs always yield the same hero — so a quick build is repeatable and
  * the player can predict what they'll get before tweaking on Review.
@@ -103,20 +164,16 @@ export const quickBuildState = (
     .filter((s) => !bgSkills.has(s))
     .slice(0, cls?.skill_choices.count ?? 0) as SkillName[];
 
-  // Caster starter loadout: the first cantrips/level-1 spells the class offers.
+  // Caster starter loadout: an iconic recommended set, topped up from the class
+  // list if a recommended spell isn't in the dataset (see pickSpells).
   const allot = spellAllotment(className);
   let cantrips: string[] = [];
   let spells: string[] = [];
   if (allot) {
     const list = spellsForClass(data.spells, className);
-    cantrips = list
-      .filter((s) => s.level === 0)
-      .slice(0, allot.cantrips)
-      .map((s) => s.name);
-    spells = list
-      .filter((s) => s.level === 1)
-      .slice(0, allot.spells)
-      .map((s) => s.name);
+    const rec = RECOMMENDED_SPELLS[className] ?? { cantrips: [], spells: [] };
+    cantrips = pickSpells(list.filter((s) => s.level === 0).map((s) => s.name), rec.cantrips, allot.cantrips);
+    spells = pickSpells(list.filter((s) => s.level === 1).map((s) => s.name), rec.spells, allot.spells);
   }
 
   return {
