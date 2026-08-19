@@ -67,7 +67,7 @@ export const TopBar = ({ character: c, api, onEditAvatar }: Props) => {
               onChange={(e) => api.setName(e.target.value)}
             />
             <div className="subline">
-              {c.species} · {c.classes.map((cl) => `${cl.name} ${cl.level}`).join(" / ")} · {c.background}
+              {c.species}{c.lineage ? ` (${c.lineage})` : ""} · {c.classes.map((cl) => `${cl.name} ${cl.level}`).join(" / ")} · {c.background}
               {nextLevelXp !== undefined && (
                 <span title={`${nextLevelXp - c.xp} XP to level ${c.level + 1}`}>
                   {" "}· XP {c.xp.toLocaleString()} / {nextLevelXp.toLocaleString()}

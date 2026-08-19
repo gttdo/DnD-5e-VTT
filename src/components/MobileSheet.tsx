@@ -93,7 +93,7 @@ export const MobileSheet = ({ character: c, api, onEditAvatar }: { character: Ch
             aria-label="Character name"
           />
           <div className="msheet-sub">
-            {c.species} · {c.classes.map((cl) => `${cl.name} ${cl.level}`).join(" / ")}
+            {c.species}{c.lineage ? ` (${c.lineage})` : ""} · {c.classes.map((cl) => `${cl.name} ${cl.level}`).join(" / ")}
           </div>
         </div>
         {/* The HP box doubles as the button that opens the HP editor — same
