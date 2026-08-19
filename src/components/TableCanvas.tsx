@@ -5260,6 +5260,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         const bonus = initiativeMod(ch);
         return (
           <DiceRollDialog
+            // Key by the combatant so the dialog REMOUNTS for each PC. Without it,
+            // React reuses the instance and its internal roll/reveal phase stays
+            // "landed" from the previous character — the die never re-arms and the
+            // ritual stalls after the first roll (#158).
+            key={mine.id}
             title="Roll for Initiative"
             subtitle={`${ch.name} · combat begins`}
             bonus={bonus}
@@ -5289,6 +5294,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           <>
             {active && target && (
               <DiceRollDialog
+                // Same remount-per-subject fix as initiative (#158): several
+                // pending saves resolve in sequence, so key by the save id or the
+                // dialog stays "landed" from the previous target and can't reroll.
+                key={active.id}
                 title={`${ABILITY_FULL[active.ability] ?? active.ability} Saving Throw`}
                 subtitle={
                   (!controlled.includes(active) ? `${active.targetLabel} · ` : "") +
