@@ -84,8 +84,12 @@ export const generateCharacterBackground = async (
   promptOverride?: string
 ): Promise<{ url: string | null; error: string | null }> => {
   const prompt = promptOverride?.trim() || buildCharacterScenePrompt(c);
+  // The wide 21:9-ish backdrop sits dimmed behind the sheet (atmospheric, not a
+  // focal render), so it uses "medium" quality: a high-quality 1536×1024 render
+  // risks overrunning the edge function's ~150s budget / resource cap and failing
+  // (the same trap the square avatar hit). Medium reliably completes.
   const { data, error } = await supabase.functions.invoke("generate-image", {
-    body: { prompt, size: "1536x1024", quality: "high" },
+    body: { prompt, size: "1536x1024", quality: "medium" },
   });
   if (error) return { url: null, error: error.message };
   const payload = data as { image_url?: string; error?: string };

@@ -43,10 +43,16 @@ export const ChangeBackgroundDialog = ({ character: c, onClose, onApply }: Props
   const generate = async () => {
     setGenerating(true);
     setCandidate(null);
-    const { url, error } = await generateCharacterBackground(c, prompt);
-    setGenerating(false);
-    if (url) setCandidate(url);
-    else toast.error(error ? `Couldn't generate: ${error}` : "Couldn't generate an image.");
+    try {
+      const { url, error } = await generateCharacterBackground(c, prompt);
+      if (url) setCandidate(url);
+      else toast.error(error ? `Couldn't generate: ${error}` : "Couldn't generate an image.");
+    } catch (e) {
+      // Never leave the button spinning if the request throws/times out.
+      toast.error(e instanceof Error ? `Couldn't generate: ${e.message}` : "Couldn't generate an image.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const upload = async (file: File) => {

@@ -193,15 +193,20 @@ function App() {
   // Auto-generate a backdrop right after character creation (fire-and-forget).
   const generateAndSaveBackground = (c: Character) => {
     toast.info("Conjuring your character's portrait…");
-    void generateCharacterBackground(c).then(({ url }) => {
-      if (!url) {
+    void generateCharacterBackground(c)
+      .then(({ url }) => {
+        if (!url) {
+          toast.error("Couldn't generate character art — you can set one from the sheet.");
+          return;
+        }
+        void persistBackground(c.id, url).then(() =>
+          toast.success("Your character's portrait is ready.")
+        );
+      })
+      .catch(() => {
+        // Never fail silently if the request throws/times out.
         toast.error("Couldn't generate character art — you can set one from the sheet.");
-        return;
-      }
-      void persistBackground(c.id, url).then(() =>
-        toast.success("Your character's portrait is ready.")
-      );
-    });
+      });
   };
 
   // Clicking a top-nav section drops any in-flight sub-view state
