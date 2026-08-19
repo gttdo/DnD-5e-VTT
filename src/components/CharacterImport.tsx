@@ -112,7 +112,7 @@ export const CharacterImport = ({ onImported, onCancel }: Props) => {
   return (
     <div className="screen-enter" style={{ padding: 24 }}>
       <LibraryBanner
-        image="/art/login.png"
+        image="/art/book_wizard.png"
         eyebrow="New Character"
         title="Import from PDF"
         subtitle="Upload a character-sheet PDF and we'll read it into a playable character for you to review."

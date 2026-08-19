@@ -51,7 +51,7 @@ export const GamesScreen = ({ characters, onOpenGame }: Props) => {
   return (
     <div className="screen-enter" style={{ padding: 24 }}>
       <LibraryBanner
-        image="/art/login.png"
+        image="/art/tavern.png"
         eyebrow="Your Table"
         title="Campaigns"
         subtitle={`${games.length} campaign${games.length === 1 ? "" : "s"}`}

@@ -685,8 +685,15 @@ const SpeciesStep = ({
 const BackgroundStep = ({
   state, setState, data,
 }: StepProps & { data: Record<string, BackgroundData> | null }) => {
+  const [q, setQ] = useState("");
   if (!data) return <div className="panel">Loading backgrounds…</div>;
-  const entries = Object.entries(data);
+  const needle = q.trim().toLowerCase();
+  const entries = Object.entries(data).filter(
+    ([name, bg]) =>
+      name.toLowerCase().includes(needle) ||
+      bg.feat.toLowerCase().includes(needle) ||
+      bg.skill_proficiencies.some((s) => s.toLowerCase().includes(needle))
+  );
   const selected = state.background ? data[state.background] : null;
 
   return (
@@ -697,20 +704,56 @@ const BackgroundStep = ({
         one Origin feat, two skill proficiencies, and a tool proficiency.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div className="col" style={{ gap: 6 }}>
-          {entries.map(([name, bg]) => (
-            <button
-              key={name}
-              className={state.background === name ? "primary" : ""}
-              onClick={() => setState({ ...state, background: name })}
-              style={{ textAlign: "left", padding: "10px 14px" }}
-            >
-              <div style={{ fontFamily: "Cinzel, serif", fontWeight: 700 }}>{name}</div>
-              <div className="dim" style={{ fontSize: 11 }}>
-                Feat: {bg.feat} · {bg.skill_proficiencies.join(", ")}
-              </div>
-            </button>
-          ))}
+        <div className="col" style={{ gap: 8 }}>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search backgrounds, feats, skills…"
+            aria-label="Search backgrounds"
+            style={{ width: "100%" }}
+          />
+          {entries.length === 0 && <div className="dim" style={{ fontSize: 12, padding: 8 }}>No backgrounds match “{q}”.</div>}
+          {entries.map(([name, bg]) => {
+            const on = state.background === name;
+            return (
+              <button
+                key={name}
+                onClick={() => setState({ ...state, background: name })}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderColor: on ? "var(--gold)" : undefined,
+                  background: on ? "color-mix(in srgb, var(--gold) 14%, transparent)" : undefined,
+                }}
+              >
+                <span
+                  style={{
+                    flexShrink: 0,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    display: "grid",
+                    placeItems: "center",
+                    fontFamily: "Cinzel, serif",
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color: "var(--gold)",
+                    background: "color-mix(in srgb, var(--gold) 16%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--gold) 45%, transparent)",
+                  }}
+                >
+                  {name[0]}
+                </span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontFamily: "Cinzel, serif", fontWeight: 700, color: on ? "var(--cream)" : undefined }}>{name}</span>
+                  <span className="dim" style={{ fontSize: 11 }}>{bg.feat} · {bg.skill_proficiencies.join(", ")}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="panel">

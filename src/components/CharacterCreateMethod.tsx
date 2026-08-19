@@ -52,7 +52,7 @@ const METHODS: Method[] = [
   },
   {
     key: "import",
-    image: "/art/login.png",
+    image: "/art/book_wizard.png",
     title: "Import from PDF",
     blurb: "Upload a character sheet PDF and we'll read it into a playable character for you to review.",
     cta: "Import a sheet",
@@ -74,7 +74,7 @@ export const CharacterCreateMethod = ({ onStandard, onPremade, onQuick, onImport
   return (
     <div className="screen-enter" style={{ padding: 24 }}>
       <LibraryBanner
-        image="/art/login.png"
+        image="/art/forest_mountain.png"
         eyebrow="New Character"
         title="Creation Method"
         subtitle="Choose how you'd like to create your character."

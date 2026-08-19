@@ -3,24 +3,26 @@ import { supabase } from "./supabase";
 
 // Class-flavored art (public/*.png) used as the character-sheet backdrop.
 // Falls back to the login hero for classes without dedicated art yet.
+// A distinct backdrop per class (was 3 images shared across 12) now that the
+// art folder has class-specific pieces — keeps the sheet from feeling repetitive.
 const CLASS_ART: Record<string, string> = {
-  Wizard: "/art/wizard.png",
-  Sorcerer: "/art/wizard.png",
-  Warlock: "/art/wizard.png",
-  Bard: "/art/wizard.png",
-  Paladin: "/art/paladin.png",
+  Barbarian: "/art/goliath_barbarian.png",
+  Bard: "/art/book_elf_warrior.png",
+  Cleric: "/art/cleric_moradin.png",
+  Druid: "/art/druid.png",
   Fighter: "/art/paladin.png",
-  Cleric: "/art/paladin.png",
+  Monk: "/art/druid_elf.png",
+  Paladin: "/art/dragonborn_paladin.png",
   Ranger: "/art/elf_hunter.png",
-  Rogue: "/art/elf_hunter.png",
-  Druid: "/art/elf_hunter.png",
-  Barbarian: "/art/elf_hunter.png",
-  Monk: "/art/elf_hunter.png",
+  Rogue: "/art/archer_v_kraken.png",
+  Sorcerer: "/art/dragonborn_warcaster.png",
+  Warlock: "/art/tiefling_warlock.png",
+  Wizard: "/art/book_wizard.png",
 };
 
 /** Static class-art fallback (used until a character has a generated bgImage). */
 export const classArtFallback = (c: Character): string =>
-  CLASS_ART[c.classes[0]?.name ?? ""] ?? "/art/login.png";
+  CLASS_ART[c.classes[0]?.name ?? ""] ?? "/art/forest_mountain.png";
 
 /** The sheet backdrop: the character's own generated scene, or class-art fallback. */
 export const classArtFor = (c: Character): string => c.bgImage || classArtFallback(c);
