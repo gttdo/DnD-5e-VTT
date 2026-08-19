@@ -20,7 +20,7 @@ const relativeTime = (at: number): string => {
   return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
 };
 
-export const GameLog = ({ onClose }: { onClose: () => void }) => {
+export const GameLog = ({ onClose, canClear = true }: { onClose: () => void; canClear?: boolean }) => {
   const { entries, clear } = useDiceLog();
 
   return (
@@ -28,7 +28,7 @@ export const GameLog = ({ onClose }: { onClose: () => void }) => {
       title="Game Log"
       onClose={onClose}
       footer={
-        entries.length ? (
+        entries.length && canClear ? (
           <button className="ghost" onClick={clear}>
             Clear log
           </button>

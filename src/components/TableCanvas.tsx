@@ -5065,7 +5065,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
       {rulesOpen && <RulesReference onClose={() => setRulesOpen(false)} />}
       {rollerOpen && <DiceRoller onClose={() => setRollerOpen(false)} />}
-      {logOpen && <GameLog onClose={() => setLogOpen(false)} />}
+      {logOpen && <GameLog onClose={() => setLogOpen(false)} canClear={isDM} />}
 
       {tokenPickerOpen && activeScene && (
         <TokenPickerDialog
