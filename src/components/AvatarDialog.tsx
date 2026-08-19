@@ -7,6 +7,7 @@ import { useTokenAssets } from "../state/useTokenAssets";
 import { useToast } from "../state/Toast";
 import { Dialog } from "./ui/Dialog";
 import { Icon } from "./ui/Icon";
+import { GenerationProgress } from "./ui/GenerationProgress";
 
 /**
  * Set a character's avatar three ways — generate a bust portrait, pick from
@@ -128,6 +129,11 @@ export const AvatarDialog = ({ character: c, onClose, onApply }: Props) => {
                 Reset prompt
               </button>
             </div>
+            {generating && (
+              <div style={{ marginTop: 14 }}>
+                <GenerationProgress aspect="1 / 1" maxWidth={200} />
+              </div>
+            )}
           </div>
         )}
 

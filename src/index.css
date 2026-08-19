@@ -2393,6 +2393,63 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   50%      { opacity: 0.6; transform: scale(0.94); }
 }
 
+/* ---- GenerationProgress: live feedback while an AI image renders ---- */
+.genprog { display: grid; gap: 10px; padding: 4px 0; }
+.genprog-canvas {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--gold) 70%, transparent);
+}
+.genprog-canvas svg { animation: pulse-soft 1.6s ease-in-out infinite; z-index: 1; }
+.genprog-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--gold) 16%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: genprog-shimmer 1.7s ease-in-out infinite;
+}
+@keyframes genprog-shimmer {
+  from { background-position: 220% 0; }
+  to   { background-position: -220% 0; }
+}
+.genprog-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.genprog-bar span {
+  display: block;
+  height: 100%;
+  width: 38%;
+  border-radius: 999px;
+  background: var(--gold);
+  animation: genprog-slide 1.4s ease-in-out infinite;
+}
+@keyframes genprog-slide {
+  0%   { transform: translateX(-130%); }
+  100% { transform: translateX(360%); }
+}
+.genprog-status { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+.genprog-hint { font-size: 11px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .genprog-shimmer, .genprog-bar span, .genprog-canvas svg { animation: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .screen-enter { animation: none; }
 }

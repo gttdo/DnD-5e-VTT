@@ -5,6 +5,7 @@ import { buildCharacterScenePrompt, generateCharacterBackground } from "../lib/c
 import { useToast } from "../state/Toast";
 import { Dialog } from "./ui/Dialog";
 import { Icon } from "./ui/Icon";
+import { GenerationProgress } from "./ui/GenerationProgress";
 
 /**
  * Set a character sheet's backdrop three ways: generate from an (editable,
@@ -133,6 +134,11 @@ export const ChangeBackgroundDialog = ({ character: c, onClose, onApply }: Props
                 Reset prompt
               </button>
             </div>
+            {generating && (
+              <div style={{ marginTop: 14 }}>
+                <GenerationProgress aspect="16 / 9" maxWidth={360} />
+              </div>
+            )}
           </div>
         )}
 
