@@ -33,7 +33,9 @@ const SKILLS = ["Acrobatics", "Animal Handling", "Arcana", "Athletics", "Decepti
 
 const SYSTEM = `You read the extracted contents of a Dungeons & Dragons 5e character sheet (often a D&D Beyond export or a form-fillable PDF) and return ONLY a single JSON object — no markdown, no commentary — describing that character mapped onto a fixed set of options.
 
-The input may contain a "FORM FIELDS:" section of "FieldName: value" pairs pulled from a fillable PDF's form layer — this is the AUTHORITATIVE data, use it first. Common D&D Beyond field names: CharacterName, "CLASS  LEVEL" (e.g. "Wizard 1"), RACE/SPECIES (e.g. "Rock Gnome"), BACKGROUND, STR/DEX/CON/INT/WIS/CHA (final scores), skill names with a "P"/"Prof" marker meaning proficient, and spellName0, spellName1, … (with a "=== CANTRIPS ===" / "=== 1st LEVEL ===" spellHeader marking which are cantrips vs leveled). A "SHEET TEXT:" section may follow with the visible page text.
+The input may begin with a "PROFICIENT SKILLS:" line — a comma-separated list already resolved to canonical skill names. When present, "skillProficiencies" MUST be exactly that list (do not add or drop any based on the numeric skill modifiers, which are present for every skill regardless of proficiency).
+
+The input may also contain a "FORM FIELDS:" section of "FieldName: value" pairs pulled from a fillable PDF's form layer — this is the AUTHORITATIVE data, use it first. Common D&D Beyond field names: CharacterName, "CLASS  LEVEL" (e.g. "Wizard 1"), RACE/SPECIES (e.g. "Rock Gnome"), BACKGROUND, STR/DEX/CON/INT/WIS/CHA (final scores), and spellName0, spellName1, … (with a "=== CANTRIPS ===" / "=== 1st LEVEL ===" spellHeader marking which are cantrips vs leveled). A "SHEET TEXT:" section may follow with the visible page text.
 
 Return exactly this shape (ImportedCharacter):
 {
@@ -52,7 +54,7 @@ Return exactly this shape (ImportedCharacter):
 Rules:
 - You MUST pick the single CLOSEST allowed value for className, species, and background even if the sheet's exact wording differs (e.g. "High Elf" -> "Elf", "Folk Hero" -> "Soldier", "Wild Magic Sorcerer" -> "Sorcerer"). Never invent a value outside the allowed lists. Use the confidence scores to flag weak matches (a background with no clean match gets low confidence).
 - "abilities" are the FINAL ability scores shown on the sheet (including any racial/background/ASI bonuses), each an integer 1-30. If a score is missing, use 10.
-- Only include skills that are actually marked proficient. Map skill names to the exact spellings in the allowed list.
+- For skills: if a "PROFICIENT SKILLS:" line is present, copy it verbatim. Otherwise include only skills actually marked proficient, mapped to the exact spellings in the allowed list. Never mark a skill proficient just because it has a modifier value.
 - cantrips and spells: list only spells the character knows/has prepared, using canonical names (e.g. "Fire Bolt", "Cure Wounds"). Empty arrays for non-casters or if none are legible.
 - Omit optional fields you can't determine. If the text is clearly not a character sheet, return {"error":"not a character sheet"}.`;
 
