@@ -18,6 +18,15 @@ import { SheetDrawer } from "./ui/SheetDrawer";
 const SCHOOL_LEVEL = (s: SpellData) =>
   s.level === 0 ? `${s.school} Cantrip` : `Level ${s.level} · ${s.school}`;
 
+// Painterly per-school banner art (public/art/Spell Schools/<School>.png). Each
+// of the 8 schools has its own piece, so the drawer's header varies by spell.
+const SCHOOLS = new Set([
+  "Abjuration", "Conjuration", "Divination", "Enchantment",
+  "Evocation", "Illusion", "Necromancy", "Transmutation",
+]);
+const schoolArt = (school: string): string | null =>
+  SCHOOLS.has(school) ? `/art/Spell%20Schools/${school}.png` : null;
+
 interface Props {
   character: Character;
   spell: SpellData;
@@ -62,7 +71,21 @@ export const SpellDrawer = ({ character: c, spell, api, onClose }: Props) => {
         </>
       }
     >
-      <p className="drawer-lede" style={{ marginBottom: 10 }}>{SCHOOL_LEVEL(spell)}</p>
+      {schoolArt(spell.school) ? (
+        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 12, aspectRatio: "16 / 7" }}>
+          <img
+            src={schoolArt(spell.school)!}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent 62%)" }} />
+          <div style={{ position: "absolute", left: 12, bottom: 8, fontSize: 12, fontWeight: 600, letterSpacing: 0.4, color: "var(--candle)" }}>
+            {SCHOOL_LEVEL(spell)}
+          </div>
+        </div>
+      ) : (
+        <p className="drawer-lede" style={{ marginBottom: 10 }}>{SCHOOL_LEVEL(spell)}</p>
+      )}
 
       {prepared && spell.level > 0 && (
         <p className="drawer-lede" style={{ color: "var(--candle)" }}>Prepared.</p>
