@@ -140,6 +140,13 @@ export interface Spellcasting {
    * shows on the sheet; no migration needed.
    */
   concentratingOn?: string | null;
+  /**
+   * Innate spells granted by a species lineage (#148) — Drow's Dancing Lights,
+   * a Tiefling legacy's cantrip, etc. Listed in `known` too, but tracked here
+   * with their own casting ability so they get a save DC independent of any
+   * class (a non-caster can have these).
+   */
+  innate?: { ability: Ability; spells: string[] };
 }
 
 export interface Character {
@@ -149,6 +156,8 @@ export interface Character {
   /** AI-generated 16:9 scene used as the sheet backdrop (falls back to class art). */
   bgImage?: string;
   species: string;
+  /** Chosen subrace/lineage/ancestry, e.g. "Drow", "Red", "Infernal" (#148). */
+  lineage?: string;
   background: string;
   alignment?: string;
   classes: ClassEntry[];

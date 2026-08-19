@@ -19,11 +19,37 @@ export interface ClassData {
   level_features: Record<string, string[]>;
 }
 
+/** A subrace/lineage/ancestry option under a species (#148). */
+export interface SpeciesLineage {
+  desc?: string;
+  /** Overrides the base species walking speed (e.g. Wood Elf 35 ft). */
+  speed?: number;
+  /** Overrides the base darkvision range (e.g. Drow 120 ft). */
+  darkvision?: number;
+  /** A damage type this lineage grants Resistance to (Tiefling legacy, Dragonborn). */
+  resistance?: string;
+  /** Ability used for this lineage's innate spells (INT/WIS/CHA). */
+  spell_ability?: "INT" | "WIS" | "CHA";
+  /** Innate spells by the character level they're gained at ("1","3","5"). */
+  spells?: Record<string, string | string[]>;
+  /** Extra traits granted by this lineage. */
+  traits?: Array<{ name: string; desc: string }>;
+  /** Dragonborn draconic ancestry: breath/resistance damage type + breath shape. */
+  damage_type?: string;
+  breath?: "line" | "cone";
+}
+
 export interface SpeciesData {
   size: "Small" | "Medium" | "Large";
   speed: number;
+  /** Base darkvision range in feet, if any. */
+  darkvision?: number;
   creature_type: string;
   traits: Array<{ name: string; desc: string }>;
+  /** Label for the lineage picker, e.g. "Elven Lineage", "Draconic Ancestry". */
+  lineage_label?: string;
+  /** Subrace/lineage options, keyed by name. Absent for species without one. */
+  lineages?: Record<string, SpeciesLineage>;
 }
 
 export interface BackgroundData {

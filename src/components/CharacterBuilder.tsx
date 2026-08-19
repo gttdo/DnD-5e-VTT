@@ -7,6 +7,7 @@ import {
   type ClassData,
   type FeatData,
   type SpeciesData,
+  type SpeciesLineage,
   type SpellData,
   loadBackgrounds,
   loadClasses,
@@ -82,11 +83,15 @@ export const CharacterBuilder = ({ onCancel, onFinish, initialState, initialStep
   const skillQuota = state.className && classes ? classes[state.className]?.skill_choices.count ?? 0 : 0;
   const skillsComplete = !state.className || state.skillChoices.length >= skillQuota;
   const abilitiesComplete = ABILITIES.reduce((s, a) => s + state.abilities[a], 0) !== 60;
+  // A species with a lineage/ancestry (Elf, Dragonborn…) needs one chosen (#148).
+  const speciesHasLineage = !!(state.species && species && species[state.species]?.lineages);
+  const lineageComplete = !speciesHasLineage || !!state.lineage;
   const canFinish = !!(
     state.name &&
     state.className &&
     state.background &&
     state.species &&
+    lineageComplete &&
     spellsComplete &&
     skillsComplete &&
     abilitiesComplete
@@ -98,7 +103,7 @@ export const CharacterBuilder = ({ onCancel, onFinish, initialState, initialStep
     Home: !!state.name,
     Class: !!state.className && skillsComplete,
     Background: !!state.background,
-    Species: !!state.species,
+    Species: !!state.species && lineageComplete,
     Abilities: abilitiesComplete,
     Spells: spellsComplete,
     Equipment: true,
@@ -203,7 +208,7 @@ export const CharacterBuilder = ({ onCancel, onFinish, initialState, initialStep
             {state.name || "Unnamed hero"}
           </div>
           <div className="dim" style={{ fontSize: 12 }}>
-            Level 1 · {state.species || "Species?"} · {state.className || "Class?"}
+            Level 1 · {state.species || "Species?"}{state.lineage ? ` (${state.lineage})` : ""} · {state.className || "Class?"}
             {state.background ? ` · ${state.background}` : ""}
           </div>
         </div>
@@ -246,6 +251,7 @@ export const CharacterBuilder = ({ onCancel, onFinish, initialState, initialStep
               onFinish={finish}
               canFinish={!!canFinish}
               extraMissing={[
+                ...(!lineageComplete ? [species && state.species ? (species[state.species]?.lineage_label ?? "Lineage") : "Lineage"] : []),
                 ...(state.className && !skillsComplete
                   ? [`${skillQuota - state.skillChoices.length} more skill${skillQuota - state.skillChoices.length === 1 ? "" : "s"}`]
                   : []),
@@ -523,6 +529,39 @@ const ClassStep = ({
   );
 };
 
+/** Detail card for a chosen lineage: its perks + level-gated innate spells (#148). */
+const LineageDetail = ({ lineage }: { lineage: SpeciesLineage }) => {
+  const spellRows = lineage.spells
+    ? Object.entries(lineage.spells)
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([lvl, names]) => ({ lvl, list: (Array.isArray(names) ? names : [names]).join(", ") }))
+    : [];
+  return (
+    <div className="feature-card" style={{ display: "grid", gap: 6 }}>
+      {lineage.desc && <div className="dim" style={{ fontSize: 12 }}>{lineage.desc}</div>}
+      <div className="kv" style={{ fontSize: 12 }}>
+        {lineage.speed && (<><span className="k">Speed</span><span>{lineage.speed} ft</span></>)}
+        {lineage.darkvision && (<><span className="k">Darkvision</span><span>{lineage.darkvision} ft</span></>)}
+        {lineage.resistance && (<><span className="k">Resistance</span><span>{lineage.resistance}</span></>)}
+        {lineage.damage_type && (<><span className="k">Breath</span><span>{lineage.damage_type} ({lineage.breath})</span></>)}
+      </div>
+      {lineage.traits?.map((t) => (
+        <div key={t.name} style={{ fontSize: 12 }}>
+          <span style={{ fontWeight: 600 }}>{t.name}.</span> <span className="dim">{t.desc}</span>
+        </div>
+      ))}
+      {spellRows.length > 0 && (
+        <div style={{ fontSize: 12 }}>
+          <span style={{ fontWeight: 600 }}>Innate spells</span>
+          {spellRows.map((r) => (
+            <div key={r.lvl} className="dim">Lvl {r.lvl}: {r.list}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const SpeciesStep = ({
   state, setState, data,
 }: StepProps & { data: Record<string, SpeciesData> | null }) => {
@@ -550,7 +589,7 @@ const SpeciesStep = ({
             return (
               <button
                 key={name}
-                onClick={() => setState({ ...state, species: name })}
+                onClick={() => setState({ ...state, species: name, lineage: null })}
                 style={{
                   textAlign: "left",
                   padding: "10px 12px",
@@ -605,6 +644,32 @@ const SpeciesStep = ({
                   <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>{t.desc}</div>
                 </div>
               ))}
+
+              {selected.lineages && (
+                <>
+                  <div className="divider" />
+                  <div className="panel-title">{selected.lineage_label ?? "Lineage"}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {Object.keys(selected.lineages).map((lname) => (
+                      <button
+                        key={lname}
+                        onClick={() => setState({ ...state, lineage: lname })}
+                        className={state.lineage === lname ? "primary" : ""}
+                        style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 600 }}
+                      >
+                        {lname}
+                      </button>
+                    ))}
+                  </div>
+                  {state.lineage && selected.lineages[state.lineage] ? (
+                    <LineageDetail lineage={selected.lineages[state.lineage]} />
+                  ) : (
+                    <div className="dim" style={{ fontSize: 12 }}>
+                      Choose a {(selected.lineage_label ?? "lineage").toLowerCase()} to finish this species.
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <div className="dim" style={{ textAlign: "center", padding: 24 }}>

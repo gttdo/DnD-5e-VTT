@@ -146,6 +146,11 @@ export const quickBuildState = (
   const background = CLASS_BACKGROUND[className] ?? "Soldier";
   const bg = data.backgrounds[background];
 
+  // If the species has a lineage/ancestry, default to its first option so a quick
+  // hero is complete; the player can change it on Review. (#148)
+  const spData = data.species[species];
+  const lineage = spData?.lineages ? Object.keys(spData.lineages)[0] : null;
+
   // Standard array poured in by class priority.
   const priority = ABILITY_PRIORITY[className] ?? FALLBACK_PRIORITY;
   const abilities = { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 } as Record<Ability, number>;
@@ -182,6 +187,7 @@ export const quickBuildState = (
     className,
     background,
     species,
+    lineage,
     abilityMethod: "standard",
     abilities,
     skillChoices,

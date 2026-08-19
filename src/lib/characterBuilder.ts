@@ -39,6 +39,8 @@ export interface BuilderState {
   className: string | null;
   background: string | null;
   species: string | null;
+  /** Chosen subrace/lineage/ancestry when the species offers one (#148). */
+  lineage: string | null;
   abilityMethod: BuilderAbilityMethod;
   abilities: Record<Ability, number>;
   /** Skills the player picked from the class's skill list */
@@ -74,6 +76,7 @@ export const emptyBuilderState = (): BuilderState => ({
   className: null,
   background: null,
   species: null,
+  lineage: null,
   abilityMethod: "standard",
   abilities: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
   skillChoices: [],
@@ -171,6 +174,8 @@ export const buildCharacter = (
   const cls = data.classes[state.className];
   const sp = data.species[state.species];
   const bg = data.backgrounds[state.background];
+  // Chosen subrace/lineage/ancestry, if the species offers one (#148).
+  const lin = state.lineage && sp.lineages ? sp.lineages[state.lineage] : null;
 
   // Background grants +2/+1 (or three +1s — we apply +2 to first, +1 to second/third)
   // Player would normally pick the split; we apply the simplest 2/1: first +2, second +1.
@@ -227,6 +232,53 @@ export const buildCharacter = (
     }))
   );
 
+  // Lineage traits → features tagged with the lineage (e.g. "Elf (Drow)") (#148).
+  const lineageLabel = state.lineage ? `${state.species} (${state.lineage})` : state.species!;
+  if (lin?.traits) {
+    features.push(
+      ...lin.traits.map((t, i) => ({
+        id: `feat-lineage-${i}`,
+        name: t.name,
+        source: "species" as const,
+        sourceDetail: lineageLabel,
+        description: t.desc,
+      }))
+    );
+  }
+
+  // Innate lineage spells gained by this character level (level 1 → the "1" set).
+  // Kept both in `known` (so they list on the sheet) and in a dedicated `innate`
+  // record with their casting ability (so slice 2 can give them a save DC even
+  // for non-casters). #148
+  const innateSpells: string[] = [];
+  if (lin?.spells) {
+    for (const [lvl, names] of Object.entries(lin.spells)) {
+      if (Number(lvl) <= 1) innateSpells.push(...(Array.isArray(names) ? names : [names]));
+    }
+  }
+
+  // Damage resistance from a lineage/legacy (Tiefling, Dragonborn ancestry).
+  const resistances = lin?.resistance ? [lin.resistance] : [];
+
+  // Darkvision (lineage override wins) surfaced as a sense line.
+  const darkvision = lin?.darkvision ?? sp.darkvision;
+
+  const casterAllot = SPELL_ALLOTMENT[state.className];
+  const classSpells = casterAllot ? [...state.cantrips, ...state.spells] : [];
+  const allKnown = [...classSpells, ...innateSpells];
+  const spellcasting =
+    casterAllot || innateSpells.length
+      ? {
+          known: allKnown,
+          prepared: allKnown,
+          slotsUsed: {},
+          concentratingOn: null,
+          ...(innateSpells.length
+            ? { innate: { ability: (lin?.spell_ability ?? "CHA") as Ability, spells: innateSpells } }
+            : {}),
+        }
+      : undefined;
+
   // Background feat. backgrounds.json names it with a variant suffix
   // ("Magic Initiate (Cleric)") while feats.json is keyed by the base name —
   // strip the parenthetical to look up the real summary.
@@ -250,6 +302,7 @@ export const buildCharacter = (
     name: state.name || "Unnamed Hero",
     portrait: state.portrait,
     species: state.species,
+    lineage: state.lineage ?? undefined,
     background: state.background,
     alignment: state.alignment || undefined,
     classes: [{ name: state.className, level: 1, hitDie: cls.hit_die }],
@@ -268,29 +321,23 @@ export const buildCharacter = (
     hitDiceUsed: 0,
 
     ac: { value: 10 + abilityMod(abilities.DEX.base + (abilities.DEX.bonus ?? 0)) },
-    speed: sp.speed,
+    speed: lin?.speed ?? sp.speed,
     initiativeBonus: 0,
     inspiration: state.species === "Human",
 
     conditions: [],
-    defenses: { resistances: [], immunities: [], vulnerabilities: [] },
+    defenses: { resistances, immunities: [], vulnerabilities: [] },
 
     attacks: [],
     // Real starting gear (#110): the "gold" option gives coin to shop with; any
     // other choice materializes the class kit — a primary weapon comes in
     // equipped, so it lands in the character's Actions right away.
     inventory: state.equipmentChoice === "gold" ? [] : startingInventory(state.className),
-    // Level-1 spellcasting from the Spells step (casters only). Everything the
-    // character has starts available; prepared casters can re-prepare on the
-    // sheet. Cantrips + level-1 picks both live in `known`. (#110)
-    spellcasting: SPELL_ALLOTMENT[state.className]
-      ? {
-          known: [...state.cantrips, ...state.spells],
-          prepared: [...state.cantrips, ...state.spells],
-          slotsUsed: {},
-          concentratingOn: null,
-        }
-      : undefined,
+    // Level-1 spellcasting from the Spells step (casters) plus any innate lineage
+    // spells (#148). Everything starts available; prepared casters re-prepare on
+    // the sheet. Built above so non-casters with an innate cantrip still get a
+    // spellcasting block. (#110/#148)
+    spellcasting,
     currency:
       state.equipmentChoice === "gold"
         ? { cp: 0, sp: 0, ep: 0, gp: cls.starting_gold, pp: 0 }
@@ -305,7 +352,7 @@ export const buildCharacter = (
       languages: ["Common"], // simple default; species/background may add more
     },
 
-    senses: {},
+    senses: darkvision ? { other: [`Darkvision ${darkvision} ft.`] } : {},
 
     notes: {
       backstory: state.equipmentChoice === "A"

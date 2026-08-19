@@ -2,18 +2,32 @@
   "Dragonborn": {
     "size": "Medium",
     "speed": 30,
+    "darkvision": 60,
     "creature_type": "Humanoid",
     "traits": [
-      {"name": "Draconic Ancestry", "desc": "Choose a dragon type. Determines damage type for Breath Weapon and Damage Resistance."},
       {"name": "Breath Weapon", "desc": "Replace one Attack with 15-ft Cone or 30-ft Line. DC 8 + Con + PB. 1d10 damage scaling 5/11/17 to 4d10."},
       {"name": "Damage Resistance", "desc": "Resistance to ancestry damage type."},
       {"name": "Darkvision", "desc": "60 ft."},
       {"name": "Draconic Flight", "desc": "Lvl 5+: fly speed = walking speed for 1 minute, 1/long rest."}
-    ]
+    ],
+    "lineage_label": "Draconic Ancestry",
+    "lineages": {
+      "Black": {"resistance": "Acid", "damage_type": "Acid", "breath": "line"},
+      "Blue": {"resistance": "Lightning", "damage_type": "Lightning", "breath": "line"},
+      "Brass": {"resistance": "Fire", "damage_type": "Fire", "breath": "line"},
+      "Bronze": {"resistance": "Lightning", "damage_type": "Lightning", "breath": "line"},
+      "Copper": {"resistance": "Acid", "damage_type": "Acid", "breath": "line"},
+      "Gold": {"resistance": "Fire", "damage_type": "Fire", "breath": "cone"},
+      "Green": {"resistance": "Poison", "damage_type": "Poison", "breath": "cone"},
+      "Red": {"resistance": "Fire", "damage_type": "Fire", "breath": "cone"},
+      "Silver": {"resistance": "Cold", "damage_type": "Cold", "breath": "cone"},
+      "White": {"resistance": "Cold", "damage_type": "Cold", "breath": "cone"}
+    }
   },
   "Dwarf": {
     "size": "Medium",
     "speed": 30,
+    "darkvision": 120,
     "creature_type": "Humanoid",
     "traits": [
       {"name": "Darkvision", "desc": "120 ft."},
@@ -25,34 +39,80 @@
   "Elf": {
     "size": "Medium",
     "speed": 30,
+    "darkvision": 60,
     "creature_type": "Humanoid",
     "traits": [
       {"name": "Darkvision", "desc": "60 ft."},
-      {"name": "Elven Lineage", "desc": "Choose Drow / High Elf / Wood Elf — each has subtraits and spells."},
       {"name": "Fey Ancestry", "desc": "Advantage on saves vs Charmed."},
       {"name": "Keen Senses", "desc": "Perception proficiency."},
       {"name": "Trance", "desc": "4-hour meditation = mental benefit of long rest."}
-    ]
+    ],
+    "lineage_label": "Elven Lineage",
+    "lineages": {
+      "Drow": {
+        "desc": "Elves of the Underdark, gifted with superior darkvision and shadow magic.",
+        "darkvision": 120,
+        "spell_ability": "CHA",
+        "spells": {"1": "Dancing Lights", "3": "Faerie Fire", "5": "Darkness"},
+        "traits": [{"name": "Superior Darkvision", "desc": "Darkvision range is 120 ft."}]
+      },
+      "High Elf": {
+        "desc": "Elves attuned to the Weave, ever ready with a minor cantrip.",
+        "spell_ability": "INT",
+        "spells": {"1": "Prestidigitation"},
+        "traits": [{"name": "Cantrip", "desc": "Know a Wizard cantrip (Prestidigitation to start); swap it whenever you finish a Long Rest."}]
+      },
+      "Wood Elf": {
+        "desc": "Swift, wild elves at home in forests.",
+        "speed": 35,
+        "spell_ability": "WIS",
+        "spells": {"1": "Druidcraft", "3": "Longstrider", "5": "Pass without Trace"},
+        "traits": [{"name": "Fleet of Foot", "desc": "Your Speed is 35 ft."}]
+      }
+    }
   },
   "Gnome": {
     "size": "Small",
     "speed": 30,
+    "darkvision": 60,
     "creature_type": "Humanoid",
     "traits": [
       {"name": "Darkvision", "desc": "60 ft."},
-      {"name": "Gnomish Cunning", "desc": "Advantage on Int, Wis, Cha saves."},
-      {"name": "Gnomish Lineage", "desc": "Choose Forest Gnome (Minor Illusion + speak with small beasts) or Rock Gnome (Mending + Prestidigitation + tinker devices)."}
-    ]
+      {"name": "Gnomish Cunning", "desc": "Advantage on Int, Wis, Cha saves."}
+    ],
+    "lineage_label": "Gnomish Lineage",
+    "lineages": {
+      "Forest Gnome": {
+        "desc": "Gnomes with a knack for illusion and a bond with small creatures.",
+        "spell_ability": "INT",
+        "spells": {"1": "Minor Illusion"},
+        "traits": [{"name": "Speak with Small Beasts", "desc": "Communicate simple ideas with Small or smaller beasts."}]
+      },
+      "Rock Gnome": {
+        "desc": "Tinkers and inventors, born to build.",
+        "spell_ability": "INT",
+        "spells": {"1": ["Mending", "Prestidigitation"]},
+        "traits": [{"name": "Tinker", "desc": "Know Mending and Prestidigitation; use them to build a Tiny clockwork device (Cost 1 GP)."}]
+      }
+    }
   },
   "Goliath": {
     "size": "Medium",
     "speed": 35,
     "creature_type": "Humanoid",
     "traits": [
-      {"name": "Giant Ancestry", "desc": "Choose Cloud, Fire, Frost, Hill, Stone, or Storm Giant — grants per-rest bonus."},
       {"name": "Large Form", "desc": "Lvl 5+: become Large for 10 min, 1/long rest."},
       {"name": "Powerful Build", "desc": "Treat as one size larger for carrying capacity, push, drag, lift."}
-    ]
+    ],
+    "lineage_label": "Giant Ancestry",
+    "lineages": {
+      "Cloud's Jaunt": {"desc": "Cloud Giant blood.", "traits": [{"name": "Cloud's Jaunt", "desc": "Bonus Action: teleport up to 30 ft to an unoccupied space you can see. PB/long rest."}]},
+      "Fire's Burn": {"desc": "Fire Giant blood.", "traits": [{"name": "Fire's Burn", "desc": "When you hit a target with an attack roll, deal +1d10 Fire damage. PB/long rest."}]},
+      "Frost's Chill": {"desc": "Frost Giant blood.", "traits": [{"name": "Frost's Chill", "desc": "When you hit with an attack roll, deal +1d6 Cold damage and reduce the target's Speed by 10 ft until your next turn. PB/long rest."}]},
+      "Hill's Tumble": {"desc": "Hill Giant blood.", "traits": [{"name": "Hill's Tumble", "desc": "When you hit a Large or smaller creature with an attack roll, knock it Prone. PB/long rest."}]},
+      "Stone's Endurance": {"desc": "Stone Giant blood.", "traits": [{"name": "Stone's Endurance", "desc": "Reaction when you take damage: roll 1d12 + Con modifier and reduce the damage by that total. PB/long rest."}]},
+      "Storm's Thunder": {"desc": "Storm Giant blood.", "traits": [{"name": "Storm's Thunder", "desc": "Reaction when a creature within 60 ft damages you: deal 1d8 Thunder damage to it. PB/long rest."}]}
+    }
   },
   "Halfling": {
     "size": "Small",
@@ -78,6 +138,7 @@
   "Orc": {
     "size": "Medium",
     "speed": 30,
+    "darkvision": 120,
     "creature_type": "Humanoid",
     "traits": [
       {"name": "Adrenaline Rush", "desc": "Dash as Bonus Action; gain temp HP = PB. PB/long rest."},
@@ -88,11 +149,35 @@
   "Tiefling": {
     "size": "Medium",
     "speed": 30,
+    "darkvision": 60,
     "creature_type": "Humanoid",
     "traits": [
       {"name": "Darkvision", "desc": "60 ft."},
-      {"name": "Fiendish Legacy", "desc": "Choose Abyssal / Chthonic / Infernal — each grants Resistance + a cantrip + leveled spells at 3 and 5."},
-      {"name": "Otherworldly Presence", "desc": "Learn Thaumaturgy cantrip."}
-    ]
+      {"name": "Otherworldly Presence", "desc": "Know the Thaumaturgy cantrip."}
+    ],
+    "lineage_label": "Fiendish Legacy",
+    "lineages": {
+      "Abyssal": {
+        "desc": "The chaos of the Abyss runs in your blood.",
+        "resistance": "Poison",
+        "spell_ability": "CHA",
+        "spells": {"1": "Poison Spray", "3": "Ray of Sickness", "5": "Hold Person"},
+        "traits": [{"name": "Resistance", "desc": "Resistance to Poison damage."}]
+      },
+      "Chthonic": {
+        "desc": "The hunger of the lower planes clings to you.",
+        "resistance": "Necrotic",
+        "spell_ability": "CHA",
+        "spells": {"1": "Chill Touch", "3": "False Life", "5": "Ray of Enfeeblement"},
+        "traits": [{"name": "Resistance", "desc": "Resistance to Necrotic damage."}]
+      },
+      "Infernal": {
+        "desc": "The discipline of the Nine Hells is your birthright.",
+        "resistance": "Fire",
+        "spell_ability": "CHA",
+        "spells": {"1": "Fire Bolt", "3": "Hellish Rebuke", "5": "Darkness"},
+        "traits": [{"name": "Resistance", "desc": "Resistance to Fire damage."}]
+      }
+    }
   }
 }
