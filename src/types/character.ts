@@ -158,6 +158,8 @@ export interface Character {
   species: string;
   /** Chosen subrace/lineage/ancestry, e.g. "Drow", "Red", "Infernal" (#148). */
   lineage?: string;
+  /** Sorcery Points spent (#97). Pool derives from Sorcerer level; reset on a Long Rest. */
+  sorceryPointsUsed?: number;
   background: string;
   alignment?: string;
   classes: ClassEntry[];

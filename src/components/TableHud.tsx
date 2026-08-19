@@ -7,7 +7,7 @@ import { spellMech, scaleCantrip, upcastDamage, dartDamage } from "../lib/spellM
 import { itemSpellGrant } from "../lib/itemSpellGrants";
 import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } from "../lib/calc";
 import { applyDamage, applyHeal } from "../lib/hp";
-import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility } from "../lib/spellcasting";
+import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility, sorceryPoints, QUICKEN_COST } from "../lib/spellcasting";
 import { aggregateConditions, conditionName } from "../lib/conditions";
 import type { MonsterStatblock } from "../types/content";
 import { useRules } from "../state/Rules";
@@ -444,6 +444,14 @@ export const TableHud = ({
   // you can't cast another spell that turn except an action cantrip — and vice
   // versa. Tracks what's been cast this turn to enforce it. Resets at turn start.
   const [spellCastTurn, setSpellCastTurn] = useState<{ leveled: boolean; bonus: boolean }>({ leveled: false, bonus: false });
+  // Quickened Spell metamagic (#97): a Sorcerer (L2+) can spend Sorcery Points to
+  // cast an Action spell as a Bonus Action. "Armed" means the next eligible spell
+  // this player casts is quickened; it auto-disarms after that cast.
+  const sp = useMemo(() => sorceryPoints(c), [c]);
+  const canQuicken = !!sp && sp.current >= QUICKEN_COST;
+  const [quickenArmed, setQuickenArmed] = useState(false);
+  const spendSorceryPoints = (n: number) =>
+    onUpdate?.((d) => ({ ...d, sorceryPointsUsed: (d.sorceryPointsUsed ?? 0) + n }));
   // DC for the one-click concentration save (10 or half the damage taken).
   const [concDc, setConcDc] = useState(10);
   const [amount, setAmount] = useState(5);
@@ -822,14 +830,18 @@ export const TableHud = ({
   const spellTile = (name: string, baseLevel: number, slotLevel: number, remaining: number): Slot => {
     const mech = spellMech(name);
     const econKind = spellEconOf(name);
+    // Quickened Spell (#97): when armed, an Action-cast spell becomes a Bonus
+    // Action (spending Sorcery Points). Reaction/already-bonus/ritual spells are
+    // ineligible.
+    const quickened = quickenArmed && canQuicken && econKind === "action";
     const tileEcon: "action" | "bonus" | "reaction" =
-      econKind === "bonus" ? "bonus" : econKind === "reaction" ? "reaction" : "action";
+      quickened || econKind === "bonus" ? "bonus" : econKind === "reaction" ? "reaction" : "action";
     const ruleBlocked =
-      !!economy && ((econKind === "bonus" && spellCastTurn.leveled) || (slotLevel > 0 && spellCastTurn.bonus));
+      !!economy && ((tileEcon === "bonus" && spellCastTurn.leveled) || (slotLevel > 0 && spellCastTurn.bonus));
     const upcast = slotLevel > baseLevel;
     const mechSub =
       mech?.kind === "attack" ? "attack" : mech?.kind === "save" ? `${mech.save} save` : mech?.kind === "heal" ? "heal" : mech?.kind === "cleanse" ? "restore" : slotLevel === 0 ? "cantrip" : `lvl ${baseLevel}`;
-    const sub = upcast ? `↑ lvl ${slotLevel}` : econKind === "action" ? mechSub : spellEconLabel(econKind);
+    const sub = quickened ? "⚡ quickened" : upcast ? `↑ lvl ${slotLevel}` : econKind === "action" ? mechSub : spellEconLabel(econKind);
     return {
       id: `spell-${name}`,
       icon: "sparkles" as IconName,
@@ -837,7 +849,13 @@ export const TableHud = ({
       name,
       sub,
       kind: "common" as const,
-      run: () => castSpell(name, slotLevel, baseLevel),
+      run: () => {
+        if (quickened) {
+          spendSorceryPoints(QUICKEN_COST);
+          setQuickenArmed(false);
+        }
+        castSpell(name, slotLevel, baseLevel);
+      },
       disabled: remaining <= 0 || ruleBlocked,
       econ: tileEcon,
     };
@@ -1187,6 +1205,31 @@ export const TableHud = ({
           >
             <Icon name="close" size={13} />
           </button>
+        </div>
+      )}
+
+      {sp && (actionTab === "cantrip" || typeof actionTab === "number") && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 4px 6px" }}>
+          <button
+            onClick={() => setQuickenArmed((a) => !a)}
+            disabled={!canQuicken}
+            title={
+              canQuicken
+                ? "Quickened Spell — your next Action spell casts as a Bonus Action (2 Sorcery Points)"
+                : "Not enough Sorcery Points"
+            }
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600,
+              padding: "4px 9px", borderRadius: 999,
+              border: `1px solid ${quickenArmed ? "var(--gold)" : "var(--border)"}`,
+              background: quickenArmed ? "color-mix(in srgb, var(--gold) 22%, transparent)" : "transparent",
+              color: quickenArmed ? "var(--candle)" : "var(--text-dim)",
+              opacity: canQuicken ? 1 : 0.5, cursor: canQuicken ? "pointer" : "not-allowed",
+            }}
+          >
+            <Icon name="sparkles" size={12} /> Quicken{quickenArmed ? " · armed" : ` · ${QUICKEN_COST} SP`}
+          </button>
+          <span className="mono dim" style={{ fontSize: 11 }}>Sorcery {sp.current}/{sp.max}</span>
         </div>
       )}
 

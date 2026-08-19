@@ -180,6 +180,8 @@ export const useCharacter = (id: string | null) => {
         );
         // All spell slots return on a long rest.
         if (d.spellcasting) d.spellcasting.slotsUsed = {};
+        // Sorcery Points return on a long rest (#97).
+        d.sorceryPointsUsed = 0;
         // Magic items recharge at dawn / on a long rest — refill their pools (#88).
         // "Regains 1dN charges" is simplified to a full refill for now.
         d.inventory = d.inventory.map((i) =>

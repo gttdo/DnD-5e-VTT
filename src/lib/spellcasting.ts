@@ -88,3 +88,19 @@ export const spellsForClass = (spells: SpellData[], className: string): SpellDat
     .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
 export const emptySpellcasting = () => ({ known: [], prepared: [], slotsUsed: {} });
+
+/**
+ * Sorcery Points (#97). A Sorcerer's Font of Magic pool arrives at level 2 and
+ * equals the Sorcerer class level (2024). Returns null for non-sorcerers and
+ * level-1 sorcerers (who have no pool yet). Spent points live on the character
+ * (`sorceryPointsUsed`) and reset on a Long Rest.
+ */
+export const sorceryPoints = (c: Character): { max: number; current: number } | null => {
+  const sorc = c.classes.find((cl) => cl.name === "Sorcerer");
+  if (!sorc || sorc.level < 2) return null;
+  const max = Math.min(sorc.level, 20);
+  return { max, current: Math.max(0, max - (c.sorceryPointsUsed ?? 0)) };
+};
+
+/** Cost in Sorcery Points to cast a spell as a Bonus Action via Quickened Spell. */
+export const QUICKEN_COST = 2;
