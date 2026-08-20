@@ -48,7 +48,12 @@ export interface Scene {
 export const useScenes = (gameId: string | null, initialActiveSceneId: string | null) => {
   const { user } = useAuth();
   const [scenes, setScenes] = useState<Scene[]>([]);
+  // The game-wide "stage" (games.active_scene_id) — the DM's default + what the
+  // projector casts.
   const [activeSceneId, setActiveSceneId] = useState<string | null>(initialActiveSceneId);
+  // This member's own override (game_members.current_scene_id). null = follow the
+  // stage. When set, THIS client resolves to it instead (#Phase 3 per-player nav).
+  const [myCurrentSceneId, setMyCurrentSceneId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(gameId));
   const [error, setError] = useState<string | null>(null);
 
@@ -144,9 +149,50 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     };
   }, [gameId]);
 
+  // Load + live-track THIS member's override (game_members.current_scene_id).
+  // Filtered to my row; a DM "gather" or my own navigation both echo here.
+  useEffect(() => {
+    if (!gameId || !user || !supabaseConfigured) {
+      setMyCurrentSceneId(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("game_members")
+        .select("current_scene_id")
+        .eq("game_id", gameId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled) setMyCurrentSceneId((data as { current_scene_id?: string | null })?.current_scene_id ?? null);
+    })();
+    const channel = supabase
+      .channel(`member-scene:${gameId}:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game_members",
+          filter: `game_id=eq.${gameId}`,
+        },
+        (payload) => {
+          const row = payload.new as { user_id?: string; current_scene_id?: string | null };
+          if (row.user_id === user.id) setMyCurrentSceneId(row.current_scene_id ?? null);
+        }
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [gameId, user]);
+
+  // A member resolves to their own override when they have one, else the stage.
+  const effectiveSceneId = myCurrentSceneId ?? activeSceneId;
   const activeScene = useMemo(
-    () => scenes.find((s) => s.id === activeSceneId) ?? scenes[0] ?? null,
-    [scenes, activeSceneId]
+    () => scenes.find((s) => s.id === effectiveSceneId) ?? scenes[0] ?? null,
+    [scenes, effectiveSceneId]
   );
 
   const createScene = useCallback(
@@ -217,19 +263,68 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     return { error: error?.message ?? null };
   }, []);
 
+  // The DM moves the STAGE (games.active_scene_id) — the default everyone
+  // without an override follows, and what the projector casts. Also clears the
+  // caller's own override so the DM follows the scene they just selected.
   const setActiveScene = useCallback(
     async (sceneId: string) => {
       if (!gameId) return { error: "No game" };
-      // Optimistic so the DM's own canvas swaps instantly.
       setActiveSceneId(sceneId);
+      if (user) {
+        setMyCurrentSceneId(null);
+        void supabase
+          .from("game_members")
+          .update({ current_scene_id: null })
+          .eq("game_id", gameId)
+          .eq("user_id", user.id);
+      }
       const { error } = await supabase
         .from("games")
         .update({ active_scene_id: sceneId })
         .eq("id", gameId);
       return { error: error?.message ?? null };
     },
-    [gameId]
+    [gameId, user]
   );
+
+  // A member navigates THEMSELVES (hotspot travel, free-roam) — sets their own
+  // override without touching the stage or anyone else.
+  const navigateToScene = useCallback(
+    async (sceneId: string) => {
+      if (!gameId || !user) return { error: "Not signed in" };
+      setMyCurrentSceneId(sceneId); // optimistic
+      const { error } = await supabase
+        .from("game_members")
+        .update({ current_scene_id: sceneId })
+        .eq("game_id", gameId)
+        .eq("user_id", user.id);
+      return { error: error?.message ?? null };
+    },
+    [gameId, user]
+  );
+
+  // A member drops their own override and rejoins the stage.
+  const returnToStage = useCallback(async () => {
+    if (!gameId || !user) return { error: "Not signed in" };
+    setMyCurrentSceneId(null); // optimistic
+    const { error } = await supabase
+      .from("game_members")
+      .update({ current_scene_id: null })
+      .eq("game_id", gameId)
+      .eq("user_id", user.id);
+    return { error: error?.message ?? null };
+  }, [gameId, user]);
+
+  // The DM gathers everyone back to the stage by clearing every override.
+  const gatherParty = useCallback(async () => {
+    if (!gameId) return { error: "No game" };
+    setMyCurrentSceneId(null); // optimistic for the DM's own view
+    const { error } = await supabase
+      .from("game_members")
+      .update({ current_scene_id: null })
+      .eq("game_id", gameId);
+    return { error: error?.message ?? null };
+  }, [gameId]);
 
   return {
     scenes,
@@ -241,6 +336,11 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     renameScene,
     deleteScene,
     setActiveScene,
+    navigateToScene,
+    returnToStage,
+    gatherParty,
+    /** True when this member is roaming off the DM's stage (has an override). */
+    isRoaming: myCurrentSceneId != null && myCurrentSceneId !== activeSceneId,
     setSceneImageUrl,
     setSceneCinematicUrl,
     setSceneMode,

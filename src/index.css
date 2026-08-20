@@ -615,6 +615,39 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .table-cinematic-badge svg { display: block; }
 
+/* Roaming banner (Phase 3) — shown when this member is off the DM's stage. */
+.roam-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 12px;
+  border-radius: var(--r-pill);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-hair);
+  color: var(--text-muted);
+  font-size: 12px;
+  box-shadow: var(--shadow-lg);
+}
+.roam-banner svg { display: block; color: var(--gold); }
+.roam-banner button {
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 3px 12px;
+  background: var(--gold);
+  color: #14100c;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
 /* Phase 1 slice 4: scenes gallery — thumbnail switcher in the scene dropdown. */
 .scene-gallery {
   display: grid;

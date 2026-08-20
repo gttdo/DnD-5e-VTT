@@ -237,6 +237,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     activeScene,
     createScene,
     setActiveScene,
+    navigateToScene,
+    returnToStage,
+    gatherParty,
+    isRoaming,
     deleteScene,
     setSceneImageUrl,
     setSceneCinematicUrl,
@@ -3586,6 +3590,22 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 Generate a location…
               </button>
             )}
+            {isDM && (
+              <button
+                className="ghost"
+                onClick={async () => {
+                  setScenesOpen(false);
+                  const { error } = await gatherParty();
+                  if (error) toast.error(error);
+                  else toast.success("Party gathered to the live scene");
+                }}
+                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
+                title="Pull every player back to the live (stage) scene"
+              >
+                <Icon name="users" size={14} />
+                Gather party here
+              </button>
+            )}
             </div>
           )}
         </div>
@@ -4489,10 +4509,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   style={{ cursor: isDM ? "pointer" : "default", opacity: h.hidden ? 0.5 : 1 }}
                   onPointerDown={(e) => {
                     e.stopPropagation(); // don't let the board place a new pin here
-                    if (!isDM) return;
-                    if (toolRef.current === "hotspot") setEditHotspotId(h.id);
-                    else if (h.target_scene_id) void setActiveScene(h.target_scene_id);
-                    else setEditHotspotId(h.id);
+                    // DM in hotspot-tool mode edits the pin; otherwise anyone
+                    // clicking a linked pin travels THEMSELVES there (per-player
+                    // navigation) — the DM stage and other players are untouched.
+                    if (isDM && toolRef.current === "hotspot") {
+                      setEditHotspotId(h.id);
+                    } else if (h.target_scene_id) {
+                      void navigateToScene(h.target_scene_id);
+                    } else if (isDM) {
+                      setEditHotspotId(h.id);
+                    }
                   }}
                 >
                   <circle r={20} fill="rgba(20,16,12,0.55)" stroke="var(--gold)" strokeWidth={selected ? 4 : 2.5} />
@@ -4634,6 +4660,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 <Icon name="drama" size={12} />
                 <span>Cinematic — this is what players see</span>
               </div>
+            </div>
+          )}
+
+          {/* Roaming banner (#Phase 3) — this member has wandered off the DM's
+              stage via a hotspot; one tap rejoins the group. */}
+          {isRoaming && (
+            <div className="roam-banner">
+              <Icon name="map" size={13} />
+              <span>{isDM ? "You've stepped away from the stage" : "You've wandered off from the group"}</span>
+              <button onClick={() => void returnToStage()}>Rejoin</button>
             </div>
           )}
 
