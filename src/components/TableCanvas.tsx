@@ -3375,7 +3375,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 left: 0,
                 marginTop: 4,
                 zIndex: 50,
-                minWidth: 240,
+                minWidth: 320,
                 padding: 8,
                 display: "flex",
                 flexDirection: "column",
@@ -3383,47 +3383,66 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 boxShadow: "var(--shadow-lg)",
               }}
             >
-            {scenes.map((s) => (
-              <button
-                key={s.id}
-                className={s.id === activeScene?.id ? "primary" : "ghost"}
-                onClick={async () => {
-                  if (isDM) await setActiveScene(s.id);
-                  setScenesOpen(false);
-                }}
-                disabled={!isDM && s.id !== activeScene?.id}
-                style={{
-                  justifyContent: "space-between",
-                  display: "flex",
-                  fontSize: 12,
-                  textAlign: "left",
-                }}
-                title={isDM ? "Switch to this scene" : "Only the DM can switch scenes"}
-              >
-                <span>{s.name}</span>
-                {isDM && s.id !== activeScene?.id && scenes.length > 1 && (
-                  <span
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (
-                        await confirm({
-                          title: "Delete scene",
-                          message: `Delete "${s.name}"? Its tokens will be lost.`,
-                          confirmLabel: "Delete",
-                          danger: true,
-                        })
-                      ) {
-                        await deleteScene(s.id);
-                      }
-                    }}
-                    style={{ opacity: 0.6, marginLeft: 8, cursor: "pointer", display: "inline-flex", alignItems: "center" }}
-                    aria-label="Delete scene"
+            <div className="scene-gallery">
+            {scenes.map((s) => {
+              const thumb = s.cinematic_url ?? s.image_url ?? null;
+              const isActive = s.id === activeScene?.id;
+              const sMode = s.mode ?? "tactical";
+              return (
+                <div
+                  key={s.id}
+                  className={`scene-card ${isActive ? "is-live" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-current={isActive}
+                  onClick={async () => {
+                    if (isDM && !isActive) await setActiveScene(s.id);
+                    setScenesOpen(false);
+                  }}
+                  title={isDM ? "Switch to this scene" : isActive ? "Current scene" : "Only the DM can switch scenes"}
+                  style={{ cursor: isDM || isActive ? "pointer" : "default" }}
+                >
+                  <div
+                    className="scene-card-thumb"
+                    style={thumb ? { backgroundImage: `url("${thumb}")` } : undefined}
                   >
-                    <Icon name="close" size={12} />
-                  </span>
-                )}
-              </button>
-            ))}
+                    {!thumb && <Icon name="image" size={16} />}
+                    {isActive && <span className="scene-card-live">Live</span>}
+                    <span
+                      className={`scene-card-mode ${sMode}`}
+                      title={sMode === "cinematic" ? "Showing the cinematic backdrop" : "Showing the battlemap"}
+                    >
+                      <Icon name={sMode === "cinematic" ? "drama" : "grid"} size={11} />
+                    </span>
+                  </div>
+                  <div className="scene-card-foot">
+                    <span className="scene-card-name">{s.name}</span>
+                    {isDM && !isActive && scenes.length > 1 && (
+                      <span
+                        className="scene-card-del"
+                        aria-label="Delete scene"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (
+                            await confirm({
+                              title: "Delete scene",
+                              message: `Delete "${s.name}"? Its tokens will be lost.`,
+                              confirmLabel: "Delete",
+                              danger: true,
+                            })
+                          ) {
+                            await deleteScene(s.id);
+                          }
+                        }}
+                      >
+                        <Icon name="close" size={11} />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            </div>
             {isDM && activeScene && (
               <button
                 className="ghost"

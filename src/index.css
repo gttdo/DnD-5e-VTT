@@ -538,6 +538,87 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background: var(--border);
   margin: 4px 0;
 }
+/* Phase 1 slice 4: scenes gallery — thumbnail switcher in the scene dropdown. */
+.scene-gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.scene-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-0) 40%, var(--panel));
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.scene-card:hover { border-color: color-mix(in srgb, var(--gold) 45%, var(--border)); }
+.scene-card.is-live {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold), var(--glass-sheen);
+}
+.scene-card-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background-size: cover;
+  background-position: center;
+  background-color: color-mix(in srgb, var(--bg-0) 60%, var(--panel));
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+}
+.scene-card-thumb svg { display: block; }
+.scene-card-live {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #14100c;
+  background: var(--gold);
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+}
+.scene-card-mode {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg-0) 55%, transparent);
+  color: var(--cream);
+}
+.scene-card-mode.cinematic { color: var(--gold); }
+.scene-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px;
+}
+.scene-card-name {
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scene-card-del {
+  flex: none;
+  opacity: 0.5;
+  cursor: pointer;
+  display: inline-flex;
+  color: var(--text-dim);
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.scene-card-del svg { display: block; }
+.scene-card-del:hover { opacity: 1; color: var(--ember); }
+
 /* Phase 1: DM cinematic/tactical face toggle — a glass segmented pill. */
 .scene-mode-toggle {
   display: inline-flex;
