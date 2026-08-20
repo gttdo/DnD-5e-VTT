@@ -45,7 +45,15 @@ export interface Scene {
  * choice is authoritative and every client sees the same thing. Both `scenes`
  * and the parent game's `active_scene_id` come in over realtime.
  */
-export const useScenes = (gameId: string | null, initialActiveSceneId: string | null) => {
+export const useScenes = (
+  gameId: string | null,
+  initialActiveSceneId: string | null,
+  opts?: { stageOnly?: boolean }
+) => {
+  // stageOnly (the projector): always resolve the game's stage, ignoring the
+  // viewer's per-member override — the cast screen shows the DM's stage, never
+  // whoever happens to be signed in on that device.
+  const stageOnly = opts?.stageOnly ?? false;
   const { user } = useAuth();
   const [scenes, setScenes] = useState<Scene[]>([]);
   // The game-wide "stage" (games.active_scene_id) — the DM's default + what the
@@ -152,7 +160,7 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
   // Load + live-track THIS member's override (game_members.current_scene_id).
   // Filtered to my row; a DM "gather" or my own navigation both echo here.
   useEffect(() => {
-    if (!gameId || !user || !supabaseConfigured) {
+    if (!gameId || !user || !supabaseConfigured || stageOnly) {
       setMyCurrentSceneId(null);
       return;
     }
@@ -186,10 +194,11 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [gameId, user]);
+  }, [gameId, user, stageOnly]);
 
   // A member resolves to their own override when they have one, else the stage.
-  const effectiveSceneId = myCurrentSceneId ?? activeSceneId;
+  // The projector (stageOnly) always shows the stage.
+  const effectiveSceneId = stageOnly ? activeSceneId : myCurrentSceneId ?? activeSceneId;
   const activeScene = useMemo(
     () => scenes.find((s) => s.id === effectiveSceneId) ?? scenes[0] ?? null,
     [scenes, effectiveSceneId]

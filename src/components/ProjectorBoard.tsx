@@ -62,7 +62,9 @@ export const ProjectorBoard = ({ gameId }: { gameId: string }) => {
     };
   }, [gameId]);
 
-  const { activeScene } = useScenes(gameId, seedSceneId);
+  // The cast screen follows the DM's stage, never the viewer's own per-member
+  // override (#Phase 3) — even though it may run under a signed-in account.
+  const { activeScene } = useScenes(gameId, seedSceneId, { stageOnly: true });
   const cols = activeScene?.grid_cols ?? DEFAULT_COLS;
   const rows = activeScene?.grid_rows ?? DEFAULT_ROWS;
   const width = cols * CELL;
