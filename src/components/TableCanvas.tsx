@@ -3504,27 +3504,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   >
                     {!thumb && <Icon name="image" size={16} />}
                     {isActive && <span className="scene-card-live">Live</span>}
-                  </div>
-                  <div className="scene-card-foot">
-                    <span
-                      className="scene-card-name"
-                      style={cardMenuId === s.id ? { visibility: "hidden" } : undefined}
-                    >
-                      {s.name}
-                    </span>
-                    {isDM && (
-                      <span
-                        className={`scene-card-more ${cardMenuId === s.id ? "is-open" : ""}`}
-                        aria-label={`Options for ${s.name}`}
-                        title="Scene options"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCardMenuId((cur) => (cur === s.id ? null : s.id));
-                        }}
-                      >
-                        <Icon name="more" size={12} />
-                      </span>
-                    )}
                     {isDM && scenes.length > 1 && (
                       <span
                         className="scene-card-del"
@@ -3544,7 +3523,28 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                           }
                         }}
                       >
-                        <Icon name="delete" size={11} />
+                        <Icon name="delete" size={12} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="scene-card-foot">
+                    <span
+                      className="scene-card-name"
+                      style={cardMenuId === s.id ? { visibility: "hidden" } : undefined}
+                    >
+                      {s.name}
+                    </span>
+                    {isDM && (
+                      <span
+                        className={`scene-card-more ${cardMenuId === s.id ? "is-open" : ""}`}
+                        aria-label={`Options for ${s.name}`}
+                        title="Scene options"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCardMenuId((cur) => (cur === s.id ? null : s.id));
+                        }}
+                      >
+                        <Icon name="more" size={12} />
                       </span>
                     )}
                   </div>

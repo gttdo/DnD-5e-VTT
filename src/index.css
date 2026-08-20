@@ -920,16 +920,24 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Trash lives in the thumbnail's top-right corner — a dark scrim disc keeps it
+   legible over any art. */
 .scene-card-del {
-  flex: none;
-  opacity: 0.5;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg-0) 60%, transparent);
+  color: var(--cream);
   cursor: pointer;
-  display: inline-flex;
-  color: var(--text-dim);
-  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .scene-card-del svg { display: block; }
-.scene-card-del:hover { opacity: 1; color: var(--ember); }
+.scene-card-del:hover { background: var(--ember); color: #fff; }
 .scene-card-more {
   flex: none;
   opacity: 0.55;
