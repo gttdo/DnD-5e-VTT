@@ -538,6 +538,41 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background: var(--border);
   margin: 4px 0;
 }
+/* Phase 2: hotspot editor popover. */
+.hotspot-editor {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: 268px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-lg);
+}
+.hotspot-field { display: flex; flex-direction: column; gap: 3px; }
+.hotspot-field span {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.hotspot-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.hotspot-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+}
+.hotspot-pin { transition: opacity var(--dur-fast) var(--ease); }
+
 /* Phase 1 slice 4: scenes gallery — thumbnail switcher in the scene dropdown. */
 .scene-gallery {
   display: grid;

@@ -40,6 +40,7 @@ import { AttackCursor, CURSOR_SWING_MS, cursorSwingMs, cursorImpactMs, type Curs
 import { TableModals, RegionMapModal, JournalModal, type HudModal } from "./TableModals";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
+import { useHotspots } from "../state/useHotspots";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
 import { PartyTray, DRAG_MIME } from "./PartyTray";
 import { CombatTurnRail } from "./CombatTurnRail";
@@ -326,7 +327,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // Active canvas tool. "select" moves tokens, "pan" drags the view,
   // "ping" pulses a point for every player, "ruler" measures distance.
   // (Space-held still pans regardless of tool, as a quick modifier.)
-  const [tool, setTool] = useState<"select" | "pan" | "ping" | "ruler" | "fog" | "draw">("select");
+  const [tool, setTool] = useState<"select" | "pan" | "ping" | "ruler" | "fog" | "draw" | "hotspot">("select");
   const toolRef = useRef(tool);
   useEffect(() => {
     toolRef.current = tool;
@@ -508,6 +509,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     game.id,
     activeScene?.id ?? null
   );
+  // Hotspots (#Phase 2): navigable pins on this scene's backdrop.
+  const { hotspots, createHotspot, updateHotspot, deleteHotspot } = useHotspots(activeScene?.id ?? null);
+  // The pin whose editor popover is open (DM authoring).
+  const [editHotspotId, setEditHotspotId] = useState<string | null>(null);
   // Draw tool: which shape, what colour. "erase" removes on click.
   const [drawKind, setDrawKind] = useState<DrawKind | "erase">("pen");
   const [drawColor, setDrawColor] = useState(DRAW_COLORS[0]);
@@ -688,6 +693,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       const start = { x: snapToCellCenter(local.x), y: snapToCellCenter(local.y) };
       rulerDragRef.current = start;
       setMeasure({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
+    } else if (toolRef.current === "hotspot") {
+      if (!isDM) return;
+      const local = clientToSvg(e.clientX, e.clientY);
+      if (!local || width === 0 || height === 0) return;
+      // Store normalized to the backdrop so the pin survives any board size/zoom.
+      const nx = Math.max(0, Math.min(1, local.x / width));
+      const ny = Math.max(0, Math.min(1, local.y / height));
+      void createHotspot(nx, ny).then(({ hotspot, error }) => {
+        if (error) toast.error(error);
+        else if (hotspot) setEditHotspotId(hotspot.id); // open its editor to link a target
+      });
     }
   };
 
@@ -1117,8 +1133,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       setTokenMenu({ tokenId: t.id, x: e.clientX, y: e.clientY });
       return;
     }
-    // Ping/ruler clicks pass through tokens to the board handler.
-    if (toolRef.current === "ping" || toolRef.current === "ruler" || toolRef.current === "fog" || toolRef.current === "draw") return;
+    // Ping/ruler/fog/draw/hotspot clicks pass through tokens to the board handler.
+    if (
+      toolRef.current === "ping" ||
+      toolRef.current === "ruler" ||
+      toolRef.current === "fog" ||
+      toolRef.current === "draw" ||
+      toolRef.current === "hotspot"
+    )
+      return;
     // Pan takes priority if the user is holding space, using middle-mouse, or
     // has the Pan tool active — the svg's capture-phase handler gets it then.
     if (spaceHeldRef.current || toolRef.current === "pan") {
@@ -3702,6 +3725,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               <Icon name="grid" size={18} />
             </button>
           )}
+          {isDM && (
+            <button
+              className={`rail-tool ${tool === "hotspot" ? "active" : ""}`}
+              onClick={() => {
+                setTool((t) => (t === "hotspot" ? "select" : "hotspot"));
+                setPartyOpen(false);
+              }}
+              title="Hotspots — click the map to drop a travel pin, then link it to a scene"
+              aria-label="Hotspot tool"
+            >
+              <Icon name="map" size={18} />
+            </button>
+          )}
 
           <div className="rail-divider" />
           <div className="rail-group-label">Actors</div>
@@ -4408,6 +4444,52 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               </g>
             ))}
 
+            {/* Hotspots (#Phase 2) — navigable pins on the backdrop, positioned
+                from normalized coords. DM authors/navigates; players see them
+                (per-player navigation is Phase 3). Hidden pins are DM-only. */}
+            {hotspots.map((h) => {
+              if (h.hidden && !isDM) return null;
+              const px = h.x * width;
+              const py = h.y * height;
+              const linked = Boolean(h.target_scene_id);
+              const selected = editHotspotId === h.id;
+              return (
+                <g
+                  key={h.id}
+                  className="hotspot-pin"
+                  transform={`translate(${px} ${py})`}
+                  style={{ cursor: isDM ? "pointer" : "default", opacity: h.hidden ? 0.5 : 1 }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation(); // don't let the board place a new pin here
+                    if (!isDM) return;
+                    if (toolRef.current === "hotspot") setEditHotspotId(h.id);
+                    else if (h.target_scene_id) void setActiveScene(h.target_scene_id);
+                    else setEditHotspotId(h.id);
+                  }}
+                >
+                  <circle r={20} fill="rgba(20,16,12,0.55)" stroke="var(--gold)" strokeWidth={selected ? 4 : 2.5} />
+                  <circle r={7} fill="var(--gold)" />
+                  {!linked && (
+                    <circle r={20} fill="none" stroke="var(--ember)" strokeWidth={2.5} strokeDasharray="4 4" />
+                  )}
+                  {h.label && (
+                    <text
+                      y={40}
+                      textAnchor="middle"
+                      fontSize={16}
+                      fill="var(--cream)"
+                      stroke="var(--bg-0)"
+                      strokeWidth={3}
+                      paintOrder="stroke"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {h.label}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
             {/* Roll blooms — a result floats up from the roller's token so the
                 whole table SEES the number land, not just reads it in the log. */}
             {blooms.map((b) => (
@@ -5037,6 +5119,85 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onClose={() => setPartyOpen(false)}
             />
           )}
+
+          {/* Hotspot editor (#Phase 2) — DM names a pin, links it to a scene
+              (or spawns a new one inline), gates it, or removes it. */}
+          {editHotspotId && isDM && (() => {
+            const h = hotspots.find((x) => x.id === editHotspotId);
+            if (!h) return null;
+            const others = scenes.filter((s) => s.id !== activeScene?.id);
+            return (
+              <div className="panel hotspot-editor">
+                <div className="panel-title">Travel hotspot</div>
+                <label className="hotspot-field">
+                  <span>Label</span>
+                  <input
+                    autoFocus
+                    value={h.label ?? ""}
+                    onChange={(e) => updateHotspot(h.id, { label: e.target.value })}
+                    placeholder="e.g. The Keep"
+                  />
+                </label>
+                <label className="hotspot-field">
+                  <span>Links to scene</span>
+                  <select
+                    value={h.target_scene_id ?? ""}
+                    onChange={async (e) => {
+                      const v = e.target.value;
+                      if (v === "__new__") {
+                        const name = await prompt({
+                          title: "New scene",
+                          subtitle: "Name the destination this pin leads to",
+                          initialValue: h.label || `Scene ${scenes.length + 1}`,
+                          confirmLabel: "Create scene",
+                        });
+                        if (!name) return;
+                        const { scene, error } = await createScene(name);
+                        if (error) {
+                          toast.error(error);
+                          return;
+                        }
+                        if (scene) await updateHotspot(h.id, { target_scene_id: scene.id });
+                      } else {
+                        await updateHotspot(h.id, { target_scene_id: v || null });
+                      }
+                    }}
+                  >
+                    <option value="">— Not linked —</option>
+                    {others.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                    <option value="__new__">＋ New scene…</option>
+                  </select>
+                </label>
+                <label className="hotspot-toggle">
+                  <input
+                    type="checkbox"
+                    checked={h.hidden}
+                    onChange={(e) => updateHotspot(h.id, { hidden: e.target.checked })}
+                  />
+                  <span>Hidden until revealed</span>
+                </label>
+                <div className="hotspot-editor-actions">
+                  <button
+                    className="ghost"
+                    style={{ color: "var(--ember)" }}
+                    onClick={() => {
+                      void deleteHotspot(h.id);
+                      setEditHotspotId(null);
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button className="primary" onClick={() => setEditHotspotId(null)}>
+                    Done
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Map alignment panel (#115) — DM nudges/scales the background image so
               its baked grid lines up with the canonical overlay. Live-updates the
