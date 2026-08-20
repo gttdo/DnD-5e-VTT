@@ -4384,6 +4384,21 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   height: 100dvh;
   overflow: hidden;
 }
+/* Bulletproof the table's height chain (a player reported dead space below the
+   footer): make the immersive main a flex column that hard-fills the shell, and
+   the table-shell a flex child that fills it — so the footer is pinned to the
+   viewport bottom even if `height: 100%` fails to resolve somewhere. Scoped to
+   immersive so other screens' block-flow/scroll is untouched. */
+.app-shell.is-immersive .app-main {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app-shell.is-immersive .table-shell {
+  flex: 1;
+  min-height: 0;
+}
 .app-shell.is-immersive .app-main {
   min-height: 0;
   overflow: hidden;
