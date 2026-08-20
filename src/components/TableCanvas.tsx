@@ -4,6 +4,7 @@ import { useScenes } from "../state/useScenes";
 import type { Game } from "../state/useGames";
 import { MapPickerDialog } from "./MapPickerDialog";
 import { GenerateSceneDialog } from "./GenerateSceneDialog";
+import { GenerateLocationDialog } from "./GenerateLocationDialog";
 import { TokenPickerDialog, TOKEN_DRAG_MIME } from "./TokenPickerDialog";
 import { supabase } from "../lib/supabase";
 import type { MapAsset } from "../state/useMaps";
@@ -281,6 +282,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // cinematic backdrop (#Phase 1). Reuses the one MapPickerDialog for both.
   const [pickerTarget, setPickerTarget] = useState<"tactical" | "cinematic">("tactical");
   const [genSceneOpen, setGenSceneOpen] = useState(false);
+  const [genLocationOpen, setGenLocationOpen] = useState(false);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
   // The combat rail shows by default (a pill out of combat for the DM, the turn
@@ -3571,6 +3573,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 + New Scene
               </button>
             )}
+            {isDM && (
+              <button
+                className="ghost"
+                onClick={() => {
+                  setGenLocationOpen(true);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <Icon name="sparkles" size={14} />
+                Generate a location…
+              </button>
+            )}
             </div>
           )}
         </div>
@@ -5395,6 +5410,20 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             return { error };
           }}
           onClose={() => setGenSceneOpen(false)}
+        />
+      )}
+
+      {genLocationOpen && (
+        <GenerateLocationDialog
+          onCreate={async (name, cinematicUrl, battlemapUrl) => {
+            const { scene, error } = await createScene(name);
+            if (error || !scene) return { error: error ?? "Could not create the scene" };
+            await setSceneImageUrl(scene.id, battlemapUrl);
+            await setSceneCinematicUrl(scene.id, cinematicUrl);
+            await setActiveScene(scene.id);
+            return { error: null };
+          }}
+          onClose={() => setGenLocationOpen(false)}
         />
       )}
 
