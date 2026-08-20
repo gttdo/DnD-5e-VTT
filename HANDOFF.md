@@ -72,6 +72,8 @@ Item-granted spellcasting (#88) + curated SRD item spell grants (`4f11d5f`); dea
 
 Late in the session the work pivoted from features to a **design vision**. Full detail is in the memory notes; summarized here.
 
+> **⭐ CONSOLIDATED PROPOSAL — "The Living World":** https://claude.ai/code/artifact/0a1b9a75-a792-4352-a9fb-019e7aee07da — ties §4a (cinematic UI) + §4b (scenes) + the generative foundry into one vision, mapped onto the **Heroes of the Borderlands** campaign (the 2024 starter set — Keep / Wilderness / Caves of Chaos; researched as the concrete test dataset). Core model: **everything is a Scene** with three composable faces (Navigation / Cinematic / Tactical); scenes nest into a world-tree via hotspots; **players navigate, the DM directs** (only the DM flips cinematic⇄tactical = the combat trigger, per-scene); assets come from a **generative foundry** (Token ✅ / Map[regional+battle] / **Scene**=new / Handout=planned, + a composite "Generate a Location"). **Phased plan:** Phase 0 = UI base (glass tokens, dice tray, one-gold + labels, hide-chrome — low effort, stands alone, **the natural first build**) → 1 scene model + toggle + scenes gallery → 2 foundry + hotspot editor → 3 per-player navigation + presence → 4 packs + handout gen + AI-GM hooks.
+
 ### 4a. Alchemy-inspired cinematic/glass UI redesign
 Researched Alchemy RPG VTT live (Chrome extension). **Artifacts (saved on claude.ai):**
 - UI audit: https://claude.ai/code/artifact/25557bb7-531c-482d-8a81-77a5bbc4fdad
