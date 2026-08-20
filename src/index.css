@@ -614,6 +614,55 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   text-transform: uppercase;
 }
 .table-cinematic-badge svg { display: block; }
+/* Hotspot pins on the cinematic face — the navigation-scene interaction. */
+.cine-hotspot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.cine-hotspot-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--gold) 30%, rgba(20, 16, 12, 0.6));
+  border: 2.5px solid var(--gold);
+  box-shadow: 0 0 0 4px rgba(20, 16, 12, 0.35), 0 0 18px color-mix(in srgb, var(--gold) 55%, transparent);
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.cine-hotspot:hover .cine-hotspot-dot {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 4px rgba(20, 16, 12, 0.35), 0 0 26px var(--gold);
+}
+.cine-hotspot.is-unlinked .cine-hotspot-dot { border-style: dashed; border-color: var(--ember); }
+.cine-hotspot.is-hidden { opacity: 0.5; }
+.cine-hotspot-label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--cream);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+}
+
+/* Blurred backdrop UNDER the tactical board (the Phase-1 two-layer design on
+   the DM board): the battlemap floats over the blurred place it belongs to. */
+.table-backdrop-under {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(28px) brightness(0.45) saturate(1.1);
+  transform: scale(1.12); /* overscan the blur's soft edges */
+  pointer-events: none;
+}
 
 /* Roaming banner (Phase 3) — shown when this member is off the DM's stage. */
 .roam-banner {
@@ -810,6 +859,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   width: 100%;
   height: 100%;
   display: block;
+  position: relative;
+  z-index: 1;
   /* touch-action:none (set inline) already kills double-tap zoom here.
      -webkit-touch-callout stops iOS's long-press "save image / copy" sheet,
      which would otherwise hijack a long-press on a token. */

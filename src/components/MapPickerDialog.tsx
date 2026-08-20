@@ -9,28 +9,32 @@ interface Props {
    * so the DM can see which library asset the scene came from.
    */
   currentMapId: string | null;
-  /** Restrict the grid to one asset kind (#Phase 2). Omit to show everything. */
-  filterType?: "battlemap" | "regional" | "cinematic";
+  /** Restrict the grid to these asset kinds (#Phase 2). Omit to show everything. */
+  filterType?: Array<"battlemap" | "regional" | "cinematic">;
+  /** Which copy variant to show. */
+  slot?: "battlemap" | "backdrop";
   onPick: (map: MapAsset) => void;
   onClose: () => void;
 }
 
 const COPY = {
   battlemap: { title: "Pick a battlemap", subtitle: "From your library. Click to use as this scene's tactical map." },
-  regional: { title: "Pick a regional map", subtitle: "From your library. Click to use as this scene's overview map." },
-  cinematic: { title: "Pick a backdrop", subtitle: "From your library. Click to use as this scene's cinematic backdrop." },
+  backdrop: {
+    title: "Pick a backdrop",
+    subtitle: "From your library — a cinematic backdrop, or a regional map to make this a navigation scene.",
+  },
   all: { title: "Pick a map", subtitle: "From your library. Click to use on this scene." },
 } as const;
 
 /**
- * Grid of the DM's saved maps, optionally filtered to one asset kind. Click one
+ * Grid of the DM's saved maps, optionally filtered by asset kind. Click one
  * → applies to the active scene. Empty state points the DM at the Cartographer.
  */
-export const MapPickerDialog = ({ currentMapId, filterType, onPick, onClose }: Props) => {
+export const MapPickerDialog = ({ currentMapId, filterType, slot, onPick, onClose }: Props) => {
   const { maps, loading } = useMaps();
   // Pre-0037 rows have no map_type → treat them as battlemaps.
-  const shown = filterType ? maps.filter((m) => (m.map_type ?? "battlemap") === filterType) : maps;
-  const copy = COPY[filterType ?? "all"];
+  const shown = filterType ? maps.filter((m) => filterType.includes(m.map_type ?? "battlemap")) : maps;
+  const copy = COPY[slot ?? "all"];
 
   return (
     <Dialog onClose={onClose} size="lg" title={copy.title} subtitle={copy.subtitle}>

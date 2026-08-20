@@ -3930,6 +3930,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         </div>
 
         <div className="table-board">
+          {/* The scene's cinematic backdrop as atmosphere UNDER the tactical
+              board (#Phase 1 design, now on the DM board too): blurred + dimmed
+              so the battlemap floats over the place it belongs to, filling the
+              letterbox margins. Sharp full-bleed cinematic mode is the separate
+              .table-cinematic overlay below. */}
+          {activeScene?.cinematic_url && (activeScene.mode ?? "tactical") === "tactical" && (
+            <div
+              className="table-backdrop-under"
+              style={{ backgroundImage: `url("${activeScene.cinematic_url}")` }}
+              aria-hidden="true"
+            />
+          )}
           <svg
             ref={svgRef}
             viewBox={viewBox}
@@ -4649,13 +4661,53 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               with what players see on the cast view — instead of a silent no-op.
               Covers the grid/tokens; flip back to Tactical to return to the map. */}
           {activeScene?.mode === "cinematic" && activeScene.cinematic_url && (
-            <div className="table-cinematic">
+            <div
+              className="table-cinematic"
+              onPointerDown={(e) => {
+                // DM hotspot tool works here too — this is how a NAVIGATION scene
+                // is authored: a regional-map backdrop, pins placed straight on it.
+                if (!isDM || toolRef.current !== "hotspot") return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                void createHotspot(nx, ny).then(({ hotspot, error }) => {
+                  if (error) toast.error(error);
+                  else if (hotspot) setEditHotspotId(hotspot.id);
+                });
+              }}
+            >
               <div
                 className="table-cinematic-bg"
                 style={{ backgroundImage: `url("${activeScene.cinematic_url}")` }}
                 aria-hidden="true"
               />
               <div className="table-cinematic-vignette" aria-hidden="true" />
+
+              {/* Hotspot pins on the cinematic face — the navigation-scene look:
+                  pins float on the full-bleed map; clicking one travels YOU. */}
+              {hotspots.map((h) => {
+                if (h.hidden && !isDM) return null;
+                const linked = Boolean(h.target_scene_id);
+                return (
+                  <button
+                    key={h.id}
+                    className={`cine-hotspot ${linked ? "" : "is-unlinked"} ${h.hidden ? "is-hidden" : ""}`}
+                    style={{ left: `${h.x * 100}%`, top: `${h.y * 100}%` }}
+                    title={h.label ?? (linked ? "Travel" : "Unlinked hotspot")}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isDM && toolRef.current === "hotspot") setEditHotspotId(h.id);
+                      else if (h.target_scene_id) void navigateToScene(h.target_scene_id);
+                      else if (isDM) setEditHotspotId(h.id);
+                    }}
+                  >
+                    <span className="cine-hotspot-dot" />
+                    {h.label && <span className="cine-hotspot-label">{h.label}</span>}
+                  </button>
+                );
+              })}
+
               <div className="table-cinematic-badge">
                 <Icon name="drama" size={12} />
                 <span>Cinematic — this is what players see</span>
@@ -5438,7 +5490,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
       {pickerOpen && activeScene && (
         <MapPickerDialog
-          filterType={pickerTarget === "tactical" ? "battlemap" : "cinematic"}
+          filterType={pickerTarget === "tactical" ? ["battlemap"] : ["cinematic", "regional"]}
+          slot={pickerTarget === "tactical" ? "battlemap" : "backdrop"}
           currentMapId={pickerTarget === "tactical" ? activeScene.map_id : null}
           onPick={async (m) => {
             if (pickerTarget === "cinematic") {
