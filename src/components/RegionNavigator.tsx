@@ -68,7 +68,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
   // click that ends it, so panning never places pins or triggers travel.
   const [view, setView] = useState({ z: 1, tx: 0, ty: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
-  const panRef = useRef({ active: false, moved: false, x: 0, y: 0, tx: 0, ty: 0 });
+  const panRef = useRef({ active: false, moved: false, x: 0, y: 0, tx: 0, ty: 0, thresh: 4 });
   useEffect(() => {
     setView({ z: 1, tx: 0, ty: 0 });
   }, [current?.id]);
@@ -93,14 +93,19 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
   };
   const panStart = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.pointerType !== "touch") return;
-    panRef.current = { active: true, moved: false, x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+    // A press that starts ON a pin is a click/tap, never a pan — a natural
+    // finger tap wobbles a few px, and treating that as a pan suppressed the
+    // click (players tapped pins and "nothing happened").
+    if ((e.target as HTMLElement).closest?.(".cine-hotspot")) return;
+    const thresh = e.pointerType === "touch" ? 12 : 4;
+    panRef.current = { active: true, moved: false, x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty, thresh };
   };
   const panMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const p = panRef.current;
     if (!p.active) return;
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
-    if (!p.moved && Math.hypot(dx, dy) < 4) return;
+    if (!p.moved && Math.hypot(dx, dy) < (p.thresh ?? 4)) return;
     p.moved = true;
     setView((v) => ({ ...v, tx: p.tx + dx, ty: p.ty + dy }));
   };
