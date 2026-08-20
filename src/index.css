@@ -855,6 +855,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   justify-content: space-between;
   gap: 4px;
   padding: 4px 6px;
+  /* Above the ⋮ overlay menu, so ⋮ stays clickable as a toggle and the trash
+     stays reachable while the menu is open. */
+  position: relative;
+  z-index: 3;
 }
 .scene-card-name {
   font-size: 11px;
@@ -882,7 +886,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .scene-card-more svg { display: block; }
-.scene-card-more:hover { opacity: 1; color: var(--gold); }
+.scene-card-more:hover, .scene-card-more.is-open { opacity: 1; color: var(--gold); }
 /* Per-scene face actions (IA rework) — an overlay menu inside the card, so the
    card's overflow:hidden never clips it. */
 .scene-card { position: relative; }
@@ -892,10 +896,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   z-index: 2;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: 8px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  justify-content: flex-start;
+  gap: 1px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
@@ -903,7 +907,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: none;
   border-radius: 6px;
   background: transparent;

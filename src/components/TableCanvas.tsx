@@ -3486,10 +3486,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     </span>
                   </div>
                   <div className="scene-card-foot">
-                    <span className="scene-card-name">{s.name}</span>
+                    <span
+                      className="scene-card-name"
+                      style={cardMenuId === s.id ? { visibility: "hidden" } : undefined}
+                    >
+                      {s.name}
+                    </span>
                     {isDM && (
                       <span
-                        className="scene-card-more"
+                        className={`scene-card-more ${cardMenuId === s.id ? "is-open" : ""}`}
                         aria-label={`Options for ${s.name}`}
                         title="Scene options"
                         onClick={(e) => {
@@ -3500,10 +3505,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                         <Icon name="more" size={12} />
                       </span>
                     )}
-                    {isDM && !isActive && scenes.length > 1 && (
+                    {isDM && scenes.length > 1 && (
                       <span
                         className="scene-card-del"
                         aria-label="Delete scene"
+                        title="Delete scene"
                         onClick={async (e) => {
                           e.stopPropagation();
                           if (
@@ -3518,7 +3524,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                           }
                         }}
                       >
-                        <Icon name="close" size={11} />
+                        <Icon name="delete" size={11} />
                       </span>
                     )}
                   </div>
