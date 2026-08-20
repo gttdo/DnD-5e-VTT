@@ -42,6 +42,7 @@ import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
 import { usePartyPresence } from "../state/usePartyPresence";
+import { PartyPanel } from "./PartyPanel";
 import { useAuth } from "../state/useAuth";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
 import { PartyTray, DRAG_MIME } from "./PartyTray";
@@ -307,6 +308,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   }, [scenesOpen]);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
+  // The social Party panel (members + presence + invite) — decoupled from the
+  // personal characters tray above (IA). They share screen space, so opening
+  // one closes the other.
+  const [partyPanelOpen, setPartyPanelOpen] = useState(false);
   // The combat rail shows by default (a pill out of combat for the DM, the turn
   // rail in combat); the tool-rail hourglass hides it when it's in the way.
   const [railHidden, setRailHidden] = useState(false);
@@ -3844,12 +3849,26 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <Icon name="swords" size={18} />
           </button>
           <button
+            className={`rail-tool ${partyPanelOpen ? "active" : ""}`}
+            onClick={() => {
+              setPartyPanelOpen((v) => !v);
+              setPartyOpen(false);
+            }}
+            title="Party — who's at the table, and invite players"
+            aria-label="Party"
+          >
+            <Icon name="users" size={18} />
+          </button>
+          <button
             className={`rail-tool ${partyOpen ? "active" : ""}`}
-            onClick={() => setPartyOpen((v) => !v)}
+            onClick={() => {
+              setPartyOpen((v) => !v);
+              setPartyPanelOpen(false);
+            }}
             title="Your characters — drag one onto the map"
             aria-label="Your characters"
           >
-            <Icon name="users" size={18} />
+            <Icon name="user" size={18} />
           </button>
           {isDM && (
             <>
@@ -5285,12 +5304,30 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           {partyOpen && (
             <PartyTray
               characters={characters}
-              isDM={isDM}
+              onPlace={(ch) => {
+                void placeCharacter(ch);
+                setPartyOpen(false);
+              }}
+              onClose={() => setPartyOpen(false)}
+            />
+          )}
+
+          {/* The social Party panel — members, presence, invite (IA: decoupled
+              from the personal characters tray). */}
+          {partyPanelOpen && (
+            <PartyPanel
               party={party}
               myUserId={authUser?.id ?? null}
               mySceneId={activeScene?.id ?? null}
               stageSceneId={stageSceneId}
               sceneNameOf={(id) => scenes.find((s) => s.id === id)?.name ?? null}
+              isDM={isDM}
+              joinCode={game.join_code}
+              onCopyInvite={() => {
+                const url = `${window.location.origin}/#/join/${game.join_code}`;
+                void navigator.clipboard.writeText(url);
+                toast.success("Invite link copied");
+              }}
               onBringHere={(userId) => {
                 // Landing them on the DM's scene: if the DM is on the stage,
                 // clear the override (follow the stage); else pin them to it.
@@ -5300,17 +5337,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   else toast.success("Player brought to your scene");
                 });
               }}
-              joinCode={game.join_code}
-              onCopyInvite={() => {
-                const url = `${window.location.origin}/#/join/${game.join_code}`;
-                void navigator.clipboard.writeText(url);
-                toast.success("Invite link copied");
-              }}
-              onPlace={(ch) => {
-                void placeCharacter(ch);
-                setPartyOpen(false);
-              }}
-              onClose={() => setPartyOpen(false)}
+              onClose={() => setPartyPanelOpen(false)}
             />
           )}
 

@@ -1,5 +1,4 @@
 import type { Character } from "../types/character";
-import type { PartyMember } from "../state/usePartyPresence";
 import { Icon } from "./ui/Icon";
 
 /**
@@ -19,20 +18,6 @@ interface Props {
   /** Place at the grid centre — the tap path. */
   onPlace: (c: Character) => void;
   onClose: () => void;
-  /** DM-only invite: the party panel is where "who's at my table?" lives, so
-   *  it's also where inviting them lives (the raw code left the top bar). */
-  isDM?: boolean;
-  joinCode?: string;
-  onCopyInvite?: () => void;
-  /** Presence (#Phase 3b): the game's members with online + location. */
-  party?: PartyMember[];
-  myUserId?: string | null;
-  /** Viewer-relative location labeling. */
-  mySceneId?: string | null;
-  stageSceneId?: string | null;
-  sceneNameOf?: (id: string) => string | null;
-  /** DM pulls one member to their own scene (#Phase 3c). */
-  onBringHere?: (userId: string) => void;
 }
 
 const initialsOf = (name: string) =>
@@ -44,64 +29,14 @@ const initialsOf = (name: string) =>
     .join("")
     .toUpperCase();
 
-export const PartyTray = ({
-  characters,
-  onPlace,
-  onClose,
-  isDM,
-  joinCode,
-  onCopyInvite,
-  party,
-  myUserId,
-  mySceneId,
-  stageSceneId,
-  sceneNameOf,
-  onBringHere,
-}: Props) => (
+export const PartyTray = ({ characters, onPlace, onClose }: Props) => (
   <div className="party-tray panel">
     <div className="party-tray-head">
-      <span>Party</span>
+      <span>Your Characters</span>
       <button className="ghost" onClick={onClose} aria-label="Close" title="Close">
         <Icon name="close" size={12} />
       </button>
     </div>
-
-    {/* Who's at the table — presence (#Phase 3b). */}
-    {party && party.length > 0 && (
-      <div className="party-members">
-        {party.map((m) => {
-          const where = m.current_scene_id ?? stageSceneId ?? null;
-          const isMe = m.user_id === myUserId;
-          const location = isMe
-            ? null
-            : where && where === mySceneId
-              ? "With you"
-              : (where && sceneNameOf?.(where)) ?? "Elsewhere";
-          return (
-            <div key={m.user_id} className="party-member">
-              <span className={`party-dot ${m.online ? "is-on" : ""}`} title={m.online ? "Online" : "Offline"} />
-              <span className="party-member-name">
-                {m.name}
-                {isMe && <span className="party-member-you"> · you</span>}
-              </span>
-              {m.role === "dm" && <span className="party-member-role">DM</span>}
-              {location && <span className="party-member-where">{location}</span>}
-              {isDM && !isMe && onBringHere && where !== mySceneId && (
-                <button
-                  className="party-member-bring"
-                  title="Bring this player to your scene"
-                  onClick={() => onBringHere(m.user_id)}
-                >
-                  Bring here
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    )}
-
-    <div className="party-tray-sub">Your Characters</div>
 
     {characters.length === 0 ? (
       <div className="dim" style={{ fontSize: 12, padding: "10px 2px" }}>
@@ -137,16 +72,5 @@ export const PartyTray = ({
       </div>
     )}
 
-    {isDM && joinCode && (
-      <div className="party-invite">
-        <button className="party-invite-btn" onClick={onCopyInvite}>
-          <Icon name="copy" size={14} />
-          Copy invite link
-        </button>
-        <div className="party-invite-code">
-          or join with code <b>{joinCode}</b>
-        </div>
-      </div>
-    )}
   </div>
 );
