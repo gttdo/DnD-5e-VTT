@@ -4618,6 +4618,25 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             )}
           </svg>
 
+          {/* Cinematic face on the DM board (#Phase 2 follow-up): when the DM
+              flips this scene to Cinematic, show the backdrop here too — WYSIWYG
+              with what players see on the cast view — instead of a silent no-op.
+              Covers the grid/tokens; flip back to Tactical to return to the map. */}
+          {activeScene?.mode === "cinematic" && activeScene.cinematic_url && (
+            <div className="table-cinematic">
+              <div
+                className="table-cinematic-bg"
+                style={{ backgroundImage: `url("${activeScene.cinematic_url}")` }}
+                aria-hidden="true"
+              />
+              <div className="table-cinematic-vignette" aria-hidden="true" />
+              <div className="table-cinematic-badge">
+                <Icon name="drama" size={12} />
+                <span>Cinematic — this is what players see</span>
+              </div>
+            </div>
+          )}
+
           {/* Animated attack cursor (sword / fist) — stays alive through the swing tail. */}
           <AttackCursor
             active={ANIMATED_CURSOR && (!!pendingAttack || swinging || !!pendingSteal || stealing)}

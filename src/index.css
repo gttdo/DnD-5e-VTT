@@ -573,6 +573,48 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .hotspot-pin { transition: opacity var(--dur-fast) var(--ease); }
 
+/* Cinematic face on the DM board (Phase 2 follow-up) — WYSIWYG preview of the
+   backdrop players see, shown when the DM flips this scene to Cinematic. */
+.table-cinematic {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+}
+.table-cinematic-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.table-cinematic-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 120% at 50% 42%, transparent 55%, rgba(0, 0, 0, 0.72) 100%);
+}
+.table-cinematic-badge {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-hair);
+  color: var(--gold);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.table-cinematic-badge svg { display: block; }
+
 /* Phase 1 slice 4: scenes gallery — thumbnail switcher in the scene dropdown. */
 .scene-gallery {
   display: grid;
