@@ -41,9 +41,16 @@ const KIND_COPY: Record<CreateMapKind, { title: string; hint: string; uploadHint
   },
 };
 
+const KIND_TABS: { key: CreateMapKind; label: string; icon: "grid" | "drama" | "map" }[] = [
+  { key: "battlemap", label: "Battlemap", icon: "grid" },
+  { key: "cinematic", label: "Backdrop", icon: "drama" },
+  { key: "regional", label: "Region map", icon: "map" },
+];
+
 interface Props {
-  /** What this dialog creates. */
-  kind: CreateMapKind;
+  /** Which tab to open on (the kind is switched via tabs inside, Token-Studio
+   *  style). */
+  initialKind?: CreateMapKind;
   /**
    * When present the dialog is opened from an in-game context and offers to
    * apply the finished map to that scene in addition to saving it to the
@@ -76,8 +83,9 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
  * `maps` library; when opened from a game, "Use as background" also applies
  * the new map to the current scene.
  */
-export const GenerateMapDialog = ({ kind, applyToScene, onClose }: Props) => {
+export const GenerateMapDialog = ({ initialKind = "battlemap", applyToScene, onClose }: Props) => {
   const { createMap } = useMaps();
+  const [kind, setKind] = useState<CreateMapKind>(initialKind);
   const [mode, setMode] = useState<Mode>("upload");
   const [mood, setMood] = useState<SceneMood>("auto");
   const [name, setName] = useState("");
@@ -205,13 +213,30 @@ export const GenerateMapDialog = ({ kind, applyToScene, onClose }: Props) => {
     <Dialog
       onClose={onClose}
       size="md"
-      title={KIND_COPY[kind].title}
+      title="Create a Map"
       subtitle={
         (applyToScene
           ? "Upload your own or generate one — saves to your library and applies to the active scene. "
           : "Upload your own or generate one — saves to your library. ") + KIND_COPY[kind].hint
       }
     >
+      {!result && (
+        <div className="tstudio-types" role="group" aria-label="What to create" style={{ alignSelf: "center" }}>
+          {KIND_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={kind === t.key ? "on" : ""}
+              aria-pressed={kind === t.key}
+              onClick={() => setKind(t.key)}
+              title={KIND_COPY[t.key].hint}
+            >
+              <Icon name={t.icon} size={15} /> {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {!result && (
         <div style={{ display: "flex", gap: 6 }}>
           <button

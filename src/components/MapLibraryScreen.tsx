@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMaps, type MapAsset } from "../state/useMaps";
 import { useAuth } from "../state/useAuth";
-import { GenerateMapDialog, type CreateMapKind } from "./GenerateMapDialog";
+import { GenerateMapDialog } from "./GenerateMapDialog";
 import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { CardMenu } from "./ui/CardMenu";
 import { Button } from "./ui/Button";
@@ -17,9 +17,7 @@ export const MapLibraryScreen = () => {
   const { maps, loading, renameMap, deleteMap, setMapPublic } = useMaps();
   const { user } = useAuth();
   const { confirm, prompt } = useConfirm();
-  // Which creator is open — each kind gets its own entry button (IA: upload
-  // first, generate second, kind fixed up front).
-  const [createKind, setCreateKind] = useState<CreateMapKind | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [preview, setPreview] = useState<MapAsset | null>(null);
 
   return (
@@ -39,14 +37,8 @@ export const MapLibraryScreen = () => {
               })()
         }
       >
-        <Button variant="primary" size="lg" icon="palette" onClick={() => setCreateKind("battlemap")}>
-          Create battlemap
-        </Button>
-        <Button variant="ghost" size="lg" icon="drama" onClick={() => setCreateKind("cinematic")}>
-          Create backdrop
-        </Button>
-        <Button variant="ghost" size="lg" icon="map" onClick={() => setCreateKind("regional")}>
-          Create region map
+        <Button variant="primary" size="lg" icon="palette" onClick={() => setCreateOpen(true)}>
+          Create map
         </Button>
       </LibraryBanner>
 
@@ -54,7 +46,7 @@ export const MapLibraryScreen = () => {
         <EmptyState
           icon="map"
           title="No maps yet"
-          cta={{ label: "Create your first battlemap", icon: "palette", onClick: () => setCreateKind("battlemap") }}
+          cta={{ label: "Create your first map", icon: "palette", onClick: () => setCreateOpen(true) }}
         >
           Upload your own battle map, or summon one with the cartographer —
           describe a scene and it paints a top-down map. Every one lands here.
@@ -131,9 +123,7 @@ export const MapLibraryScreen = () => {
         })}
       </div>
 
-      {createKind && (
-        <GenerateMapDialog kind={createKind} onClose={() => setCreateKind(null)} />
-      )}
+      {createOpen && <GenerateMapDialog onClose={() => setCreateOpen(false)} />}
 
       {preview && (
         <div

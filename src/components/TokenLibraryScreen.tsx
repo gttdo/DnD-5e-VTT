@@ -3,7 +3,6 @@ import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
 import { useAuth } from "../state/useAuth";
 import { useConfirm } from "../state/Confirm";
 import { TokenStudioDialog } from "./TokenStudioDialog";
-import { TokenUploadDialog } from "./TokenUploadDialog";
 import { TokenStatSheet } from "./TokenStatSheet";
 import { Icon, type IconName } from "./ui/Icon";
 import { findSize, TOKEN_SIZES } from "../lib/tokenSmith";
@@ -18,8 +17,7 @@ import { LibraryBanner } from "./ui/LibraryBanner";
 type TabKey = "monster" | "npc" | "item" | "prop" | "spell" | "other";
 
 export const TokenLibraryScreen = () => {
-  const { assets, loading, deleteAsset, setAssetPublic, createAsset } = useTokenAssets();
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const { assets, loading, deleteAsset, setAssetPublic } = useTokenAssets();
   const { user } = useAuth();
   const { confirm } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -198,14 +196,12 @@ export const TokenLibraryScreen = () => {
               })()
         }
       >
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Button variant="primary" size="lg" icon="drama" onClick={() => setGenerateOpen(true)}>
-            Create token
-          </Button>
-          <Button variant="secondary" size="lg" icon="image" onClick={() => setUploadOpen(true)}>
-            Upload
-          </Button>
-        </div>
+        {/* One entry point (IA): uploading your own art lives inside Create
+            token → By hand, where type/stats/size are captured too. The old
+            standalone Upload (#16) produced untyped assets and is gone. */}
+        <Button variant="primary" size="lg" icon="drama" onClick={() => setGenerateOpen(true)}>
+          Create token
+        </Button>
       </LibraryBanner>
 
       {!loading && assets.length === 0 && (
@@ -438,7 +434,6 @@ export const TokenLibraryScreen = () => {
       </div>
 
       {generateOpen && <TokenStudioDialog onClose={() => setGenerateOpen(false)} />}
-      {uploadOpen && <TokenUploadDialog onClose={() => setUploadOpen(false)} createAsset={createAsset} />}
       {editAsset && <TokenStudioDialog editAsset={editAsset} onClose={() => setEditAsset(null)} />}
 
       {preview && (
