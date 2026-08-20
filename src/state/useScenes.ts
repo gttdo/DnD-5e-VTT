@@ -6,7 +6,15 @@ export interface Scene {
   id: string;
   game_id: string;
   name: string;
+  /** The TACTICAL face — top-down battlemap drawn under the grid. */
   image_url: string | null;
+  /** The CINEMATIC face — atmospheric backdrop of the same place (#Phase 1).
+   *  Null until the DM sets one. Rendered full-bleed in cinematic mode, and
+   *  blurred behind the grid in tactical mode (fills the letterbox margins). */
+  cinematic_url?: string | null;
+  /** Which face the DM is currently showing. 'tactical' preserves the old
+   *  behavior and is the default for every pre-0035 scene. */
+  mode?: "cinematic" | "tactical";
   grid_cols: number;
   grid_rows: number;
   map_id: string | null;
@@ -170,6 +178,24 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     return { error: error?.message ?? null };
   }, []);
 
+  // The cinematic backdrop face (#Phase 1). Optimistic, same as image_url.
+  const setSceneCinematicUrl = useCallback(async (id: string, url: string | null) => {
+    setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, cinematic_url: url } : s)));
+    const { error } = await supabase
+      .from("scenes")
+      .update({ cinematic_url: url })
+      .eq("id", id);
+    return { error: error?.message ?? null };
+  }, []);
+
+  // The DM flips a scene between its cinematic and tactical faces. Optimistic so
+  // the DM's own board swaps instantly; the realtime echo carries it to players.
+  const setSceneMode = useCallback(async (id: string, mode: "cinematic" | "tactical") => {
+    setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, mode } : s)));
+    const { error } = await supabase.from("scenes").update({ mode }).eq("id", id);
+    return { error: error?.message ?? null };
+  }, []);
+
   // Grid + map-alignment layout (#115). Optimistic so the DM sees the map/grid
   // move live while calibrating; the realtime echo confirms for everyone.
   const updateSceneLayout = useCallback(
@@ -216,6 +242,8 @@ export const useScenes = (gameId: string | null, initialActiveSceneId: string | 
     deleteScene,
     setActiveScene,
     setSceneImageUrl,
+    setSceneCinematicUrl,
+    setSceneMode,
     updateSceneLayout,
   };
 };
