@@ -139,6 +139,16 @@
   --radius-sm: 3px;
   --radius:    4px;
   --radius-lg: 8px;
+  --r-pill:    999px;
+
+  /* ---------- Glass primitive (cinematic redesign, phase 0) ----------------
+     Derived from theme tokens via color-mix so it adapts to light/dark. Any
+     floating panel over the board becomes frosted glass: a see-through fill
+     over a background blur, edged with a gold hairline and a top sheen. */
+  --glass-fill:  color-mix(in srgb, var(--panel) 80%, transparent);
+  --glass-blur:  blur(16px) saturate(1.08);
+  --glass-hair:  color-mix(in srgb, var(--gold) 22%, var(--border));
+  --glass-sheen: inset 0 1px 0 color-mix(in srgb, var(--cream) 9%, transparent);
 
   /* ---------- Elevation (warm-tinted shadows) ---------------------------- */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
@@ -4676,50 +4686,75 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
    buttons and the log's unseen-count badge are styled with the other
    `.rail-tool`s. What remains here is the roller popover and the log drawer. */
 
-/* Roller popover, sitting above the d20 it belongs to. */
-.dice-roller {
+/* Frosted-glass dice tray, sitting above the d20 it belongs to (phase 0). */
+.dice-tray {
   position: fixed;
   left: 8px;
   bottom: 116px;   /* just above the roller FAB at the rail's foot */
   z-index: 56;
   width: min(320px, calc(100vw - 32px));
-  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-hair);
+  box-shadow: var(--shadow-lg), var(--glass-sheen);
   animation: ui-dialog-enter var(--dur) var(--ease);
 }
 @media (max-width: 760px) {
-  .dice-roller { left: 12px; bottom: calc(var(--bottom-bar-clear) + 64px); }
+  .dice-tray { left: 12px; bottom: calc(var(--bottom-bar-clear) + 64px); }
 }
 
-.dice-roller-head {
+.dice-tray-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 10px;
+  color: var(--gold);
+  margin-bottom: 12px;
 }
+.dice-tray-x {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--glass-hair); color: var(--text-muted);
+  cursor: pointer; transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.dice-tray-x:hover { color: var(--gold); border-color: var(--gold); }
+
 /* d20/d12/d100/d10 then d8/d6/d4 — the reference's 4-then-3 arrangement. */
 .dice-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
-.die-btn {
+.die-tile {
   position: relative;
-  padding: 10px 4px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px 6px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--glass-hair);
+  border-radius: 12px;
   color: var(--text-dim);
   cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
-.die-btn:hover { border-color: var(--candle); color: var(--candle); }
-.die-btn.has { border-color: var(--candle); color: var(--candle); background: var(--surface-3); }
-.die-face { font-family: var(--font-mono); font-size: 12px; }
+.die-tile:hover { border-color: color-mix(in srgb, var(--gold) 55%, transparent); color: var(--gold); }
+.die-tile.has {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 14%, rgba(0, 0, 0, 0.2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 30%, transparent);
+}
+.die-glyph { width: 26px; height: 26px; display: grid; place-items: center; }
+.die-glyph svg { width: 100%; height: 100%; }
+.die-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.04em; opacity: 0.85; }
 .die-count {
   position: absolute;
   top: -6px;
@@ -4730,38 +4765,56 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   display: grid;
   place-items: center;
   border-radius: 999px;
-  background: var(--ember);
-  color: var(--on-accent);
+  background: linear-gradient(180deg, var(--gold), color-mix(in srgb, var(--gold) 70%, #000));
+  color: #241c10;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
-  border: 1px solid var(--surface-0);
+  border: 1px solid color-mix(in srgb, var(--cream) 20%, transparent);
 }
 .dice-mod {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 10px;
-  font-size: 11px;
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
   color: var(--text-muted);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.dice-mod input { width: 72px; text-align: center; }
-.dice-roller-expr {
-  margin-top: 10px;
-  padding: 7px 9px;
-  background: var(--surface-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
+.dice-mod input {
+  width: 72px; text-align: center;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--glass-hair);
+  border-radius: 999px;
   color: var(--cream);
+  font-family: var(--font-mono);
+  padding: 5px 8px;
+}
+.dice-tray-expr {
+  margin-top: 12px;
+  padding: 9px 11px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--glass-hair);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--gold);
   text-align: center;
 }
-.dice-roller-actions { display: flex; gap: 6px; margin-top: 10px; }
-.dice-roller-actions > button { flex: 1; }
+.dice-tray-actions { display: flex; gap: 8px; margin-top: 12px; }
+.dice-tray-actions > button { flex: 1; padding: 9px 0; border-radius: 999px; font-weight: 600; cursor: pointer; transition: opacity var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+.dice-tray-clear {
+  background: transparent; border: 1px solid var(--glass-hair); color: var(--text-muted);
+}
+.dice-tray-clear:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.dice-tray-roll {
+  background: linear-gradient(180deg, var(--gold), color-mix(in srgb, var(--gold) 78%, #000));
+  border: 1px solid transparent; color: #241c10; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.dice-tray-actions > button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Game Log entries (inside the drawer). */
 .gamelog-list { display: flex; flex-direction: column; gap: 8px; }

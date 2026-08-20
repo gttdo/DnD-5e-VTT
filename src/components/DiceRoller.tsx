@@ -11,12 +11,24 @@ import { Icon } from "./ui/Icon";
  * random table, "everyone roll a d6".
  *
  * An INPUT surface, kept separate from the Game Log (the record of what was
- * rolled) — the reference anchors this popover to the floating d20 and puts
- * the history in its own drawer.
+ * rolled). Styled as a frosted-glass tray of die-shape silhouettes (the
+ * cinematic redesign, phase 0) — the reference anchors it to the floating d20.
  */
 
 const DICE = [20, 12, 100, 10, 8, 6, 4] as const;
 type Die = (typeof DICE)[number];
+
+/** Die-shape silhouette per die type (viewBox 0 0 40 40), stroked in currentColor. */
+const DieGlyph = ({ d }: { d: Die }) => (
+  <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+    {d === 4 && <path d="M20 5 L34 33 L6 33 Z" />}
+    {d === 6 && <rect x="9" y="9" width="22" height="22" rx="3" />}
+    {d === 8 && (<><path d="M20 4 L33 20 L20 36 L7 20 Z" /><path d="M7 20 L33 20" /></>)}
+    {(d === 10 || d === 100) && (<><path d="M20 4 L34 18 L20 36 L6 18 Z" /><path d="M6 18 L20 25 L34 18" /></>)}
+    {d === 12 && <path d="M20 4 L31 10 L35 22 L27 33 L13 33 L5 22 L9 10 Z" />}
+    {d === 20 && (<><path d="M20 3 L34 13 L34 27 L20 37 L6 27 L6 13 Z" /><path d="M20 3 L20 15 M6 13 L20 15 L34 13 M6 27 L20 15 L34 27 M20 37 L20 15" /></>)}
+  </svg>
+);
 
 interface Props {
   onClose: () => void;
@@ -69,10 +81,10 @@ export const DiceRoller = ({ onClose }: Props) => {
   };
 
   return (
-    <div className="dice-roller panel">
-      <div className="dice-roller-head">
+    <div className="dice-tray">
+      <div className="dice-tray-head">
         <span>Roll Dice</span>
-        <button className="ghost" onClick={onClose} aria-label="Close" title="Close">
+        <button className="dice-tray-x" onClick={onClose} aria-label="Close" title="Close">
           <Icon name="close" size={12} />
         </button>
       </div>
@@ -83,7 +95,7 @@ export const DiceRoller = ({ onClose }: Props) => {
           return (
             <button
               key={d}
-              className={`die-btn ${n ? "has" : ""}`}
+              className={`die-tile ${n ? "has" : ""}`}
               onClick={() => add(d)}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -91,7 +103,8 @@ export const DiceRoller = ({ onClose }: Props) => {
               }}
               title={`Add a d${d}${n ? " · right-click to remove one" : ""}`}
             >
-              <span className="die-face">d{d}</span>
+              <span className="die-glyph"><DieGlyph d={d} /></span>
+              <span className="die-label">d{d}</span>
               {n > 0 && <span className="die-count">{n}</span>}
             </button>
           );
@@ -108,15 +121,15 @@ export const DiceRoller = ({ onClose }: Props) => {
         />
       </div>
 
-      <div className="dice-roller-expr" aria-live="polite">
+      <div className="dice-tray-expr" aria-live="polite">
         {isEmpty ? "Pick dice to roll" : label}
       </div>
 
-      <div className="dice-roller-actions">
-        <button className="ghost" onClick={clear} disabled={isEmpty && modifier === 0}>
+      <div className="dice-tray-actions">
+        <button className="dice-tray-clear" onClick={clear} disabled={isEmpty && modifier === 0}>
           Clear
         </button>
-        <button className="primary" onClick={doRoll} disabled={isEmpty}>
+        <button className="dice-tray-roll" onClick={doRoll} disabled={isEmpty}>
           Roll
         </button>
       </div>
