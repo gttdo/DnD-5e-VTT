@@ -1,4 +1,5 @@
 import type { Character } from "../types/character";
+import type { PartyMember } from "../state/usePartyPresence";
 import { Icon } from "./ui/Icon";
 
 /**
@@ -23,6 +24,13 @@ interface Props {
   isDM?: boolean;
   joinCode?: string;
   onCopyInvite?: () => void;
+  /** Presence (#Phase 3b): the game's members with online + location. */
+  party?: PartyMember[];
+  myUserId?: string | null;
+  /** Viewer-relative location labeling. */
+  mySceneId?: string | null;
+  stageSceneId?: string | null;
+  sceneNameOf?: (id: string) => string | null;
 }
 
 const initialsOf = (name: string) =>
@@ -34,14 +42,54 @@ const initialsOf = (name: string) =>
     .join("")
     .toUpperCase();
 
-export const PartyTray = ({ characters, onPlace, onClose, isDM, joinCode, onCopyInvite }: Props) => (
+export const PartyTray = ({
+  characters,
+  onPlace,
+  onClose,
+  isDM,
+  joinCode,
+  onCopyInvite,
+  party,
+  myUserId,
+  mySceneId,
+  stageSceneId,
+  sceneNameOf,
+}: Props) => (
   <div className="party-tray panel">
     <div className="party-tray-head">
-      <span>Your Characters</span>
+      <span>Party</span>
       <button className="ghost" onClick={onClose} aria-label="Close" title="Close">
         <Icon name="close" size={12} />
       </button>
     </div>
+
+    {/* Who's at the table — presence (#Phase 3b). */}
+    {party && party.length > 0 && (
+      <div className="party-members">
+        {party.map((m) => {
+          const where = m.current_scene_id ?? stageSceneId ?? null;
+          const isMe = m.user_id === myUserId;
+          const location = isMe
+            ? null
+            : where && where === mySceneId
+              ? "With you"
+              : (where && sceneNameOf?.(where)) ?? "Elsewhere";
+          return (
+            <div key={m.user_id} className="party-member">
+              <span className={`party-dot ${m.online ? "is-on" : ""}`} title={m.online ? "Online" : "Offline"} />
+              <span className="party-member-name">
+                {m.name}
+                {isMe && <span className="party-member-you"> · you</span>}
+              </span>
+              {m.role === "dm" && <span className="party-member-role">DM</span>}
+              {location && <span className="party-member-where">{location}</span>}
+            </div>
+          );
+        })}
+      </div>
+    )}
+
+    <div className="party-tray-sub">Your Characters</div>
 
     {characters.length === 0 ? (
       <div className="dim" style={{ fontSize: 12, padding: "10px 2px" }}>

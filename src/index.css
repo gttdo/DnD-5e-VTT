@@ -2313,6 +2313,69 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   margin-bottom: 8px;
 }
 .party-tray-list { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+/* Presence (Phase 3b): who's at the table — online dots + viewer-relative
+   location. Sits above the character roster in the party panel. */
+.party-members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.party-member {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text);
+  padding: 3px 2px;
+  min-width: 0;
+}
+.party-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+}
+.party-dot.is-on {
+  background: #7fae6d;
+  box-shadow: 0 0 6px rgba(127, 174, 109, 0.7);
+}
+.party-member-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.party-member-you { color: var(--text-dim); }
+.party-member-role {
+  flex: none;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: var(--gold);
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+}
+.party-member-where {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.party-tray-sub {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
 /* DM invite affordance — inviting lives with the party, not in the top bar. */
 .party-invite {
   margin-top: 10px;

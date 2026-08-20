@@ -348,6 +348,10 @@ export const useScenes = (
     navigateToScene,
     returnToStage,
     gatherParty,
+    /** The game-wide stage scene id (games.active_scene_id) — what members
+     *  without an override resolve to (#Phase 3 presence needs it to label
+     *  where each member is). */
+    stageSceneId: activeSceneId,
     /** True when this member is roaming off the DM's stage (has an override). */
     isRoaming: myCurrentSceneId != null && myCurrentSceneId !== activeSceneId,
     setSceneImageUrl,

@@ -41,6 +41,8 @@ import { RegionNavigator } from "./RegionNavigator";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
+import { usePartyPresence } from "../state/usePartyPresence";
+import { useAuth } from "../state/useAuth";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
 import { PartyTray, DRAG_MIME } from "./PartyTray";
 import { CombatTurnRail } from "./CombatTurnRail";
@@ -240,6 +242,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     returnToStage,
     gatherParty,
     isRoaming,
+    stageSceneId,
     deleteScene,
     setSceneImageUrl,
     setSceneCinematicUrl,
@@ -529,6 +532,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     game.id,
     activeScene?.id ?? null
   );
+  // Presence (#Phase 3b): who's at the table, online, and where.
+  const { user: authUser } = useAuth();
+  const { party } = usePartyPresence(game.id);
   // Hotspots (#Phase 2): navigable pins on this scene's backdrop.
   const { hotspots, createHotspot, updateHotspot, deleteHotspot } = useHotspots(activeScene?.id ?? null);
   const hotspotsRef = useRef(hotspots);
@@ -5270,6 +5276,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <PartyTray
               characters={characters}
               isDM={isDM}
+              party={party}
+              myUserId={authUser?.id ?? null}
+              mySceneId={activeScene?.id ?? null}
+              stageSceneId={stageSceneId}
+              sceneNameOf={(id) => scenes.find((s) => s.id === id)?.name ?? null}
               joinCode={game.join_code}
               onCopyInvite={() => {
                 const url = `${window.location.origin}/#/join/${game.join_code}`;
