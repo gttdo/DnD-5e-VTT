@@ -153,14 +153,13 @@ Done this session: #16, #97, #110, #148, #158 (+ the earlier-session set).
 
 Actionable checklist per phase (from the proposal in §4). ⚠️ Logged here because the numbered-task MCP is disconnected; migrate to the numbered backlog when it returns.
 
-**Phase 0 — Glass UI base** *(LOW · stands alone · start here)*
-- [ ] Glass primitive as tokens (`--glass-fill/blur/hairline/sheen` + radius scale 10/16/24/pill); deepen blur 6–8px → ~16px; gold hairline + sheen.
-- [ ] One-gold accent pass (single accent = active/current/interactive).
-- [ ] Tracked-uppercase label pass + serif titles.
-- [ ] Glass dice tray — reskin `DiceRoller.tsx` as a floating die-shape capsule.
-- [ ] Vignette overlay over the board/scene.
-- [ ] Hide the app header + edge-to-edge in table mode (`is-immersive` hook exists; header still renders; kill the black margins).
-- [ ] Glass the left tool rail + movement strip.
+**Phase 0 — Glass UI base** — ✅ **DONE** (2026-08-20, commits `29f811f..fbcf68e`)
+- [x] Glass primitive tokens (`--glass-fill/blur/hairline/sheen` + `--r-pill`), theme-adaptive via color-mix.
+- [x] Glass dice tray — `DiceRoller.tsx` reskinned as a die-shape capsule.
+- [x] Full-bleed table — global app header hidden in-session (`.app-shell.is-immersive .app-header{display:none}`).
+- [x] Board vignette (`.table-board` warm radial + `::after` corner frame).
+- [x] Glass tool rail (circular gold tools) + glass HUD (`.thud`) + movement strip (`.thud-rs`) + initiative turn rail (`.turn-rail-bar`).
+- [x] Accent decision: gold owns all active/current state; **ember kept for CTAs/danger** (already consistent — no risky sweep). Tracked-uppercase labels already the norm.
 
 **Phase 1 — Scene model + two-layer toggle** *(MEDIUM)*
 - [ ] Scene data model: faces (nav/cinematic/tactical) + attachments; extend `useScenes` + scenes table.
