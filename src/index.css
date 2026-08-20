@@ -650,6 +650,100 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   white-space: nowrap;
 }
 
+/* Region Map navigator (IA rework) — the world the players click through. */
+.regnav { width: min(840px, 94vw); }
+.regnav-body {
+  position: relative;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+.regnav-stage {
+  position: relative;
+  align-self: center;
+  max-width: 100%;
+}
+.regnav-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 62vh;
+  user-select: none;
+}
+.regnav-stage.is-editing { cursor: crosshair; }
+.regnav-back {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.regnav-back svg { display: block; }
+.regnav-back:hover { color: var(--gold); border-color: var(--gold); }
+.regnav-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.regnav-edit svg { display: block; }
+.regnav-edit:hover { color: var(--gold); border-color: var(--gold); }
+.regnav-edit.is-on {
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--border));
+}
+.regnav-mapbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+}
+.regnav-mapbar button.is-danger {
+  border: none;
+  background: none;
+  color: var(--ember);
+  font-size: 11px;
+  cursor: pointer;
+}
+.regnav-editor {
+  position: absolute;
+  right: 12px;
+  top: 52px;
+  z-index: 3;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+.regnav-error {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--ember);
+  cursor: pointer;
+}
+
 /* Blurred backdrop UNDER the tactical board (the Phase-1 two-layer design on
    the DM board): the battlemap floats over the blurred place it belongs to. */
 .table-backdrop-under {
@@ -659,8 +753,10 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(28px) brightness(0.45) saturate(1.1);
-  transform: scale(1.12); /* overscan the blur's soft edges */
+  /* Soft enough to recede behind the battlemap, sharp enough that the place
+     still reads (user feedback: 28px was mush). */
+  filter: blur(9px) brightness(0.55) saturate(1.05);
+  transform: scale(1.05); /* overscan the blur's soft edges */
   pointer-events: none;
 }
 
@@ -5810,8 +5906,8 @@ button.topbar-stat {
   transition: filter var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease);
 }
 .projector-mode-tactical .projector-cinematic {
-  filter: blur(32px) brightness(0.45) saturate(1.1);
-  transform: scale(1.12); /* overscan so the blur's soft edges never show a seam */
+  filter: blur(9px) brightness(0.55) saturate(1.05);
+  transform: scale(1.05); /* overscan so the blur's soft edges never show a seam */
 }
 .projector-mode-cinematic .projector-cinematic {
   filter: none;

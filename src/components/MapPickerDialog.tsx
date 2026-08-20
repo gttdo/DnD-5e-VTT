@@ -12,7 +12,7 @@ interface Props {
   /** Restrict the grid to these asset kinds (#Phase 2). Omit to show everything. */
   filterType?: Array<"battlemap" | "regional" | "cinematic">;
   /** Which copy variant to show. */
-  slot?: "battlemap" | "backdrop";
+  slot?: "battlemap" | "backdrop" | "region";
   onPick: (map: MapAsset) => void;
   onClose: () => void;
 }
@@ -22,6 +22,10 @@ const COPY = {
   backdrop: {
     title: "Pick a backdrop",
     subtitle: "From your library — a cinematic backdrop, or a regional map to make this a navigation scene.",
+  },
+  region: {
+    title: "Pick a region map",
+    subtitle: "From your library — the world your players will navigate. Generate regional maps in the Maps editor.",
   },
   all: { title: "Pick a map", subtitle: "From your library. Click to use on this scene." },
 } as const;

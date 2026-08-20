@@ -9,8 +9,12 @@ import { useAuth } from "./useAuth";
  */
 export interface Hotspot {
   id: string;
-  scene_id: string;
+  /** Parent — a pin lives on a scene OR a region map (0040), never both. */
+  scene_id: string | null;
+  region_map_id?: string | null;
+  /** Target — a pin leads to a scene OR drills into a deeper region map. */
   target_scene_id: string | null;
+  target_map_id?: string | null;
   x: number;
   y: number;
   label: string | null;

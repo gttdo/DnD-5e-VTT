@@ -36,7 +36,8 @@ import { attackRangeFt, resolveAttacks } from "../lib/attacks";
 import { applyHeal, applyDamage, applyTempHp } from "../lib/hp";
 import { TableHud, TokenHud, MonsterHud } from "./TableHud";
 import { AttackCursor, CURSOR_SWING_MS, cursorSwingMs, cursorImpactMs, type CursorKind } from "./AttackCursor";
-import { TableModals, RegionMapModal, JournalModal, type HudModal } from "./TableModals";
+import { TableModals, JournalModal, type HudModal } from "./TableModals";
+import { RegionNavigator } from "./RegionNavigator";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
@@ -288,6 +289,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const [pickerSceneId, setPickerSceneId] = useState<string | null>(null);
   // Which gallery card's contextual ⋯ menu is open.
   const [cardMenuId, setCardMenuId] = useState<string | null>(null);
+  // Close the scene dropdown (and any card menu) on a click outside it.
+  const sceneMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!scenesOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (sceneMenuRef.current && !sceneMenuRef.current.contains(e.target as Node)) {
+        setScenesOpen(false);
+        setCardMenuId(null);
+      }
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [scenesOpen]);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
   // The combat rail shows by default (a pill out of combat for the DM, the turn
@@ -3401,7 +3415,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
         {/* Scene selector — DM-only quick switcher (#IA rework). Players just
             see where they are; they navigate via regional-map hotspots. */}
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative" }} ref={sceneMenuRef}>
           <button
             className="ghost"
             onClick={() => {
@@ -3509,9 +3523,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     )}
                   </div>
 
-                  {/* Per-scene face actions (#IA rework) — contextual, not global. */}
+                  {/* Per-scene face actions (#IA rework) — contextual, not global.
+                      Any click on the overlay (including after an action) closes
+                      it, so it never traps the user. */}
                   {cardMenuId === s.id && isDM && (
-                    <div className="scene-card-menu" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="scene-card-menu"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCardMenuId(null);
+                      }}
+                    >
                       <button
                         onClick={() => {
                           setPickerSceneId(s.id);
@@ -5056,7 +5078,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               so it opens for anyone (no bound character needed), unlike the
               sheet-mapped modals below. */}
           {hudModal === "map" && (
-            <RegionMapModal gameId={game.id} isDM={isDM} onClose={() => setHudModal(null)} />
+            <RegionNavigator
+              gameId={game.id}
+              isDM={isDM}
+              scenes={scenes.map((s) => ({ id: s.id, name: s.name }))}
+              onTravel={(sceneId) => void navigateToScene(sceneId)}
+              onClose={() => setHudModal(null)}
+            />
           )}
           {/* The campaign journal needs only a game + an author name, so it opens
               for anyone — including a DM with no bound character (#20). */}
