@@ -104,5 +104,18 @@ export const usePartyPresence = (gameId: string | null) => {
     online: online.has(m.user_id),
   }));
 
-  return { party };
+  /** DM moves one member (#Phase 3c): sceneId places them there; null returns
+   *  them to the stage. Allowed by the 0039 DM-update policy. */
+  const moveMember = async (userId: string, sceneId: string | null) => {
+    if (!gameId) return { error: "No game" };
+    setMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, current_scene_id: sceneId } : m)));
+    const { error } = await supabase
+      .from("game_members")
+      .update({ current_scene_id: sceneId })
+      .eq("game_id", gameId)
+      .eq("user_id", userId);
+    return { error: error?.message ?? null };
+  };
+
+  return { party, moveMember };
 };

@@ -31,6 +31,8 @@ interface Props {
   mySceneId?: string | null;
   stageSceneId?: string | null;
   sceneNameOf?: (id: string) => string | null;
+  /** DM pulls one member to their own scene (#Phase 3c). */
+  onBringHere?: (userId: string) => void;
 }
 
 const initialsOf = (name: string) =>
@@ -54,6 +56,7 @@ export const PartyTray = ({
   mySceneId,
   stageSceneId,
   sceneNameOf,
+  onBringHere,
 }: Props) => (
   <div className="party-tray panel">
     <div className="party-tray-head">
@@ -83,6 +86,15 @@ export const PartyTray = ({
               </span>
               {m.role === "dm" && <span className="party-member-role">DM</span>}
               {location && <span className="party-member-where">{location}</span>}
+              {isDM && !isMe && onBringHere && where !== mySceneId && (
+                <button
+                  className="party-member-bring"
+                  title="Bring this player to your scene"
+                  onClick={() => onBringHere(m.user_id)}
+                >
+                  Bring here
+                </button>
+              )}
             </div>
           );
         })}

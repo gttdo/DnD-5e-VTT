@@ -534,9 +534,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   );
   // Presence (#Phase 3b): who's at the table, online, and where.
   const { user: authUser } = useAuth();
-  const { party } = usePartyPresence(game.id);
+  const { party, moveMember } = usePartyPresence(game.id);
   // Hotspots (#Phase 2): navigable pins on this scene's backdrop.
   const { hotspots, createHotspot, updateHotspot, deleteHotspot } = useHotspots(activeScene?.id ?? null);
+  // Navigation lock (#Phase 3d): a player whose scene is IN COMBAT can't wander
+  // off — combat pins the party in place. The DM is never locked.
+  const navLocked = !isDM && Boolean(activeScene?.in_combat);
+  const guardTravel = (sceneId: string) => {
+    if (navLocked) {
+      toast.error("You're in combat — you can't wander off");
+      return;
+    }
+    void navigateToScene(sceneId);
+  };
   const hotspotsRef = useRef(hotspots);
   hotspotsRef.current = hotspots;
   // The pin whose editor popover is open (DM authoring).
@@ -4556,7 +4566,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     if (isDM && toolRef.current === "hotspot") {
                       setEditHotspotId(h.id);
                     } else if (h.target_scene_id) {
-                      void navigateToScene(h.target_scene_id);
+                      guardTravel(h.target_scene_id);
                     } else if (isDM) {
                       setEditHotspotId(h.id);
                     }
@@ -4727,7 +4737,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isDM && toolRef.current === "hotspot") setEditHotspotId(h.id);
-                      else if (h.target_scene_id) void navigateToScene(h.target_scene_id);
+                      else if (h.target_scene_id) guardTravel(h.target_scene_id);
                       else if (isDM) setEditHotspotId(h.id);
                     }}
                   >
@@ -5094,7 +5104,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               gameId={game.id}
               isDM={isDM}
               scenes={scenes.map((s) => ({ id: s.id, name: s.name }))}
-              onTravel={(sceneId) => void navigateToScene(sceneId)}
+              onTravel={(sceneId) => guardTravel(sceneId)}
               onClose={() => setHudModal(null)}
             />
           )}
@@ -5281,6 +5291,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               mySceneId={activeScene?.id ?? null}
               stageSceneId={stageSceneId}
               sceneNameOf={(id) => scenes.find((s) => s.id === id)?.name ?? null}
+              onBringHere={(userId) => {
+                // Landing them on the DM's scene: if the DM is on the stage,
+                // clear the override (follow the stage); else pin them to it.
+                const dest = activeScene?.id === stageSceneId ? null : activeScene?.id ?? null;
+                void moveMember(userId, dest).then(({ error }) => {
+                  if (error) toast.error(error);
+                  else toast.success("Player brought to your scene");
+                });
+              }}
               joinCode={game.join_code}
               onCopyInvite={() => {
                 const url = `${window.location.origin}/#/join/${game.join_code}`;
