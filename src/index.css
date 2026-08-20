@@ -538,6 +538,27 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background: var(--border);
   margin: 4px 0;
 }
+/* "Clear this face" tile leading the map picker grid (IA: set + clear live in
+   the same dialog). */
+.map-clear-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 180px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md, 12px);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.map-clear-tile:hover { border-color: var(--ember); color: var(--ember); }
+.map-clear-tile svg { display: block; }
+.map-clear-tile-sub { font-size: 10.5px; color: var(--text-dim); opacity: 0.7; }
+
 /* Phase 2: hotspot editor popover. */
 .hotspot-editor {
   position: absolute;
@@ -881,19 +902,6 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   padding: 1px 5px;
   border-radius: var(--r-pill);
 }
-.scene-card-mode {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--bg-0) 55%, transparent);
-  color: var(--cream);
-}
-.scene-card-mode.cinematic { color: var(--gold); }
 .scene-card-foot {
   display: flex;
   align-items: center;

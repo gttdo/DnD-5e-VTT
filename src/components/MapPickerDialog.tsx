@@ -1,4 +1,5 @@
 import { useMaps, type MapAsset } from "../state/useMaps";
+import { Icon } from "./ui/Icon";
 import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { Dialog } from "./ui/Dialog";
 import { EmptyState } from "./ui/EmptyState";
@@ -13,6 +14,9 @@ interface Props {
   filterType?: Array<"battlemap" | "regional" | "cinematic">;
   /** Which copy variant to show. */
   slot?: "battlemap" | "backdrop" | "region";
+  /** When present, the grid leads with a "clear this slot" tile (IA: setting
+   *  and clearing a face live in the same place). */
+  onClear?: () => void;
   onPick: (map: MapAsset) => void;
   onClose: () => void;
 }
@@ -34,23 +38,24 @@ const COPY = {
  * Grid of the DM's saved maps, optionally filtered by asset kind. Click one
  * → applies to the active scene. Empty state points the DM at the Cartographer.
  */
-export const MapPickerDialog = ({ currentMapId, filterType, slot, onPick, onClose }: Props) => {
+export const MapPickerDialog = ({ currentMapId, filterType, slot, onClear, onPick, onClose }: Props) => {
   const { maps, loading } = useMaps();
   // Pre-0037 rows have no map_type → treat them as battlemaps.
   const shown = filterType ? maps.filter((m) => filterType.includes(m.map_type ?? "battlemap")) : maps;
   const copy = COPY[slot ?? "all"];
+  const clearLabel = slot === "backdrop" ? "Clear backdrop" : slot === "battlemap" ? "Clear battlemap" : "Clear";
 
   return (
     <Dialog onClose={onClose} size="lg" title={copy.title} subtitle={copy.subtitle}>
       {loading && <div className="dim">Loading library…</div>}
 
-      {!loading && shown.length === 0 && (
+      {!loading && shown.length === 0 && !onClear && (
         <EmptyState icon="map" title="Nothing here yet" compact>
           Generate one from the scene menu, or head to the <strong>Maps</strong> tab to upload your own.
         </EmptyState>
       )}
 
-      {!loading && shown.length > 0 && (
+      {!loading && (shown.length > 0 || onClear) && (
         <div
           style={{
             display: "grid",
@@ -58,6 +63,13 @@ export const MapPickerDialog = ({ currentMapId, filterType, slot, onPick, onClos
             gap: 12,
           }}
         >
+          {onClear && (
+            <button className="map-clear-tile" onClick={onClear} title={clearLabel}>
+              <Icon name="delete" size={20} />
+              <span>{clearLabel}</span>
+              <span className="map-clear-tile-sub">The scene keeps its other face.</span>
+            </button>
+          )}
           {shown.map((m) => {
             const isCurrent = m.id === currentMapId;
             return (

@@ -3484,7 +3484,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             {scenes.map((s) => {
               const thumb = s.cinematic_url ?? s.image_url ?? null;
               const isActive = s.id === activeScene?.id;
-              const sMode = s.mode ?? "tactical";
               return (
                 <div
                   key={s.id}
@@ -3505,12 +3504,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   >
                     {!thumb && <Icon name="image" size={16} />}
                     {isActive && <span className="scene-card-live">Live</span>}
-                    <span
-                      className={`scene-card-mode ${sMode}`}
-                      title={sMode === "cinematic" ? "Showing the cinematic backdrop" : "Showing the battlemap"}
-                    >
-                      <Icon name={sMode === "cinematic" ? "drama" : "grid"} size={11} />
-                    </span>
                   </div>
                   <div className="scene-card-foot">
                     <span
@@ -3578,17 +3571,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                       >
                         <Icon name="library" size={12} /> Set battlemap…
                       </button>
-                      {s.image_url && (
-                        <button
-                          onClick={async () => {
-                            const { error } = await setSceneImageUrl(s.id, null);
-                            if (error) toast.error(error);
-                            setCardMenuId(null);
-                          }}
-                        >
-                          <Icon name="delete" size={12} /> Clear battlemap
-                        </button>
-                      )}
                       <button
                         onClick={() => {
                           setPickerSceneId(s.id);
@@ -3600,17 +3582,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                       >
                         <Icon name="drama" size={12} /> Set backdrop…
                       </button>
-                      {s.cinematic_url && (
-                        <button
-                          onClick={async () => {
-                            const { error } = await setSceneCinematicUrl(s.id, null);
-                            if (error) toast.error(error);
-                            setCardMenuId(null);
-                          }}
-                        >
-                          <Icon name="delete" size={12} /> Clear backdrop
-                        </button>
-                      )}
+                      {/* Clearing a face lives inside the picker now (a lead
+                          "Clear" tile) — set + clear in one place. */}
                     </div>
                   )}
                 </div>
@@ -5590,6 +5563,20 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             filterType={pickerTarget === "tactical" ? ["battlemap"] : ["cinematic", "regional"]}
             slot={pickerTarget === "tactical" ? "battlemap" : "backdrop"}
             currentMapId={pickerTarget === "tactical" ? target.map_id : null}
+            onClear={
+              (pickerTarget === "tactical" ? target.image_url : target.cinematic_url)
+                ? async () => {
+                    const { error } =
+                      pickerTarget === "tactical"
+                        ? await setSceneImageUrl(target.id, null)
+                        : await setSceneCinematicUrl(target.id, null);
+                    if (error) toast.error(error);
+                    else toast.success(`${target.name}: ${pickerTarget === "tactical" ? "battlemap" : "backdrop"} cleared`);
+                    setPickerOpen(false);
+                    setPickerSceneId(null);
+                  }
+                : undefined
+            }
             onPick={async (m) => {
               if (pickerTarget === "cinematic") {
                 const { error } = await setSceneCinematicUrl(target.id, m.image_url);
