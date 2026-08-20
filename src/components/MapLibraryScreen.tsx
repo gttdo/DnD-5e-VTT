@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMaps, type MapAsset } from "../state/useMaps";
 import { useAuth } from "../state/useAuth";
-import { GenerateMapDialog } from "./GenerateMapDialog";
+import { GenerateMapDialog, type CreateMapKind } from "./GenerateMapDialog";
+import { Icon } from "./ui/Icon";
 import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { CardMenu } from "./ui/CardMenu";
 import { Button } from "./ui/Button";
@@ -19,6 +20,21 @@ export const MapLibraryScreen = () => {
   const { confirm, prompt } = useConfirm();
   const [createOpen, setCreateOpen] = useState(false);
   const [preview, setPreview] = useState<MapAsset | null>(null);
+  // The library is split by asset kind, same tab pattern as Resources.
+  // Pre-0037 rows (no map_type) read as battlemaps.
+  const [tab, setTab] = useState<CreateMapKind>("battlemap");
+  const kindOf = (m: MapAsset): CreateMapKind => m.map_type ?? "battlemap";
+  const counts = useMemo(() => {
+    const c: Record<CreateMapKind, number> = { battlemap: 0, cinematic: 0, regional: 0 };
+    maps.forEach((m) => c[kindOf(m)]++);
+    return c;
+  }, [maps]);
+  const TABS: { key: CreateMapKind; label: string; icon: "grid" | "drama" | "map" }[] = [
+    { key: "battlemap", label: "Battlemaps", icon: "grid" },
+    { key: "cinematic", label: "Backdrops", icon: "drama" },
+    { key: "regional", label: "Region maps", icon: "map" },
+  ];
+  const shown = maps.filter((m) => kindOf(m) === tab);
 
   return (
     <div className="screen-enter" style={{ padding: 24 }}>
@@ -42,14 +58,31 @@ export const MapLibraryScreen = () => {
         </Button>
       </LibraryBanner>
 
-      {!loading && maps.length === 0 && (
+      {!loading && (
+        <div className="tlib-tabs" role="tablist" style={{ marginBottom: 16 }}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              className={`tlib-tab ${tab === t.key ? "on" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              <Icon name={t.icon} size={15} /> {t.label}
+              <span className="tlib-tab-count">{counts[t.key]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && shown.length === 0 && (
         <EmptyState
           icon="map"
-          title="No maps yet"
-          cta={{ label: "Create your first map", icon: "palette", onClick: () => setCreateOpen(true) }}
+          title={`No ${TABS.find((t) => t.key === tab)?.label.toLowerCase()} yet`}
+          cta={{ label: "Create one", icon: "palette", onClick: () => setCreateOpen(true) }}
         >
-          Upload your own battle map, or summon one with the cartographer —
-          describe a scene and it paints a top-down map. Every one lands here.
+          Upload your own or generate one with Create map — every finished piece
+          lands here, sorted by kind.
         </EmptyState>
       )}
 
@@ -60,7 +93,7 @@ export const MapLibraryScreen = () => {
           gap: 16,
         }}
       >
-        {maps.map((m) => {
+        {shown.map((m) => {
           const owned = m.owner_id === user?.id;
           return (
           <Card
@@ -123,7 +156,7 @@ export const MapLibraryScreen = () => {
         })}
       </div>
 
-      {createOpen && <GenerateMapDialog onClose={() => setCreateOpen(false)} />}
+      {createOpen && <GenerateMapDialog initialKind={tab} onClose={() => setCreateOpen(false)} />}
 
       {preview && (
         <div
