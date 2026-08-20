@@ -725,14 +725,18 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   row-gap: 8px;
   gap: 10px;
   padding: 9px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 11px;
-  background: linear-gradient(180deg, rgb(44, 34, 22), rgb(27, 21, 13));
-  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(212, 169, 90, 0.08);
-  backdrop-filter: blur(6px);
+  border: 1px solid var(--glass-hair);
+  border-radius: 14px;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.75), var(--glass-sheen);
 }
 /* Its turn — the dock says so without a glance at the tracker. */
-.thud.is-turn { border-color: var(--candle); box-shadow: 0 0 0 1px var(--candle), 0 14px 34px -12px rgba(0,0,0,0.75); }
+.thud.is-turn {
+  border-color: color-mix(in srgb, var(--gold) 55%, var(--glass-hair));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent), 0 14px 34px -12px rgba(0, 0, 0, 0.75), var(--glass-sheen);
+}
 
 .thud-who { display: flex; align-items: center; gap: 11px; min-width: 176px; }
 /* The portrait is a button that opens the sheet — strip the global button chrome. */
@@ -5387,9 +5391,11 @@ button.topbar-stat {
   z-index: 44;
   display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; white-space: nowrap;
   padding: 9px 14px;
-  border: 1px solid var(--border-strong); border-radius: 11px;
-  background: linear-gradient(180deg, rgb(44, 34, 22), rgb(27, 21, 13));
-  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(212, 169, 90, 0.08);
+  border: 1px solid var(--glass-hair); border-radius: var(--r-pill);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.7), var(--glass-sheen);
 }
 .thud-rs-glyph {
   display: inline-flex; align-items: center; justify-content: center; gap: 3px;
