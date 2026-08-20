@@ -3611,6 +3611,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   min-height: 0;
   overflow: hidden;
 }
+/* Go full-bleed in-session (cinematic redesign, phase 0). The table carries its
+   own header (Games back + scene switcher), so the global app header is
+   redundant during play — hide it on every viewport (previously only on short
+   ones) and let the board own the whole screen. Exit via the table's "Games". */
+.app-shell.is-immersive .app-header { display: none; }
 
 /* Avatar dropdown menu — src/components/ui/AvatarMenu.tsx */
 .avatar-menu { position: relative; }
