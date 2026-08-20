@@ -538,10 +538,25 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   flex: 1;
   min-width: 0;
   position: relative;
-  background: var(--surface-0);
+  /* Cinematic vignette (phase 0): the exposed board margins go from flat black
+     to a warm radial glow that darkens to the edges — atmospheric framing
+     instead of a void behind the map. */
+  background:
+    radial-gradient(135% 115% at 50% 42%, color-mix(in srgb, var(--surface-0) 80%, #241a0d), var(--surface-0) 84%);
   display: flex;
   overflow: hidden;
   overscroll-behavior: none;
+}
+/* A whisper of corner-darkening OVER the board to frame the scene. Kept very
+   light and confined to the outer edge so tokens stay legible; sits below the
+   chrome (rail/HUD/tracker all carry higher z-index). */
+.table-board::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(125% 105% at 50% 50%, transparent 68%, rgba(6, 5, 3, 0.34) 100%);
 }
 /* Direct child ONLY — this is the board canvas. A bare descendant selector
    here also captured the lucide icons inside overlay panels (initiative
