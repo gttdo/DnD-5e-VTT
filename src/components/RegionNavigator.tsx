@@ -100,6 +100,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
   const missing = !!error && /region_maps|does not exist|schema cache/i.test(error);
 
   return (
+    <>
     <div className="region-panel regnav" role="dialog" aria-label="Region map">
       <div className="region-panel-bar">
         {stack.length > 1 ? (
@@ -280,24 +281,27 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
           {error}
         </div>
       )}
-
-      {mapPicker && (
-        <MapPickerDialog
-          filterType={["regional"]}
-          slot="region"
-          currentMapId={null}
-          onPick={async (m) => {
-            const { map, error: err } = await createRegionMap(m.name, m.image_url);
-            if (err) {
-              setError(err);
-            } else if (map && mapPicker.forPin) {
-              await updateHotspot(mapPicker.forPin, { target_map_id: map.id, target_scene_id: null });
-            }
-            setMapPicker(null);
-          }}
-          onClose={() => setMapPicker(null)}
-        />
-      )}
     </div>
+
+    {/* Rendered OUTSIDE the panel: the panel's transform makes it the containing
+        block for fixed descendants, which clipped the dialog inside its box. */}
+    {mapPicker && (
+      <MapPickerDialog
+        filterType={["regional"]}
+        slot="region"
+        currentMapId={null}
+        onPick={async (m) => {
+          const { map, error: err } = await createRegionMap(m.name, m.image_url);
+          if (err) {
+            setError(err);
+          } else if (map && mapPicker.forPin) {
+            await updateHotspot(mapPicker.forPin, { target_map_id: map.id, target_scene_id: null });
+          }
+          setMapPicker(null);
+        }}
+        onClose={() => setMapPicker(null)}
+      />
+    )}
+    </>
   );
 };
