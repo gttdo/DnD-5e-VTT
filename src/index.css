@@ -4383,6 +4383,13 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  /* The base shell is `grid-template-rows: auto 1fr` (header + main). In
+     immersive the header is display:none, which drops app-main into the FIRST
+     (auto/content-sized) track — collapsing it to content height and leaving
+     the empty 1fr track as dead space below the footer (a player hit this
+     whenever their content was shorter than the viewport). One 1fr row so the
+     lone visible child (app-main) always fills the viewport. */
+  grid-template-rows: 1fr;
 }
 /* Bulletproof the table's height chain (a player reported dead space below the
    footer): make the immersive main a flex column that hard-fills the shell, and
