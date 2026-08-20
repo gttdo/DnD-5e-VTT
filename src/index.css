@@ -659,9 +659,18 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   flex-direction: column;
   min-height: 200px;
 }
+/* Pan/zoom viewport: the stage transforms inside; overflow stays clipped. */
+.regnav-viewport {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none; /* wheel/drag are ours */
+}
+.regnav-viewport:active { cursor: grabbing; }
 .regnav-stage {
   position: relative;
-  align-self: center;
   max-width: 100%;
 }
 .regnav-stage img {
@@ -669,8 +678,28 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   max-width: 100%;
   max-height: 62vh;
   user-select: none;
+  -webkit-user-drag: none;
 }
 .regnav-stage.is-editing { cursor: crosshair; }
+/* DM pencil chip — appears on pin hover; the always-available path to the pin
+   editor (no placement mode required). */
+.cine-hotspot-edit {
+  position: absolute;
+  top: -8px;
+  right: -22px;
+  display: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  cursor: pointer;
+}
+.cine-hotspot-edit svg { display: block; }
+.cine-hotspot:hover .cine-hotspot-edit { display: grid; }
+.cine-hotspot-edit:hover { background: var(--gold); color: #241a0c; }
 .regnav-back {
   display: inline-flex;
   align-items: center;

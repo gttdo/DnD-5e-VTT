@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRegionMaps, useMapHotspots } from "../state/useRegionNav";
 import { MapPickerDialog } from "./MapPickerDialog";
 import { GameGlyph } from "./ui/GameGlyph";
@@ -62,8 +62,58 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, mapPicker, editPinId]);
 
+  // Pan + zoom over the map (user ask: inspect the map closer). The stage gets
+  // translate+scale; pins are children so they ride along for free. Wheel zooms
+  // toward the cursor; drag pans; double-click resets. A drag suppresses the
+  // click that ends it, so panning never places pins or triggers travel.
+  const [view, setView] = useState({ z: 1, tx: 0, ty: 0 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const panRef = useRef({ active: false, moved: false, x: 0, y: 0, tx: 0, ty: 0 });
+  useEffect(() => {
+    setView({ z: 1, tx: 0, ty: 0 });
+  }, [current?.id]);
+
+  const onWheelZoom = (e: React.WheelEvent<HTMLDivElement>) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    e.preventDefault();
+    const vp = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - vp.left;
+    const py = e.clientY - vp.top;
+    setView((v) => {
+      const nz = Math.min(6, Math.max(1, v.z * Math.exp(-e.deltaY * 0.0016)));
+      if (nz === v.z) return v;
+      if (nz === 1) return { z: 1, tx: 0, ty: 0 };
+      // Keep the map point under the cursor fixed: solve in the stage's
+      // pre-transform space (offsetLeft/Top = its layout slot in the viewport).
+      const sx = (px - stage.offsetLeft - v.tx) / v.z;
+      const sy = (py - stage.offsetTop - v.ty) / v.z;
+      return { z: nz, tx: px - stage.offsetLeft - sx * nz, ty: py - stage.offsetTop - sy * nz };
+    });
+  };
+  const panStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.pointerType !== "touch") return;
+    panRef.current = { active: true, moved: false, x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+  };
+  const panMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = panRef.current;
+    if (!p.active) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    if (!p.moved && Math.hypot(dx, dy) < 4) return;
+    p.moved = true;
+    setView((v) => ({ ...v, tx: p.tx + dx, ty: p.ty + dy }));
+  };
+  const panEnd = () => {
+    panRef.current.active = false;
+    // `moved` survives until the click that follows pointerup has been seen.
+    setTimeout(() => {
+      panRef.current.moved = false;
+    }, 0);
+  };
+
   const placePin = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDM || !editMode || editPinId) return;
+    if (!isDM || !editMode || editPinId || panRef.current.moved) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
@@ -74,6 +124,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
   };
 
   const pinClick = (h: (typeof hotspots)[number]) => {
+    if (panRef.current.moved) return; // that was a pan, not a click
     if (isDM && editMode) {
       setEditPinId(h.id);
       return;
@@ -84,7 +135,9 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
       onTravel(h.target_scene_id);
       onClose();
     } else if (isDM) {
-      setEditMode(true);
+      // Unlinked pin: open its editor — WITHOUT flipping into placement mode
+      // (auto-entering edit mode made the next map click silently create a
+      // duplicate pin; that trap is how a stray second pin got authored).
       setEditPinId(h.id);
     }
   };
@@ -151,30 +204,65 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
 
         {current && (
           <div
-            className={`regnav-stage ${isDM && editMode ? "is-editing" : ""}`}
-            onClick={placePin}
-            title={isDM && editMode ? "Click to place a hotspot" : undefined}
+            className="regnav-viewport"
+            onWheel={onWheelZoom}
+            onPointerDown={panStart}
+            onPointerMove={panMove}
+            onPointerUp={panEnd}
+            onPointerLeave={panEnd}
+            onDoubleClick={() => {
+              if (!editMode) setView({ z: 1, tx: 0, ty: 0 });
+            }}
+            title={view.z > 1 ? "Drag to pan · scroll to zoom · double-click to reset" : "Scroll to zoom"}
           >
-            <img src={current.image_url} alt={current.name} draggable={false} />
-            {hotspots.map((h) => {
-              if (h.hidden && !isDM) return null;
-              const linked = Boolean(h.target_scene_id || h.target_map_id);
-              return (
-                <button
-                  key={h.id}
-                  className={`cine-hotspot ${linked ? "" : "is-unlinked"} ${h.hidden ? "is-hidden" : ""}`}
-                  style={{ left: `${h.x * 100}%`, top: `${h.y * 100}%` }}
-                  title={h.label ?? (h.target_map_id ? "Open map" : linked ? "Travel" : "Unlinked")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    pinClick(h);
-                  }}
-                >
-                  <span className="cine-hotspot-dot" />
-                  {h.label && <span className="cine-hotspot-label">{h.label}</span>}
-                </button>
-              );
-            })}
+            <div
+              ref={stageRef}
+              className={`regnav-stage ${isDM && editMode ? "is-editing" : ""}`}
+              style={{ transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.z})`, transformOrigin: "0 0" }}
+              onClick={placePin}
+            >
+              <img src={current.image_url} alt={current.name} draggable={false} />
+              {hotspots.map((h) => {
+                if (h.hidden && !isDM) return null;
+                const linked = Boolean(h.target_scene_id || h.target_map_id);
+                return (
+                  <button
+                    key={h.id}
+                    className={`cine-hotspot ${linked ? "" : "is-unlinked"} ${h.hidden ? "is-hidden" : ""}`}
+                    style={{ left: `${h.x * 100}%`, top: `${h.y * 100}%` }}
+                    title={h.label ?? (h.target_map_id ? "Open map" : linked ? "Travel" : "Unlinked")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pinClick(h);
+                    }}
+                    onContextMenu={(e) => {
+                      // DM right-click = straight to the editor, no mode needed.
+                      if (!isDM) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditPinId(h.id);
+                    }}
+                  >
+                    <span className="cine-hotspot-dot" />
+                    {h.label && <span className="cine-hotspot-label">{h.label}</span>}
+                    {isDM && (
+                      <span
+                        className="cine-hotspot-edit"
+                        role="button"
+                        title="Edit this pin"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (panRef.current.moved) return;
+                          setEditPinId(h.id);
+                        }}
+                      >
+                        <Icon name="edit" size={11} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

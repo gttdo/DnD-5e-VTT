@@ -550,6 +550,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       toast.error("You're in combat — you can't wander off");
       return;
     }
+    // A pin that leads to where you're standing shouldn't fail silently —
+    // that reads as "the pin is broken" (it was reported exactly that way).
+    if (sceneId === activeScene?.id) {
+      toast.info("You're already here");
+      return;
+    }
     void navigateToScene(sceneId);
   };
   const hotspotsRef = useRef(hotspots);
