@@ -3,6 +3,7 @@ import { useTokens, isTokenDowned, type Token } from "../state/useTokens";
 import { useScenes } from "../state/useScenes";
 import type { Game } from "../state/useGames";
 import { MapPickerDialog } from "./MapPickerDialog";
+import { GenerateSceneDialog } from "./GenerateSceneDialog";
 import { TokenPickerDialog, TOKEN_DRAG_MIME } from "./TokenPickerDialog";
 import { supabase } from "../lib/supabase";
 import type { MapAsset } from "../state/useMaps";
@@ -278,6 +279,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // Which face the map picker is filling — the tactical battlemap or the
   // cinematic backdrop (#Phase 1). Reuses the one MapPickerDialog for both.
   const [pickerTarget, setPickerTarget] = useState<"tactical" | "cinematic">("tactical");
+  const [genSceneOpen, setGenSceneOpen] = useState(false);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
   // The combat rail shows by default (a pill out of combat for the DM, the turn
@@ -3485,6 +3487,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 Set backdrop…
               </button>
             )}
+            {isDM && activeScene && (
+              <button
+                className="ghost"
+                onClick={() => {
+                  setGenSceneOpen(true);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <Icon name="sparkles" size={14} />
+                Generate backdrop…
+              </button>
+            )}
             {isDM && activeScene && activeScene.cinematic_url && (
               <button
                 className="ghost"
@@ -5186,6 +5201,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             setPickerOpen(false);
           }}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {genSceneOpen && activeScene && (
+        <GenerateSceneDialog
+          onApply={async (backdropUrl) => {
+            const { error } = await setSceneCinematicUrl(activeScene.id, backdropUrl);
+            if (error) toast.error(error);
+            else toast.success("Backdrop generated — flip to Cinematic to show it");
+            return { error };
+          }}
+          onClose={() => setGenSceneOpen(false)}
         />
       )}
 

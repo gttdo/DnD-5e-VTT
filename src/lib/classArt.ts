@@ -80,7 +80,7 @@ export const buildCharacterPortraitPrompt = (c: Character): string => {
  * content policy", a timeout) is JSON in the response body on error.context —
  * dig it out so failures are actionable, not mysterious.
  */
-const readFnError = async (error: unknown): Promise<string> => {
+export const readFnError = async (error: unknown): Promise<string> => {
   const ctx = (error as { context?: Response } | null)?.context;
   if (ctx && typeof ctx.json === "function") {
     const body = await ctx.json().catch(() => null);
