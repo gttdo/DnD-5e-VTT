@@ -641,6 +641,14 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   transform: scale(1.25);
   box-shadow: 0 0 0 4px rgba(20, 16, 12, 0.35), 0 0 26px var(--gold);
 }
+/* CRITICAL: the global `button:active { transform: translateY(1px) }` press
+   effect REPLACES this button's translate(-50%,-50%) centering — mid-press the
+   pin teleported half its own size away, pointerup landed elsewhere, and the
+   click died on the common ancestor. Every real pointer click on every pin was
+   dead ("it jiggles but nothing happens"). Keep the centering under :active;
+   press feedback lives on the dot instead. */
+.cine-hotspot:active { transform: translate(-50%, -50%); }
+.cine-hotspot:active .cine-hotspot-dot { transform: scale(1.1); }
 .cine-hotspot.is-unlinked .cine-hotspot-dot { border-style: dashed; border-color: var(--ember); }
 .cine-hotspot.is-hidden { opacity: 0.5; }
 .cine-hotspot-label {
