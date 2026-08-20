@@ -82,7 +82,15 @@ function App() {
   // Restore the last view. Builder is never restored (no half-finished creation
   // on reload); a sheet needs an active character; a table is restored async by
   // the effect below (we keep `screen` on "table" and fetch the game).
+  // An invite link (#/join/<code>) lands here — carry the code to the Games
+  // screen so the join field is prefilled. The branded pre-join lobby is a
+  // later slice; for now a signed-in player sees the code ready to accept.
+  const [joinCodeFromUrl] = useState<string | null>(() => {
+    const m = window.location.hash.match(/^#\/join\/([\w-]+)/);
+    return m ? m[1] : null;
+  });
   const [screen, setScreen] = useState<Screen>(() => {
+    if (joinCodeFromUrl) return "games";
     const nav = readNav();
     if (!nav) return activeId ? "sheet" : "roster";
     if (nav.screen === "builder") return "roster";
@@ -267,6 +275,7 @@ function App() {
         {!showLanding && screen === "games" && (
           <GamesScreen
             characters={characters}
+            initialJoinCode={joinCodeFromUrl}
             onOpenGame={(game) => {
               setActiveGame(game);
               setScreen("table");

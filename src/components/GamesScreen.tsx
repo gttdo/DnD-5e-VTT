@@ -10,14 +10,16 @@ import { useConfirm } from "../state/Confirm";
 
 interface Props {
   characters: Character[];
+  /** Prefill from an invite link (#/join/<code>). */
+  initialJoinCode?: string | null;
   onOpenGame: (game: Game) => void;
 }
 
-export const GamesScreen = ({ characters, onOpenGame }: Props) => {
+export const GamesScreen = ({ characters, initialJoinCode, onOpenGame }: Props) => {
   const { games, loading, error, createGame, joinByCode, leaveGame, deleteGame } = useGames();
   const { user } = useAuth();
   const [newName, setNewName] = useState("");
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(initialJoinCode ?? "");
   const [joinCharacterId, setJoinCharacterId] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);

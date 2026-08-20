@@ -3547,9 +3547,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           </div>
         )}
 
-        <span className="join-code" title="Share this code so players can join">
-          {game.join_code}
-        </span>
+        {/* The join code no longer lives in the top bar — inviting is now an
+            action in the Party panel (Copy invite link). See PartyTray. */}
 
         {/* Brief load cue only — the persistent token count was ambient chrome
             competing with the scene, so it's gone once the table is ready. The
@@ -5009,6 +5008,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           {partyOpen && (
             <PartyTray
               characters={characters}
+              isDM={isDM}
+              joinCode={game.join_code}
+              onCopyInvite={() => {
+                const url = `${window.location.origin}/#/join/${game.join_code}`;
+                void navigator.clipboard.writeText(url);
+                toast.success("Invite link copied");
+              }}
               onPlace={(ch) => {
                 void placeCharacter(ch);
                 setPartyOpen(false);

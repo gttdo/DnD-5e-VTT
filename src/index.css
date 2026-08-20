@@ -2007,6 +2007,44 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   margin-bottom: 8px;
 }
 .party-tray-list { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+/* DM invite affordance — inviting lives with the party, not in the top bar. */
+.party-invite {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.party-invite-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--glass-hair);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.party-invite-btn svg { display: block; }
+.party-invite-btn:hover {
+  background: color-mix(in srgb, var(--gold) 20%, transparent);
+  border-color: var(--gold);
+}
+.party-invite-code {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.party-invite-code b {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
 .party-row {
   display: flex;
   align-items: center;

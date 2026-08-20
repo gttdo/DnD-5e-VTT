@@ -18,6 +18,11 @@ interface Props {
   /** Place at the grid centre — the tap path. */
   onPlace: (c: Character) => void;
   onClose: () => void;
+  /** DM-only invite: the party panel is where "who's at my table?" lives, so
+   *  it's also where inviting them lives (the raw code left the top bar). */
+  isDM?: boolean;
+  joinCode?: string;
+  onCopyInvite?: () => void;
 }
 
 const initialsOf = (name: string) =>
@@ -29,7 +34,7 @@ const initialsOf = (name: string) =>
     .join("")
     .toUpperCase();
 
-export const PartyTray = ({ characters, onPlace, onClose }: Props) => (
+export const PartyTray = ({ characters, onPlace, onClose, isDM, joinCode, onCopyInvite }: Props) => (
   <div className="party-tray panel">
     <div className="party-tray-head">
       <span>Your Characters</span>
@@ -69,6 +74,18 @@ export const PartyTray = ({ characters, onPlace, onClose }: Props) => (
             </span>
           </button>
         ))}
+      </div>
+    )}
+
+    {isDM && joinCode && (
+      <div className="party-invite">
+        <button className="party-invite-btn" onClick={onCopyInvite}>
+          <Icon name="copy" size={14} />
+          Copy invite link
+        </button>
+        <div className="party-invite-code">
+          or join with code <b>{joinCode}</b>
+        </div>
       </div>
     )}
   </div>
