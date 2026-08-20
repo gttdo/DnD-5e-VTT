@@ -9,33 +9,40 @@ interface Props {
    * so the DM can see which library asset the scene came from.
    */
   currentMapId: string | null;
+  /** Restrict the grid to one asset kind (#Phase 2). Omit to show everything. */
+  filterType?: "battlemap" | "regional" | "cinematic";
   onPick: (map: MapAsset) => void;
   onClose: () => void;
 }
 
+const COPY = {
+  battlemap: { title: "Pick a battlemap", subtitle: "From your library. Click to use as this scene's tactical map." },
+  regional: { title: "Pick a regional map", subtitle: "From your library. Click to use as this scene's overview map." },
+  cinematic: { title: "Pick a backdrop", subtitle: "From your library. Click to use as this scene's cinematic backdrop." },
+  all: { title: "Pick a map", subtitle: "From your library. Click to use on this scene." },
+} as const;
+
 /**
- * Grid of the DM's saved maps. Click one → applies to the active scene.
- * Empty state points the DM at the Cartographer.
+ * Grid of the DM's saved maps, optionally filtered to one asset kind. Click one
+ * → applies to the active scene. Empty state points the DM at the Cartographer.
  */
-export const MapPickerDialog = ({ currentMapId, onPick, onClose }: Props) => {
+export const MapPickerDialog = ({ currentMapId, filterType, onPick, onClose }: Props) => {
   const { maps, loading } = useMaps();
+  // Pre-0037 rows have no map_type → treat them as battlemaps.
+  const shown = filterType ? maps.filter((m) => (m.map_type ?? "battlemap") === filterType) : maps;
+  const copy = COPY[filterType ?? "all"];
 
   return (
-    <Dialog
-      onClose={onClose}
-      size="lg"
-      title="Pick a map"
-      subtitle="From your library. Click to use as this scene's background."
-    >
+    <Dialog onClose={onClose} size="lg" title={copy.title} subtitle={copy.subtitle}>
       {loading && <div className="dim">Loading library…</div>}
 
-      {!loading && maps.length === 0 && (
-        <EmptyState icon="map" title="Your library is empty" compact>
-          Head to the <strong>Maps</strong> tab to upload your own or generate one.
+      {!loading && shown.length === 0 && (
+        <EmptyState icon="map" title="Nothing here yet" compact>
+          Generate one from the scene menu, or head to the <strong>Maps</strong> tab to upload your own.
         </EmptyState>
       )}
 
-      {!loading && maps.length > 0 && (
+      {!loading && shown.length > 0 && (
         <div
           style={{
             display: "grid",
@@ -43,7 +50,7 @@ export const MapPickerDialog = ({ currentMapId, onPick, onClose }: Props) => {
             gap: 12,
           }}
         >
-          {maps.map((m) => {
+          {shown.map((m) => {
             const isCurrent = m.id === currentMapId;
             return (
               <Card

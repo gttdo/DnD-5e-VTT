@@ -11,6 +11,8 @@ export interface MapAsset {
   family: string | null;
   style: string | null;
   size: string | null;
+  /** Asset kind (#Phase 2). Optional for a pre-0037 schema → treat as battlemap. */
+  map_type?: "battlemap" | "regional" | "cinematic";
   /** Published to the shared library — readable by every account (#135/#137).
    *  Optional for a pre-0032 schema. */
   is_public?: boolean;
@@ -25,6 +27,7 @@ export interface NewMapInput {
   family?: string | null;
   style?: string | null;
   size?: string | null;
+  map_type?: "battlemap" | "regional" | "cinematic";
 }
 
 /**
@@ -118,19 +121,24 @@ export const useMaps = () => {
   const createMap = useCallback(
     async (input: NewMapInput): Promise<{ map: MapAsset | null; error: string | null }> => {
       if (!user) return { map: null, error: "Not signed in" };
-      const { data, error } = await supabase
-        .from("maps")
-        .insert({
-          owner_id: user.id,
-          name: input.name,
-          image_url: input.image_url,
-          prompt: input.prompt ?? null,
-          family: input.family ?? null,
-          style: input.style ?? null,
-          size: input.size ?? null,
-        })
-        .select()
-        .single();
+      const row = {
+        owner_id: user.id,
+        name: input.name,
+        image_url: input.image_url,
+        prompt: input.prompt ?? null,
+        family: input.family ?? null,
+        style: input.style ?? null,
+        size: input.size ?? null,
+        map_type: input.map_type ?? "battlemap",
+      };
+      let { data, error } = await supabase.from("maps").insert(row).select().single();
+      // Pre-0037 fallback: the map_type column may not exist yet — retry without
+      // it so map creation keeps working during the migration window.
+      if (error && /map_type/i.test(error.message)) {
+        const { map_type: _omit, ...rest } = row;
+        void _omit;
+        ({ data, error } = await supabase.from("maps").insert(rest).select().single());
+      }
       if (error || !data) return { map: null, error: error?.message ?? "Insert failed" };
       return { map: data as MapAsset, error: null };
     },

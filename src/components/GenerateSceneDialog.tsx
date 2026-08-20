@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { generateScene, SCENE_MOODS, type SceneMood } from "../lib/sceneSmith";
+import { generateScene, buildScenePrompt, SCENE_MOODS, type SceneMood } from "../lib/sceneSmith";
+import { useMaps } from "../state/useMaps";
 import { Dialog } from "./ui/Dialog";
 import { GenerationProgress } from "./ui/GenerationProgress";
 
@@ -15,6 +16,7 @@ interface Props {
  * lib/sceneSmith. Kept lean: describe the place, pick a mood, generate, apply.
  */
 export const GenerateSceneDialog = ({ onApply, onClose }: Props) => {
+  const { createMap } = useMaps();
   const [description, setDescription] = useState("");
   const [mood, setMood] = useState<SceneMood>("auto");
   const [busy, setBusy] = useState(false);
@@ -26,12 +28,24 @@ export const GenerateSceneDialog = ({ onApply, onClose }: Props) => {
     setBusy(true);
     setError(null);
     const { url: out, error: err } = await generateScene(description, mood);
-    setBusy(false);
     if (err) {
+      setBusy(false);
       setError(err);
       return;
     }
     setUrl(out);
+    // Save to the library as a cinematic asset so the backdrop is reusable via
+    // "Set backdrop…" and never lost, even if the DM closes without applying.
+    if (out) {
+      await createMap({
+        name: description.trim().slice(0, 40) || "Backdrop",
+        image_url: out,
+        prompt: buildScenePrompt(description, mood),
+        size: "1536x1024",
+        map_type: "cinematic",
+      });
+    }
+    setBusy(false);
   };
 
   const apply = async () => {

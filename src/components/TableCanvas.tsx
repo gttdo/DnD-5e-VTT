@@ -5187,6 +5187,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
       {pickerOpen && activeScene && (
         <MapPickerDialog
+          filterType={pickerTarget === "tactical" ? "battlemap" : "cinematic"}
           currentMapId={pickerTarget === "tactical" ? activeScene.map_id : null}
           onPick={async (m) => {
             if (pickerTarget === "cinematic") {
