@@ -178,6 +178,54 @@ const ILLUSTRATED_WRAPPER =
 const wrapperFor = (family: MapFamily): string =>
   family === "illustrated" ? ILLUSTRATED_WRAPPER : REALISTIC_WRAPPER;
 
+// A REGIONAL map is a different animal from a battle map: a wide overview of a
+// whole area (miles across) for travel and navigation — the surface a DM drops
+// hotspots on. No grid, no battle-scale interiors; terrain and settlements read
+// as an overworld, not a floor plan.
+export type MapProfile = "battlemap" | "regional";
+
+const REGIONAL_ILLUSTRATED =
+  "Top-down fantasy REGION map — the hand-drawn overland/overworld map from a " +
+  "published tabletop RPG campaign setting (think a kingdom or wilderness map " +
+  "in a 5e adventure module). Aged parchment palette, ink linework over soft " +
+  "watercolor. A WIDE area many miles across seen from high above: mountain " +
+  "ranges drawn as ridged pictographic peaks, forests as clusters of small tree " +
+  "icons, rivers and lakes, a coastline, roads as thin dashed lines, hills, " +
+  "marshes, and small pictographic settlement markers (towns, keeps, villages) " +
+  "as simple icons. This is a NAVIGATION overview, NOT a battle-scale interior " +
+  "or floor plan. NO square grid, NO hex grid. The map fills the image edge-to-" +
+  "edge: NO decorative border, NO cartouche, NO compass rose, NO scale bar, and " +
+  "NO text, labels, letters, or numbers of any kind (markers stay wordless). " +
+  "NOT a top-down battle map of a single room, NOT isometric, NOT a 3/4 view.";
+
+const REGIONAL_REALISTIC =
+  "Top-down painted terrain overview of a fantasy REGION — a realistic aerial/" +
+  "satellite view of a large landscape from very high altitude. Natural biomes " +
+  "read clearly: forest canopy, mountain ranges with bare rock and snow caps, " +
+  "winding rivers, lakes, coastline and sea, open plains, marsh, desert. Muted " +
+  "naturalistic palette, soft even lighting. Small settlements appear as tiny " +
+  "clearings, road networks, and structure clusters. A WIDE navigation overview " +
+  "many miles across — NOT battle-scale, NOT a floor plan. NO grid of any kind. " +
+  "The terrain fills the image edge-to-edge: NO border, NO compass rose, NO " +
+  "scale bar, NO text, labels, letters, or numbers anywhere. " +
+  "NOT cartoon, NOT isometric, NOT a 3/4 view, NOT a single-room battle map.";
+
+const regionalWrapperFor = (family: MapFamily): string =>
+  family === "illustrated" ? REGIONAL_ILLUSTRATED : REGIONAL_REALISTIC;
+
+export const PROFILE_PRESETS: Array<{ key: MapProfile; label: string; hint: string }> = [
+  {
+    key: "battlemap",
+    label: "Battlemap",
+    hint: "Top-down, to-scale — the tactical map you fight on, under the grid.",
+  },
+  {
+    key: "regional",
+    label: "Regional",
+    hint: "A wide overworld/region map for travel — where you place hotspots.",
+  },
+];
+
 export const FAMILY_PRESETS: Array<{ key: MapFamily; label: string; hint: string }> = [
   {
     key: "realistic",
@@ -195,15 +243,24 @@ export interface BuildPromptInput {
   description: string;
   style: MapStyle;
   family?: MapFamily;
+  /** battlemap (default) uses the top-down style presets; regional swaps in the
+   *  overworld wrapper and ignores the battle-scale style. */
+  profile?: MapProfile;
 }
 
 export const buildImagePrompt = ({
   description,
   style,
   family = "realistic",
+  profile = "battlemap",
 }: BuildPromptInput): string => {
-  const preset = findPreset(style);
   const desc = description.trim();
+  if (profile === "regional") {
+    const parts = [regionalWrapperFor(family)];
+    if (desc) parts.push(`The region: ${desc}.`);
+    return parts.join(" ");
+  }
+  const preset = findPreset(style);
   const parts = [
     wrapperFor(family),
     `Scene: ${preset.label.toLowerCase()} — ${preset.hint}.`,

@@ -9,12 +9,14 @@ import {
   SIZE_PRESETS,
   QUALITY_PRESETS,
   FAMILY_PRESETS,
+  PROFILE_PRESETS,
   buildImagePrompt,
   findPreset,
   type MapStyle,
   type MapSize,
   type MapQuality,
   type MapFamily,
+  type MapProfile,
 } from "../lib/cartographer";
 
 interface Props {
@@ -53,6 +55,9 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
   const { createMap } = useMaps();
   const [mode, setMode] = useState<Mode>("upload");
+  // What kind of map this is — drives map_type on save and, when generating, the
+  // battle-vs-overworld prompt wrapper (#Phase 2).
+  const [profile, setProfile] = useState<MapProfile>("battlemap");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [family, setFamily] = useState<MapFamily>("realistic");
@@ -93,6 +98,7 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
       const { map, error: saveErr } = await createMap({
         name: derivedName,
         image_url: data.publicUrl,
+        map_type: profile,
       });
       if (saveErr) setError(`uploaded image but library save failed: ${saveErr}`);
       if (map) setSavedMap(map);
@@ -109,7 +115,7 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
     setError(null);
     setSavedMap(null);
     try {
-      const prompt = buildImagePrompt({ description, style, family });
+      const prompt = buildImagePrompt({ description, style, family, profile });
       const { data, error } = await supabase.functions.invoke("generate-image", {
         body: { prompt, size, quality },
       });
@@ -140,6 +146,7 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
         family,
         style,
         size,
+        map_type: profile,
       });
       if (saveErr) setError(`saved image but library save failed: ${saveErr}`);
       if (map) setSavedMap(map);
@@ -193,6 +200,27 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
           >
             <Icon name="sparkles" size={15} /> Generate
           </button>
+        </div>
+      )}
+
+      {!result && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span className="dim" style={uploadLabel}>Kind of map</span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {PROFILE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setProfile(p.key)}
+                className={profile === p.key ? "primary" : "ghost"}
+                style={{ fontSize: 12, textAlign: "left", flex: 1 }}
+                title={p.hint}
+              >
+                <div style={{ fontWeight: 600 }}>{p.label}</div>
+                <div className="dim" style={{ fontSize: 10, marginTop: 2 }}>{p.hint}</div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -296,17 +324,25 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span className="dim" style={uploadLabel}>Scene</span>
-              <select value={style} onChange={(e) => setStyle(e.target.value as MapStyle)}>
-                {STYLE_PRESETS.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: profile === "regional" ? "1fr 1fr" : "1fr 1fr 1fr",
+              gap: 12,
+            }}
+          >
+            {profile === "battlemap" && (
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span className="dim" style={uploadLabel}>Scene</span>
+                <select value={style} onChange={(e) => setStyle(e.target.value as MapStyle)}>
+                  {STYLE_PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span className="dim" style={uploadLabel}>Aspect</span>
