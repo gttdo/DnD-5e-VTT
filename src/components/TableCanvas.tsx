@@ -511,8 +511,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   );
   // Hotspots (#Phase 2): navigable pins on this scene's backdrop.
   const { hotspots, createHotspot, updateHotspot, deleteHotspot } = useHotspots(activeScene?.id ?? null);
+  const hotspotsRef = useRef(hotspots);
+  hotspotsRef.current = hotspots;
   // The pin whose editor popover is open (DM authoring).
   const [editHotspotId, setEditHotspotId] = useState<string | null>(null);
+  // Local draft for the label field — committed on blur/Done, NOT per keystroke.
+  // Per-keystroke writes race each other (unordered concurrent PATCHes) and the
+  // realtime echoes clobber the field, so a fast "Ancient Ruins" persisted as "A".
+  const [hotspotLabelDraft, setHotspotLabelDraft] = useState("");
+  useEffect(() => {
+    if (!editHotspotId) return;
+    // Seed once when the editor opens; don't re-seed on realtime updates (that
+    // would overwrite what the DM is typing).
+    setHotspotLabelDraft(hotspotsRef.current.find((x) => x.id === editHotspotId)?.label ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editHotspotId]);
   // Draw tool: which shape, what colour. "erase" removes on click.
   const [drawKind, setDrawKind] = useState<DrawKind | "erase">("pen");
   const [drawColor, setDrawColor] = useState(DRAW_COLORS[0]);
@@ -5133,8 +5146,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   <span>Label</span>
                   <input
                     autoFocus
-                    value={h.label ?? ""}
-                    onChange={(e) => updateHotspot(h.id, { label: e.target.value })}
+                    value={hotspotLabelDraft}
+                    onChange={(e) => setHotspotLabelDraft(e.target.value)}
+                    onBlur={() => void updateHotspot(h.id, { label: hotspotLabelDraft })}
                     placeholder="e.g. The Keep"
                   />
                 </label>
@@ -5148,7 +5162,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                         const name = await prompt({
                           title: "New scene",
                           subtitle: "Name the destination this pin leads to",
-                          initialValue: h.label || `Scene ${scenes.length + 1}`,
+                          initialValue: hotspotLabelDraft || `Scene ${scenes.length + 1}`,
                           confirmLabel: "Create scene",
                         });
                         if (!name) return;
@@ -5191,7 +5205,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   >
                     Delete
                   </button>
-                  <button className="primary" onClick={() => setEditHotspotId(null)}>
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      void updateHotspot(h.id, { label: hotspotLabelDraft });
+                      setEditHotspotId(null);
+                    }}
+                  >
                     Done
                   </button>
                 </div>
