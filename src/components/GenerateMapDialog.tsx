@@ -9,17 +9,41 @@ import {
   SIZE_PRESETS,
   QUALITY_PRESETS,
   FAMILY_PRESETS,
-  PROFILE_PRESETS,
   buildImagePrompt,
   findPreset,
   type MapStyle,
   type MapSize,
   type MapQuality,
   type MapFamily,
-  type MapProfile,
 } from "../lib/cartographer";
+import { buildScenePrompt, SCENE_MOODS, type SceneMood } from "../lib/sceneSmith";
+
+/** Which kind of asset this dialog creates — fixed by the entry button (IA:
+ *  "Create battlemap / Create backdrop / Create region map"), not toggled
+ *  inside the dialog. */
+export type CreateMapKind = "battlemap" | "regional" | "cinematic";
+
+const KIND_COPY: Record<CreateMapKind, { title: string; hint: string; uploadHint: string }> = {
+  battlemap: {
+    title: "New Battlemap",
+    hint: "Top-down, to-scale — the tactical map you fight on, under the grid.",
+    uploadHint: "PNG or JPG · keeps its aspect ratio · up to 20 MB",
+  },
+  regional: {
+    title: "New Region Map",
+    hint: "A wide overworld/region map for travel — where you place hotspots.",
+    uploadHint: "PNG or JPG · a kingdom, region, or town overview · up to 20 MB",
+  },
+  cinematic: {
+    title: "New Backdrop",
+    hint: "An eye-level cinematic backdrop — a scene's atmosphere, not a map.",
+    uploadHint: "PNG or JPG · wide art works best · up to 20 MB",
+  },
+};
 
 interface Props {
+  /** What this dialog creates. */
+  kind: CreateMapKind;
   /**
    * When present the dialog is opened from an in-game context and offers to
    * apply the finished map to that scene in addition to saving it to the
@@ -52,12 +76,10 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
  * `maps` library; when opened from a game, "Use as background" also applies
  * the new map to the current scene.
  */
-export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
+export const GenerateMapDialog = ({ kind, applyToScene, onClose }: Props) => {
   const { createMap } = useMaps();
   const [mode, setMode] = useState<Mode>("upload");
-  // What kind of map this is — drives map_type on save and, when generating, the
-  // battle-vs-overworld prompt wrapper (#Phase 2).
-  const [profile, setProfile] = useState<MapProfile>("battlemap");
+  const [mood, setMood] = useState<SceneMood>("auto");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [family, setFamily] = useState<MapFamily>("realistic");
@@ -98,7 +120,7 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
       const { map, error: saveErr } = await createMap({
         name: derivedName,
         image_url: data.publicUrl,
-        map_type: profile,
+        map_type: kind,
       });
       if (saveErr) setError(`uploaded image but library save failed: ${saveErr}`);
       if (map) setSavedMap(map);
@@ -115,9 +137,17 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
     setError(null);
     setSavedMap(null);
     try {
-      const prompt = buildImagePrompt({ description, style, family, profile });
+      // Backdrops use the eye-level scene prompt at wall-clock-safe settings;
+      // battlemaps/region maps use the cartographer wrappers.
+      const prompt =
+        kind === "cinematic"
+          ? buildScenePrompt(description, mood)
+          : buildImagePrompt({ description, style, family, profile: kind });
       const { data, error } = await supabase.functions.invoke("generate-image", {
-        body: { prompt, size, quality },
+        body:
+          kind === "cinematic"
+            ? { prompt, size: "1536x1024", quality: "medium" }
+            : { prompt, size, quality },
       });
       if (error) {
         setError(error.message);
@@ -138,15 +168,15 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
       const derivedName =
         name.trim() ||
         (description.trim().slice(0, 40) ||
-          `${findPreset(style).label} · ${new Date().toLocaleDateString()}`);
+          `${kind === "battlemap" ? findPreset(style).label : kind === "regional" ? "Region map" : "Backdrop"} · ${new Date().toLocaleDateString()}`);
       const { map, error: saveErr } = await createMap({
         name: derivedName,
         image_url: payload.image_url,
         prompt,
-        family,
-        style,
-        size,
-        map_type: profile,
+        family: kind === "cinematic" ? null : family,
+        style: kind === "battlemap" ? style : null,
+        size: kind === "cinematic" ? "1536x1024" : size,
+        map_type: kind,
       });
       if (saveErr) setError(`saved image but library save failed: ${saveErr}`);
       if (map) setSavedMap(map);
@@ -175,11 +205,11 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
     <Dialog
       onClose={onClose}
       size="md"
-      title="New Map"
+      title={KIND_COPY[kind].title}
       subtitle={
-        applyToScene
-          ? "Upload your own or generate one — saves to your library and applies to the active scene."
-          : "Upload your own or generate one — saves to your library."
+        (applyToScene
+          ? "Upload your own or generate one — saves to your library and applies to the active scene. "
+          : "Upload your own or generate one — saves to your library. ") + KIND_COPY[kind].hint
       }
     >
       {!result && (
@@ -204,29 +234,8 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
       )}
 
       {!result && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span className="dim" style={uploadLabel}>Kind of map</span>
-          <div style={{ display: "flex", gap: 6 }}>
-            {PROFILE_PRESETS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setProfile(p.key)}
-                className={profile === p.key ? "primary" : "ghost"}
-                style={{ fontSize: 12, textAlign: "left", flex: 1 }}
-                title={p.hint}
-              >
-                <div style={{ fontWeight: 600 }}>{p.label}</div>
-                <div className="dim" style={{ fontSize: 10, marginTop: 2 }}>{p.hint}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!result && (
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span className="dim" style={uploadLabel}>Map name (optional)</span>
+          <span className="dim" style={uploadLabel}>Name (optional)</span>
           <input
             placeholder="e.g. Moonlit Clearing"
             value={name}
@@ -274,7 +283,7 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
               {busy ? "Uploading…" : "Click to choose an image, or drag one here"}
             </div>
             <div className="dim" style={{ fontSize: 11 }}>
-              PNG or JPG · keeps its aspect ratio · up to 20 MB
+              {KIND_COPY[kind].uploadHint}
             </div>
           </div>
           <input
@@ -295,43 +304,72 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
       {!result && mode === "generate" && (
         <>
           <label className="col" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span className="dim" style={uploadLabel}>Describe the scene</span>
+            <span className="dim" style={uploadLabel}>
+              {kind === "cinematic" ? "Describe the place" : kind === "regional" ? "Describe the region" : "Describe the scene"}
+            </span>
             <textarea
               autoFocus
               rows={3}
-              placeholder="e.g. a moonlit clearing with a stone altar in the center, tall grass, ring of standing stones"
+              placeholder={
+                kind === "cinematic"
+                  ? "e.g. a torchlit tavern common room, timber beams, a roaring hearth"
+                  : kind === "regional"
+                    ? "e.g. a coastal kingdom — mountains to the north, a river delta, three towns and a ruined keep"
+                    : "e.g. a moonlit clearing with a stone altar in the center, tall grass, ring of standing stones"
+              }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               style={{ resize: "vertical" }}
             />
           </label>
 
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {FAMILY_PRESETS.map((f) => (
-              <button
-                type="button"
-                key={f.key}
-                onClick={() => setFamily(f.key)}
-                className={family === f.key ? "primary" : "ghost"}
-                style={{ fontSize: 12, textAlign: "left", flex: 1, minWidth: 200 }}
-                title={f.hint}
-              >
-                <div style={{ fontWeight: 600 }}>{f.label}</div>
-                <div className="dim" style={{ fontSize: 10, marginTop: 2 }}>
-                  {f.hint}
-                </div>
-              </button>
-            ))}
-          </div>
+          {kind === "cinematic" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span className="dim" style={uploadLabel}>Mood</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {SCENE_MOODS.map((m) => (
+                  <button
+                    type="button"
+                    key={m.key}
+                    onClick={() => setMood(m.key)}
+                    className={mood === m.key ? "primary" : "ghost"}
+                    style={{ fontSize: 12 }}
+                    title={m.hint}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {FAMILY_PRESETS.map((f) => (
+                <button
+                  type="button"
+                  key={f.key}
+                  onClick={() => setFamily(f.key)}
+                  className={family === f.key ? "primary" : "ghost"}
+                  style={{ fontSize: 12, textAlign: "left", flex: 1, minWidth: 200 }}
+                  title={f.hint}
+                >
+                  <div style={{ fontWeight: 600 }}>{f.label}</div>
+                  <div className="dim" style={{ fontSize: 10, marginTop: 2 }}>
+                    {f.hint}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: profile === "regional" ? "1fr 1fr" : "1fr 1fr 1fr",
+              gridTemplateColumns:
+                kind === "cinematic" ? "1fr" : kind === "regional" ? "1fr 1fr" : "1fr 1fr 1fr",
               gap: 12,
             }}
           >
-            {profile === "battlemap" && (
+            {kind === "battlemap" && (
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span className="dim" style={uploadLabel}>Scene</span>
                 <select value={style} onChange={(e) => setStyle(e.target.value as MapStyle)}>
@@ -344,31 +382,37 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
               </label>
             )}
 
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span className="dim" style={uploadLabel}>Aspect</span>
-              <select value={size} onChange={(e) => setSize(e.target.value as MapSize)}>
-                {SIZE_PRESETS.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {kind !== "cinematic" && (
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span className="dim" style={uploadLabel}>Aspect</span>
+                <select value={size} onChange={(e) => setSize(e.target.value as MapSize)}>
+                  {SIZE_PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span className="dim" style={uploadLabel}>Quality</span>
-              <select value={quality} onChange={(e) => setQuality(e.target.value as MapQuality)}>
-                {QUALITY_PRESETS.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.label} · {p.costHint}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {kind !== "cinematic" && (
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span className="dim" style={uploadLabel}>Quality</span>
+                <select value={quality} onChange={(e) => setQuality(e.target.value as MapQuality)}>
+                  {QUALITY_PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label} · {p.costHint}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
 
           <div className="dim" style={{ fontSize: 11 }}>
-            Generation takes ~15–40s. Every finished map is saved to your library.
+            {kind === "cinematic"
+              ? "Generation takes ~15–40s. Wide 16:10, painted at medium quality to stay within the render budget."
+              : "Generation takes ~15–40s. Every finished map is saved to your library."}
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -378,7 +422,7 @@ export const GenerateMapDialog = ({ applyToScene, onClose }: Props) => {
               disabled={busy}
               style={{ fontSize: 13, padding: "8px 16px" }}
             >
-              {busy ? "Generating…" : "Generate map"}
+              {busy ? "Generating…" : kind === "cinematic" ? "Generate backdrop" : kind === "regional" ? "Generate region map" : "Generate battlemap"}
             </button>
           </div>
           {busy && (

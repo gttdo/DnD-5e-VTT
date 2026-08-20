@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useMaps, type MapAsset } from "../state/useMaps";
 import { useAuth } from "../state/useAuth";
-import { GenerateMapDialog } from "./GenerateMapDialog";
-import { GenerateSceneDialog } from "./GenerateSceneDialog";
-import { GenerateLocationDialog } from "./GenerateLocationDialog";
+import { GenerateMapDialog, type CreateMapKind } from "./GenerateMapDialog";
 import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { CardMenu } from "./ui/CardMenu";
 import { Button } from "./ui/Button";
@@ -19,9 +17,9 @@ export const MapLibraryScreen = () => {
   const { maps, loading, renameMap, deleteMap, setMapPublic } = useMaps();
   const { user } = useAuth();
   const { confirm, prompt } = useConfirm();
-  const [generateOpen, setGenerateOpen] = useState(false);
-  const [backdropOpen, setBackdropOpen] = useState(false);
-  const [locationOpen, setLocationOpen] = useState(false);
+  // Which creator is open — each kind gets its own entry button (IA: upload
+  // first, generate second, kind fixed up front).
+  const [createKind, setCreateKind] = useState<CreateMapKind | null>(null);
   const [preview, setPreview] = useState<MapAsset | null>(null);
 
   return (
@@ -41,14 +39,14 @@ export const MapLibraryScreen = () => {
               })()
         }
       >
-        <Button variant="primary" size="lg" icon="palette" onClick={() => setGenerateOpen(true)}>
-          Create map
+        <Button variant="primary" size="lg" icon="palette" onClick={() => setCreateKind("battlemap")}>
+          Create battlemap
         </Button>
-        <Button variant="ghost" size="lg" icon="drama" onClick={() => setBackdropOpen(true)}>
-          Generate backdrop
+        <Button variant="ghost" size="lg" icon="drama" onClick={() => setCreateKind("cinematic")}>
+          Create backdrop
         </Button>
-        <Button variant="ghost" size="lg" icon="sparkles" onClick={() => setLocationOpen(true)}>
-          Generate a location
+        <Button variant="ghost" size="lg" icon="map" onClick={() => setCreateKind("regional")}>
+          Create region map
         </Button>
       </LibraryBanner>
 
@@ -56,7 +54,7 @@ export const MapLibraryScreen = () => {
         <EmptyState
           icon="map"
           title="No maps yet"
-          cta={{ label: "Create your first map", icon: "palette", onClick: () => setGenerateOpen(true) }}
+          cta={{ label: "Create your first battlemap", icon: "palette", onClick: () => setCreateKind("battlemap") }}
         >
           Upload your own battle map, or summon one with the cartographer —
           describe a scene and it paints a top-down map. Every one lands here.
@@ -133,14 +131,9 @@ export const MapLibraryScreen = () => {
         })}
       </div>
 
-      {generateOpen && (
-        <GenerateMapDialog onClose={() => setGenerateOpen(false)} />
+      {createKind && (
+        <GenerateMapDialog kind={createKind} onClose={() => setCreateKind(null)} />
       )}
-
-      {/* Library-mode generators (no game context): everything saves to the
-          library, typed; scenes assemble from it in-game. */}
-      {backdropOpen && <GenerateSceneDialog onClose={() => setBackdropOpen(false)} />}
-      {locationOpen && <GenerateLocationDialog onClose={() => setLocationOpen(false)} />}
 
       {preview && (
         <div
