@@ -6,6 +6,7 @@ import { CharacterCreateMethod } from "./components/CharacterCreateMethod";
 import { CharacterImport } from "./components/CharacterImport";
 import { CharacterQuickBuild } from "./components/CharacterQuickBuild";
 import { GamesScreen } from "./components/GamesScreen";
+import { JoinLobby } from "./components/JoinLobby";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
 import { TableCanvas } from "./components/TableCanvas";
@@ -85,7 +86,7 @@ function App() {
   // An invite link (#/join/<code>) lands here — carry the code to the Games
   // screen so the join field is prefilled. The branded pre-join lobby is a
   // later slice; for now a signed-in player sees the code ready to accept.
-  const [joinCodeFromUrl] = useState<string | null>(() => {
+  const [joinCodeFromUrl, setJoinCodeFromUrl] = useState<string | null>(() => {
     const m = window.location.hash.match(/^#\/join\/([\w-]+)/);
     return m ? m[1] : null;
   });
@@ -177,6 +178,30 @@ function App() {
       <AuthScreen initialMode={authMode} onBack={() => setAuthMode(null)} />
     ) : (
       <Landing onEnter={(mode) => setAuthMode(mode)} />
+    );
+  }
+
+  // Signed-in player arriving from an invite link (#/join/<code>): a branded
+  // pre-join lobby. Clearing joinCodeFromUrl drops back into the normal shell.
+  if (joinCodeFromUrl) {
+    const dismiss = () => {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setJoinCodeFromUrl(null);
+    };
+    return (
+      <JoinLobby
+        code={joinCodeFromUrl}
+        characters={characters}
+        onEnter={(game) => {
+          dismiss();
+          setActiveGame(game);
+          setScreen("table");
+        }}
+        onCancel={() => {
+          dismiss();
+          setScreen("games");
+        }}
+      />
     );
   }
 
