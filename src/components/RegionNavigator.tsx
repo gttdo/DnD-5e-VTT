@@ -117,6 +117,51 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
     }, 0);
   };
 
+  // DM drag-to-reposition (#user ask): press a pin and drag; release commits
+  // the new normalized position. A press that never crosses the threshold is a
+  // normal click (travel / edit). Window-level listeners so the drag survives
+  // leaving the pin's hitbox.
+  const pinDragRef = useRef({ id: null as string | null, moved: false });
+  const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null);
+  const pinDragStart = (h: (typeof hotspots)[number], e: React.PointerEvent) => {
+    if (!isDM) return;
+    if ((e.target as HTMLElement).closest?.(".cine-hotspot-edit")) return; // pencil press stays a click
+    const start = { x: e.clientX, y: e.clientY };
+    const thresh = e.pointerType === "touch" ? 10 : 5;
+    const drag = pinDragRef.current;
+    drag.id = h.id;
+    drag.moved = false;
+    const onMove = (ev: PointerEvent) => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      if (!drag.moved && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < thresh) return;
+      drag.moved = true;
+      const r = stage.getBoundingClientRect(); // transformed box → zoom-correct
+      setDragPos({
+        id: h.id,
+        x: Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)),
+        y: Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height)),
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      if (drag.moved) {
+        setDragPos((p) => {
+          if (p && p.id === h.id) void updateHotspot(h.id, { x: p.x, y: p.y });
+          return null;
+        });
+      }
+      // Survives until the click that follows pointerup has been seen.
+      setTimeout(() => {
+        drag.moved = false;
+        drag.id = null;
+      }, 0);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   const placePin = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDM || !editMode || editPinId || panRef.current.moved) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -130,6 +175,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
 
   const pinClick = (h: (typeof hotspots)[number]) => {
     if (panRef.current.moved) return; // that was a pan, not a click
+    if (pinDragRef.current.moved) return; // that was a reposition drag
     if (isDM && editMode) {
       setEditPinId(h.id);
       return;
@@ -230,12 +276,15 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
               {hotspots.map((h) => {
                 if (h.hidden && !isDM) return null;
                 const linked = Boolean(h.target_scene_id || h.target_map_id);
+                const px = dragPos?.id === h.id ? dragPos.x : h.x;
+                const py = dragPos?.id === h.id ? dragPos.y : h.y;
                 return (
                   <button
                     key={h.id}
-                    className={`cine-hotspot ${linked ? "" : "is-unlinked"} ${h.hidden ? "is-hidden" : ""}`}
-                    style={{ left: `${h.x * 100}%`, top: `${h.y * 100}%` }}
+                    className={`cine-hotspot ${linked ? "" : "is-unlinked"} ${h.hidden ? "is-hidden" : ""} ${dragPos?.id === h.id ? "is-dragging" : ""}`}
+                    style={{ left: `${px * 100}%`, top: `${py * 100}%` }}
                     title={h.label ?? (h.target_map_id ? "Open map" : linked ? "Travel" : "Unlinked")}
+                    onPointerDown={(e) => pinDragStart(h, e)}
                     onClick={(e) => {
                       e.stopPropagation();
                       pinClick(h);
