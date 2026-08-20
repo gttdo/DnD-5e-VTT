@@ -3551,11 +3551,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           {game.join_code}
         </span>
 
-        <span className="dim table-token-count" style={{ fontSize: 12, marginLeft: "auto" }}>
-          {loading ? "Loading table…" : `${visibleTokens.length} token${visibleTokens.length === 1 ? "" : "s"}`}
-        </span>
+        {/* Brief load cue only — the persistent token count was ambient chrome
+            competing with the scene, so it's gone once the table is ready. The
+            right-alignment spacer role now lives on the zoom cluster below. */}
+        {loading && (
+          <span className="dim table-token-count" style={{ fontSize: 12 }}>
+            Loading table…
+          </span>
+        )}
 
-        <div className="zoom-cluster">
+        <div className="zoom-cluster" style={{ marginLeft: "auto" }}>
           <button
             className="rail-tool zoom-step"
             style={{ width: 30, height: 30 }}
