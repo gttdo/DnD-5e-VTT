@@ -515,6 +515,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
+.rail-tool svg { display: block; } /* block SVG has no baseline descender gap → dead-center in the circle */
 .rail-tool:hover { background: color-mix(in srgb, var(--gold) 13%, transparent); color: var(--gold); }
 .rail-tool.active {
   background: color-mix(in srgb, var(--gold) 18%, transparent);
