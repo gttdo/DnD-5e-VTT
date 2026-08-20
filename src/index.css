@@ -538,6 +538,40 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background: var(--border);
   margin: 4px 0;
 }
+/* Phase 1: DM cinematic/tactical face toggle — a glass segmented pill. */
+.scene-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-pill);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-hair);
+}
+.scene-mode-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.scene-mode-toggle button svg { display: block; }
+.scene-mode-toggle button:hover { color: var(--gold); }
+.scene-mode-toggle button.is-on {
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
+  color: var(--gold);
+  box-shadow: var(--glass-sheen);
+}
 /* Rail IA (Phase 0.5): per-cluster micro-labels. Recede at rest, brighten to gold on
    rail hover ("recede, don't remove"); tracked-uppercase per the cinematic language. */
 .rail-group-label {
@@ -5296,7 +5330,33 @@ button.topbar-stat {
   place-items: center;
   overflow: hidden;
 }
-.projector-svg { width: 100%; height: 100%; display: block; }
+.projector-svg { width: 100%; height: 100%; display: block; position: relative; z-index: 1; }
+/* Phase 1: the cinematic face. One backdrop layer whose treatment flips with
+   the scene's mode — sharp full-bleed when cinematic, blurred filler when tactical. */
+.projector-cinematic {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: filter var(--dur-slow) var(--ease), transform var(--dur-slow) var(--ease);
+}
+.projector-mode-tactical .projector-cinematic {
+  filter: blur(32px) brightness(0.45) saturate(1.1);
+  transform: scale(1.12); /* overscan so the blur's soft edges never show a seam */
+}
+.projector-mode-cinematic .projector-cinematic {
+  filter: none;
+  transform: none;
+}
+.projector-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(120% 120% at 50% 42%, transparent 55%, rgba(0, 0, 0, 0.72) 100%);
+}
 .projector-msg {
   color: var(--text-dim);
   font-family: var(--font-mono);

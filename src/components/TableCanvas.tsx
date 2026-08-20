@@ -236,6 +236,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     setActiveScene,
     deleteScene,
     setSceneImageUrl,
+    setSceneCinematicUrl,
+    setSceneMode,
     updateSceneLayout,
   } = useScenes(game.id, game.active_scene_id);
   const cols = activeScene?.grid_cols ?? DEFAULT_COLS;
@@ -273,6 +275,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const [newColor, setNewColor] = useState(COLOR_CHOICES[0]);
   const [scenesOpen, setScenesOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Which face the map picker is filling — the tactical battlemap or the
+  // cinematic backdrop (#Phase 1). Reuses the one MapPickerDialog for both.
+  const [pickerTarget, setPickerTarget] = useState<"tactical" | "cinematic">("tactical");
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
   // The combat rail shows by default (a pill out of combat for the DM, the turn
@@ -3423,13 +3428,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               <button
                 className="ghost"
                 onClick={() => {
+                  setPickerTarget("tactical");
                   setPickerOpen(true);
                   setScenesOpen(false);
                 }}
                 style={{ fontSize: 12, marginTop: 4, borderTop: "1px solid var(--line)", paddingTop: 8, display: "inline-flex", alignItems: "center", gap: 8 }}
               >
                 <Icon name="library" size={14} />
-                Pick from library…
+                Set battlemap…
               </button>
             )}
             {isDM && activeScene && activeScene.image_url && (
@@ -3443,7 +3449,35 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
               >
                 <Icon name="delete" size={14} />
-                Clear background
+                Clear battlemap
+              </button>
+            )}
+            {isDM && activeScene && (
+              <button
+                className="ghost"
+                onClick={() => {
+                  setPickerTarget("cinematic");
+                  setPickerOpen(true);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <Icon name="drama" size={14} />
+                Set backdrop…
+              </button>
+            )}
+            {isDM && activeScene && activeScene.cinematic_url && (
+              <button
+                className="ghost"
+                onClick={async () => {
+                  const { error } = await setSceneCinematicUrl(activeScene.id, null);
+                  if (error) toast.error(error);
+                  setScenesOpen(false);
+                }}
+                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
+              >
+                <Icon name="delete" size={14} />
+                Clear backdrop
               </button>
             )}
             {isDM && (
@@ -3470,6 +3504,29 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             </div>
           )}
         </div>
+
+        {/* DM-only face toggle (#Phase 1). Flips the active scene between its
+            cinematic backdrop and its tactical battlemap; players follow live. */}
+        {isDM && activeScene && (
+          <div className="scene-mode-toggle" role="group" aria-label="Scene face">
+            <button
+              className={(activeScene.mode ?? "tactical") === "cinematic" ? "is-on" : ""}
+              onClick={() => setSceneMode(activeScene.id, "cinematic")}
+              title="Cinematic — show players the atmospheric backdrop"
+            >
+              <Icon name="drama" size={13} />
+              <span>Cinematic</span>
+            </button>
+            <button
+              className={(activeScene.mode ?? "tactical") === "tactical" ? "is-on" : ""}
+              onClick={() => setSceneMode(activeScene.id, "tactical")}
+              title="Tactical — show the battlemap grid"
+            >
+              <Icon name="grid" size={13} />
+              <span>Tactical</span>
+            </button>
+          </div>
+        )}
 
         <span className="join-code" title="Share this code so players can join">
           {game.join_code}
@@ -5085,11 +5142,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
       {pickerOpen && activeScene && (
         <MapPickerDialog
-          currentMapId={activeScene.map_id}
+          currentMapId={pickerTarget === "tactical" ? activeScene.map_id : null}
           onPick={async (m) => {
-            const { error } = await applyMapToActiveScene(m);
-            if (error) toast.error(error);
-            else toast.success(`Scene background set to ${m.name}`);
+            if (pickerTarget === "cinematic") {
+              const { error } = await setSceneCinematicUrl(activeScene.id, m.image_url);
+              if (error) toast.error(error);
+              else toast.success(`Backdrop set to ${m.name}`);
+            } else {
+              const { error } = await applyMapToActiveScene(m);
+              if (error) toast.error(error);
+              else toast.success(`Scene background set to ${m.name}`);
+            }
             setPickerOpen(false);
           }}
           onClose={() => setPickerOpen(false)}

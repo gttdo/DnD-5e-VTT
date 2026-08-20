@@ -105,10 +105,29 @@ export const ProjectorBoard = ({ gameId }: { gameId: string }) => {
     );
   }
 
+  // Which face the DM is showing. Pre-0035 scenes have no mode → tactical.
+  const mode = activeScene?.mode ?? "tactical";
+  const cinematic = activeScene?.cinematic_url ?? null;
+
   return (
-    <div className="projector">
+    <div className={`projector projector-mode-${mode}`}>
+      {/* Cinematic backdrop. Sharp + full-bleed in cinematic mode; in tactical
+          mode it stays as a blurred, dimmed filler behind the board so the old
+          black letterbox margins read as atmospheric depth instead of void. */}
+      {cinematic && (
+        <div
+          className="projector-cinematic"
+          style={{ backgroundImage: `url("${cinematic}")` }}
+          aria-hidden="true"
+        />
+      )}
+      {mode === "cinematic" && cinematic && <div className="projector-vignette" aria-hidden="true" />}
+
       {!activeScene && <div className="projector-msg">Waiting for the DM to open a scene…</div>}
-      {activeScene && (
+      {activeScene && mode === "cinematic" && !cinematic && (
+        <div className="projector-msg">The DM is setting the scene…</div>
+      )}
+      {activeScene && mode !== "cinematic" && (
         <svg
           className="projector-svg"
           viewBox={`0 0 ${width} ${height}`}
