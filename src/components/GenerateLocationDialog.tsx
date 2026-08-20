@@ -13,8 +13,9 @@ import { Dialog } from "./ui/Dialog";
 import { GenerationProgress } from "./ui/GenerationProgress";
 
 interface Props {
-  /** Create the scene from the matched pair; returns any error. */
-  onCreate: (name: string, cinematicUrl: string, battlemapUrl: string) => Promise<{ error: string | null }>;
+  /** Create a scene from the matched pair. When absent (opened from the Maps
+   *  editor) the pair just saves to the library, typed, for scenes to pick. */
+  onCreate?: (name: string, cinematicUrl: string, battlemapUrl: string) => Promise<{ error: string | null }>;
   onClose: () => void;
 }
 
@@ -73,7 +74,7 @@ export const GenerateLocationDialog = ({ onCreate, onClose }: Props) => {
   };
 
   const create = async () => {
-    if (!pair) return;
+    if (!pair || !onCreate) return;
     setBusy(true);
     const name = description.trim().slice(0, 60) || "New location";
     const { error: err } = await onCreate(name, pair.cinematicUrl, pair.battlemapUrl);
@@ -198,10 +199,21 @@ export const GenerateLocationDialog = ({ onCreate, onClose }: Props) => {
               </figcaption>
             </figure>
           </div>
+          {!onCreate && (
+            <div className="dim" style={{ fontSize: 11 }}>
+              Both saved to your library — assemble a scene from them with “Set battlemap…” and “Set backdrop…”.
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="primary" onClick={create} disabled={busy} style={{ fontSize: 13 }}>
-              Create scene
-            </button>
+            {onCreate ? (
+              <button className="primary" onClick={create} disabled={busy} style={{ fontSize: 13 }}>
+                Create scene
+              </button>
+            ) : (
+              <button className="primary" onClick={onClose} disabled={busy} style={{ fontSize: 13 }}>
+                Done
+              </button>
+            )}
             <button
               className="ghost"
               onClick={() => setPair(null)}

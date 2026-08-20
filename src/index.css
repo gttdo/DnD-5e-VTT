@@ -777,6 +777,51 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .scene-card-del svg { display: block; }
 .scene-card-del:hover { opacity: 1; color: var(--ember); }
+.scene-card-more {
+  flex: none;
+  opacity: 0.55;
+  cursor: pointer;
+  display: inline-flex;
+  color: var(--text-dim);
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.scene-card-more svg { display: block; }
+.scene-card-more:hover { opacity: 1; color: var(--gold); }
+/* Per-scene face actions (IA rework) — an overlay menu inside the card, so the
+   card's overflow:hidden never clips it. */
+.scene-card { position: relative; }
+.scene-card-menu {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.scene-card-menu button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.scene-card-menu button:hover {
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+  color: var(--gold);
+}
+.scene-card-menu button svg { display: block; flex: none; }
 
 /* Phase 1: DM cinematic/tactical face toggle — a glass segmented pill. */
 .scene-mode-toggle {

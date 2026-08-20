@@ -5,8 +5,10 @@ import { Dialog } from "./ui/Dialog";
 import { GenerationProgress } from "./ui/GenerationProgress";
 
 interface Props {
-  /** Apply the finished backdrop to the active scene's cinematic face. */
-  onApply: (url: string) => Promise<{ error: string | null }>;
+  /** Apply the finished backdrop to the active scene's cinematic face. When
+   *  absent (opened from the Maps editor) the backdrop just saves to the
+   *  library — scenes pick it up later via "Set backdrop…". */
+  onApply?: (url: string) => Promise<{ error: string | null }>;
   onClose: () => void;
 }
 
@@ -49,7 +51,7 @@ export const GenerateSceneDialog = ({ onApply, onClose }: Props) => {
   };
 
   const apply = async () => {
-    if (!url) return;
+    if (!url || !onApply) return;
     setBusy(true);
     const { error: err } = await onApply(url);
     setBusy(false);
@@ -140,10 +142,21 @@ export const GenerateSceneDialog = ({ onApply, onClose }: Props) => {
               style={{ maxWidth: "100%", maxHeight: "60vh", borderRadius: 4 }}
             />
           </div>
+          {!onApply && (
+            <div className="dim" style={{ fontSize: 11 }}>
+              Saved to your library — pick it from a scene with “Set backdrop…”.
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="primary" onClick={apply} disabled={busy} style={{ fontSize: 13 }}>
-              Use as backdrop
-            </button>
+            {onApply ? (
+              <button className="primary" onClick={apply} disabled={busy} style={{ fontSize: 13 }}>
+                Use as backdrop
+              </button>
+            ) : (
+              <button className="primary" onClick={onClose} disabled={busy} style={{ fontSize: 13 }}>
+                Done
+              </button>
+            )}
             <button
               className="ghost"
               onClick={() => {

@@ -96,6 +96,9 @@ function App() {
     if (!nav) return activeId ? "sheet" : "roster";
     if (nav.screen === "builder") return "roster";
     if (nav.screen === "sheet") return activeId ? "sheet" : "roster";
+    // A stored table with no gameId can't be restored — land on the games list
+    // instead of an empty screen.
+    if (nav.screen === "table" && !nav.gameId) return "games";
     return nav.screen;
   });
   // The game id to re-fetch when a reload lands back on a table.
@@ -116,6 +119,10 @@ function App() {
 
   // Remember the current view so a reload returns here instead of a sheet.
   useEffect(() => {
+    // Mid-restore (screen is "table" but the game hasn't been re-fetched yet):
+    // don't overwrite the stored gameId with null — a reload in that window
+    // would otherwise persist {table, null} and strand the app on nothing.
+    if (screen === "table" && !activeGame) return;
     try {
       localStorage.setItem(NAV_KEY, JSON.stringify({ screen, gameId: activeGame?.id ?? null }));
     } catch {

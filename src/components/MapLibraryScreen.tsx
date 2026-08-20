@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useMaps, type MapAsset } from "../state/useMaps";
 import { useAuth } from "../state/useAuth";
 import { GenerateMapDialog } from "./GenerateMapDialog";
+import { GenerateSceneDialog } from "./GenerateSceneDialog";
+import { GenerateLocationDialog } from "./GenerateLocationDialog";
 import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { CardMenu } from "./ui/CardMenu";
 import { Button } from "./ui/Button";
@@ -18,6 +20,8 @@ export const MapLibraryScreen = () => {
   const { user } = useAuth();
   const { confirm, prompt } = useConfirm();
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [backdropOpen, setBackdropOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
   const [preview, setPreview] = useState<MapAsset | null>(null);
 
   return (
@@ -39,6 +43,12 @@ export const MapLibraryScreen = () => {
       >
         <Button variant="primary" size="lg" icon="palette" onClick={() => setGenerateOpen(true)}>
           Create map
+        </Button>
+        <Button variant="ghost" size="lg" icon="drama" onClick={() => setBackdropOpen(true)}>
+          Generate backdrop
+        </Button>
+        <Button variant="ghost" size="lg" icon="sparkles" onClick={() => setLocationOpen(true)}>
+          Generate a location
         </Button>
       </LibraryBanner>
 
@@ -126,6 +136,11 @@ export const MapLibraryScreen = () => {
       {generateOpen && (
         <GenerateMapDialog onClose={() => setGenerateOpen(false)} />
       )}
+
+      {/* Library-mode generators (no game context): everything saves to the
+          library, typed; scenes assemble from it in-game. */}
+      {backdropOpen && <GenerateSceneDialog onClose={() => setBackdropOpen(false)} />}
+      {locationOpen && <GenerateLocationDialog onClose={() => setLocationOpen(false)} />}
 
       {preview && (
         <div

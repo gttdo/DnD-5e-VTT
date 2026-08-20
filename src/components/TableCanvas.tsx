@@ -3,8 +3,6 @@ import { useTokens, isTokenDowned, type Token } from "../state/useTokens";
 import { useScenes } from "../state/useScenes";
 import type { Game } from "../state/useGames";
 import { MapPickerDialog } from "./MapPickerDialog";
-import { GenerateSceneDialog } from "./GenerateSceneDialog";
-import { GenerateLocationDialog } from "./GenerateLocationDialog";
 import { TokenPickerDialog, TOKEN_DRAG_MIME } from "./TokenPickerDialog";
 import { supabase } from "../lib/supabase";
 import type { MapAsset } from "../state/useMaps";
@@ -285,8 +283,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // Which face the map picker is filling — the tactical battlemap or the
   // cinematic backdrop (#Phase 1). Reuses the one MapPickerDialog for both.
   const [pickerTarget, setPickerTarget] = useState<"tactical" | "cinematic">("tactical");
-  const [genSceneOpen, setGenSceneOpen] = useState(false);
-  const [genLocationOpen, setGenLocationOpen] = useState(false);
+  // Which scene the face picker applies to — set by the gallery card's ⋯ menu
+  // (#IA rework: face actions are per-scene, not global dropdown items).
+  const [pickerSceneId, setPickerSceneId] = useState<string | null>(null);
+  // Which gallery card's contextual ⋯ menu is open.
+  const [cardMenuId, setCardMenuId] = useState<string | null>(null);
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false);
   const [partyOpen, setPartyOpen] = useState(false);
   // The combat rail shows by default (a pill out of combat for the DM, the turn
@@ -344,17 +345,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     if (error) toast.error(error);
   }, [error, toast]);
 
-  // Attach a library map to the active scene: copy image_url + map_id.
+  // Attach a library map to a scene: copy image_url + map_id.
   // Scene.image_url is what players actually load; map_id is provenance so
   // we can highlight "currently on scene" in the picker.
-  const applyMapToActiveScene = async (map: MapAsset): Promise<{ error: string | null }> => {
-    if (!activeScene) return { error: "no active scene" };
-    const { error: imgErr } = await setSceneImageUrl(activeScene.id, map.image_url);
+  const applyMapToScene = async (sceneId: string, map: MapAsset): Promise<{ error: string | null }> => {
+    const { error: imgErr } = await setSceneImageUrl(sceneId, map.image_url);
     if (imgErr) return { error: imgErr };
     const { error: linkErr } = await supabase
       .from("scenes")
       .update({ map_id: map.id })
-      .eq("id", activeScene.id);
+      .eq("id", sceneId);
     return { error: linkErr?.message ?? null };
   };
 
@@ -3399,16 +3399,28 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           <span className="table-back-label">Games</span>
         </button>
 
-        {/* Scene selector — Owlbear-style "Grass Field ▼" */}
+        {/* Scene selector — DM-only quick switcher (#IA rework). Players just
+            see where they are; they navigate via regional-map hotspots. */}
         <div style={{ position: "relative" }}>
           <button
             className="ghost"
-            onClick={() => setScenesOpen((v) => !v)}
-            style={{ fontSize: 13, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 6 }}
+            onClick={() => {
+              if (!isDM) return;
+              setScenesOpen((v) => !v);
+              setCardMenuId(null);
+            }}
+            style={{
+              fontSize: 13,
+              padding: "4px 10px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              cursor: isDM ? "pointer" : "default",
+            }}
             title={isDM ? "Switch or create a scene" : "Current scene"}
           >
             <span className="scene-name">{activeScene?.name ?? "No scene"}</span>
-            <Icon name="down" size={14} />
+            {isDM && <Icon name="down" size={14} />}
           </button>
           {scenesOpen && (
             <div
@@ -3461,6 +3473,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   </div>
                   <div className="scene-card-foot">
                     <span className="scene-card-name">{s.name}</span>
+                    {isDM && (
+                      <span
+                        className="scene-card-more"
+                        aria-label={`Options for ${s.name}`}
+                        title="Scene options"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCardMenuId((cur) => (cur === s.id ? null : s.id));
+                        }}
+                      >
+                        <Icon name="more" size={12} />
+                      </span>
+                    )}
                     {isDM && !isActive && scenes.length > 1 && (
                       <span
                         className="scene-card-del"
@@ -3483,79 +3508,62 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                       </span>
                     )}
                   </div>
+
+                  {/* Per-scene face actions (#IA rework) — contextual, not global. */}
+                  {cardMenuId === s.id && isDM && (
+                    <div className="scene-card-menu" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          setPickerSceneId(s.id);
+                          setPickerTarget("tactical");
+                          setPickerOpen(true);
+                          setCardMenuId(null);
+                          setScenesOpen(false);
+                        }}
+                      >
+                        <Icon name="library" size={12} /> Set battlemap…
+                      </button>
+                      {s.image_url && (
+                        <button
+                          onClick={async () => {
+                            const { error } = await setSceneImageUrl(s.id, null);
+                            if (error) toast.error(error);
+                            setCardMenuId(null);
+                          }}
+                        >
+                          <Icon name="delete" size={12} /> Clear battlemap
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setPickerSceneId(s.id);
+                          setPickerTarget("cinematic");
+                          setPickerOpen(true);
+                          setCardMenuId(null);
+                          setScenesOpen(false);
+                        }}
+                      >
+                        <Icon name="drama" size={12} /> Set backdrop…
+                      </button>
+                      {s.cinematic_url && (
+                        <button
+                          onClick={async () => {
+                            const { error } = await setSceneCinematicUrl(s.id, null);
+                            if (error) toast.error(error);
+                            setCardMenuId(null);
+                          }}
+                        >
+                          <Icon name="delete" size={12} /> Clear backdrop
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
             </div>
-            {isDM && activeScene && (
-              <button
-                className="ghost"
-                onClick={() => {
-                  setPickerTarget("tactical");
-                  setPickerOpen(true);
-                  setScenesOpen(false);
-                }}
-                style={{ fontSize: 12, marginTop: 4, borderTop: "1px solid var(--line)", paddingTop: 8, display: "inline-flex", alignItems: "center", gap: 8 }}
-              >
-                <Icon name="library" size={14} />
-                Set battlemap…
-              </button>
-            )}
-            {isDM && activeScene && activeScene.image_url && (
-              <button
-                className="ghost"
-                onClick={async () => {
-                  const { error } = await setSceneImageUrl(activeScene.id, null);
-                  if (error) toast.error(error);
-                  setScenesOpen(false);
-                }}
-                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
-              >
-                <Icon name="delete" size={14} />
-                Clear battlemap
-              </button>
-            )}
-            {isDM && activeScene && (
-              <button
-                className="ghost"
-                onClick={() => {
-                  setPickerTarget("cinematic");
-                  setPickerOpen(true);
-                  setScenesOpen(false);
-                }}
-                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
-              >
-                <Icon name="drama" size={14} />
-                Set backdrop…
-              </button>
-            )}
-            {isDM && activeScene && (
-              <button
-                className="ghost"
-                onClick={() => {
-                  setGenSceneOpen(true);
-                  setScenesOpen(false);
-                }}
-                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
-              >
-                <Icon name="sparkles" size={14} />
-                Generate backdrop…
-              </button>
-            )}
-            {isDM && activeScene && activeScene.cinematic_url && (
-              <button
-                className="ghost"
-                onClick={async () => {
-                  const { error } = await setSceneCinematicUrl(activeScene.id, null);
-                  if (error) toast.error(error);
-                  setScenesOpen(false);
-                }}
-                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
-              >
-                <Icon name="delete" size={14} />
-                Clear backdrop
-              </button>
-            )}
+            {/* Face actions live on each card's ⋯ menu; generation lives in the
+                Maps editor (#IA rework). This footer is just the game verbs. */}
             {isDM && (
               <button
                 className="ghost"
@@ -3563,7 +3571,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   setScenesOpen(false);
                   const name = await prompt({
                     title: "New scene",
-                    subtitle: "Give it a name",
+                    subtitle: "Give it a name — pick its battlemap and backdrop from your Maps library",
                     initialValue: `Scene ${scenes.length + 1}`,
                     confirmLabel: "Create scene",
                   });
@@ -3572,22 +3580,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   if (scene) await setActiveScene(scene.id);
                   if (error) toast.error(error);
                 }}
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 12, marginTop: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}
               >
                 + New Scene
-              </button>
-            )}
-            {isDM && (
-              <button
-                className="ghost"
-                onClick={() => {
-                  setGenLocationOpen(true);
-                  setScenesOpen(false);
-                }}
-                style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 8 }}
-              >
-                <Icon name="sparkles" size={14} />
-                Generate a location…
               </button>
             )}
             {isDM && (
@@ -5488,52 +5483,36 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         />
       )}
 
-      {pickerOpen && activeScene && (
-        <MapPickerDialog
-          filterType={pickerTarget === "tactical" ? ["battlemap"] : ["cinematic", "regional"]}
-          slot={pickerTarget === "tactical" ? "battlemap" : "backdrop"}
-          currentMapId={pickerTarget === "tactical" ? activeScene.map_id : null}
-          onPick={async (m) => {
-            if (pickerTarget === "cinematic") {
-              const { error } = await setSceneCinematicUrl(activeScene.id, m.image_url);
-              if (error) toast.error(error);
-              else toast.success(`Backdrop set to ${m.name}`);
-            } else {
-              const { error } = await applyMapToActiveScene(m);
-              if (error) toast.error(error);
-              else toast.success(`Scene background set to ${m.name}`);
-            }
-            setPickerOpen(false);
-          }}
-          onClose={() => setPickerOpen(false)}
-        />
-      )}
-
-      {genSceneOpen && activeScene && (
-        <GenerateSceneDialog
-          onApply={async (backdropUrl) => {
-            const { error } = await setSceneCinematicUrl(activeScene.id, backdropUrl);
-            if (error) toast.error(error);
-            else toast.success("Backdrop generated — flip to Cinematic to show it");
-            return { error };
-          }}
-          onClose={() => setGenSceneOpen(false)}
-        />
-      )}
-
-      {genLocationOpen && (
-        <GenerateLocationDialog
-          onCreate={async (name, cinematicUrl, battlemapUrl) => {
-            const { scene, error } = await createScene(name);
-            if (error || !scene) return { error: error ?? "Could not create the scene" };
-            await setSceneImageUrl(scene.id, battlemapUrl);
-            await setSceneCinematicUrl(scene.id, cinematicUrl);
-            await setActiveScene(scene.id);
-            return { error: null };
-          }}
-          onClose={() => setGenLocationOpen(false)}
-        />
-      )}
+      {pickerOpen && (() => {
+        // The picker fills a face on the scene chosen from the gallery card's
+        // ⋯ menu (#IA rework); falls back to the active scene.
+        const target = scenes.find((s) => s.id === pickerSceneId) ?? activeScene;
+        if (!target) return null;
+        return (
+          <MapPickerDialog
+            filterType={pickerTarget === "tactical" ? ["battlemap"] : ["cinematic", "regional"]}
+            slot={pickerTarget === "tactical" ? "battlemap" : "backdrop"}
+            currentMapId={pickerTarget === "tactical" ? target.map_id : null}
+            onPick={async (m) => {
+              if (pickerTarget === "cinematic") {
+                const { error } = await setSceneCinematicUrl(target.id, m.image_url);
+                if (error) toast.error(error);
+                else toast.success(`${target.name}: backdrop set to ${m.name}`);
+              } else {
+                const { error } = await applyMapToScene(target.id, m);
+                if (error) toast.error(error);
+                else toast.success(`${target.name}: battlemap set to ${m.name}`);
+              }
+              setPickerOpen(false);
+              setPickerSceneId(null);
+            }}
+            onClose={() => {
+              setPickerOpen(false);
+              setPickerSceneId(null);
+            }}
+          />
+        );
+      })()}
 
       {isDM && lootEditToken && (
         <LootEditorDialog
