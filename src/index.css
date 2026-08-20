@@ -538,6 +538,21 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background: var(--border);
   margin: 4px 0;
 }
+/* Rail IA (Phase 0.5): per-cluster micro-labels. Recede at rest, brighten to gold on
+   rail hover ("recede, don't remove"); tracked-uppercase per the cinematic language. */
+.rail-group-label {
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.4;
+  text-align: center;
+  line-height: 1;
+  padding: 1px 0 3px;
+  user-select: none;
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.table-rail:hover .rail-group-label { opacity: 0.9; color: var(--gold); }
 
 .table-board {
   flex: 1;

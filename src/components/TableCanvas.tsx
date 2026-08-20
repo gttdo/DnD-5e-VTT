@@ -3540,6 +3540,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {/* Body: left tool rail + board */}
       <div className="table-body">
         <div className="table-rail">
+          <div className="rail-group-label">Tools</div>
           <button
             className={`rail-tool ${tool === "select" ? "active" : ""}`}
             onClick={() => setTool("select")}
@@ -3557,20 +3558,20 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <Icon name="pan" size={18} />
           </button>
           <button
-            className={`rail-tool ${tool === "ping" ? "active" : ""}`}
-            onClick={() => setTool("ping")}
-            title="Ping — pulse a point every player can see"
-            aria-label="Ping tool"
-          >
-            <Icon name="ping" size={18} />
-          </button>
-          <button
             className={`rail-tool ${tool === "ruler" ? "active" : ""}`}
             onClick={() => setTool("ruler")}
             title="Ruler — drag to measure (5 ft per square)"
             aria-label="Ruler tool"
           >
             <Icon name="ruler" size={18} />
+          </button>
+          <button
+            className={`rail-tool ${tool === "ping" ? "active" : ""}`}
+            onClick={() => setTool("ping")}
+            title="Ping — pulse a point every player can see"
+            aria-label="Ping tool"
+          >
+            <Icon name="ping" size={18} />
           </button>
           {isDM && (
             <button
@@ -3608,6 +3609,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           )}
 
           <div className="rail-divider" />
+          <div className="rail-group-label">Actors</div>
 
           <button
             className={`rail-tool ${!railHidden ? "active" : ""} ${init.inCombat ? "is-live" : ""}`}
@@ -3661,6 +3663,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           </button>
 
           <div className="rail-divider" />
+          <div className="rail-group-label">Panels</div>
 
           <button
             className={`rail-tool ${rollerOpen ? "active" : ""}`}
@@ -3710,6 +3713,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           {selectedToken && (
             <>
               <div className="rail-divider" />
+              <div className="rail-group-label">Token</div>
               {isDM && (
                 <button
                   className={`rail-tool ${selectedToken.hidden ? "active" : ""}`}
