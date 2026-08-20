@@ -6035,11 +6035,12 @@ button.topbar-stat {
   gap: 12px;
   max-width: 100%;
   padding: 6px 10px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(6px);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-hair);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg), var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 /* Pre-combat: the DM's "Roll for Initiative" pill. */
 .turn-rail-begin {
