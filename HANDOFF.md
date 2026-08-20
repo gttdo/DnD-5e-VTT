@@ -147,4 +147,47 @@ Done this session: #16, #97, #110, #148, #158 (+ the earlier-session set).
 
 ---
 
+---
+
+## 9. Phased todo breakdown — "The Living World" redesign
+
+Actionable checklist per phase (from the proposal in §4). ⚠️ Logged here because the numbered-task MCP is disconnected; migrate to the numbered backlog when it returns.
+
+**Phase 0 — Glass UI base** *(LOW · stands alone · start here)*
+- [ ] Glass primitive as tokens (`--glass-fill/blur/hairline/sheen` + radius scale 10/16/24/pill); deepen blur 6–8px → ~16px; gold hairline + sheen.
+- [ ] One-gold accent pass (single accent = active/current/interactive).
+- [ ] Tracked-uppercase label pass + serif titles.
+- [ ] Glass dice tray — reskin `DiceRoller.tsx` as a floating die-shape capsule.
+- [ ] Vignette overlay over the board/scene.
+- [ ] Hide the app header + edge-to-edge in table mode (`is-immersive` hook exists; header still renders; kill the black margins).
+- [ ] Glass the left tool rail + movement strip.
+
+**Phase 1 — Scene model + two-layer toggle** *(MEDIUM)*
+- [ ] Scene data model: faces (nav/cinematic/tactical) + attachments; extend `useScenes` + scenes table.
+- [ ] Cinematic scene mode (full-bleed backdrop; blurred behind the tactical grid).
+- [ ] DM cinematic⇄tactical toggle, per-scene (locks nav + rolls initiative on flip to tactical).
+- [ ] Scenes gallery (thumbnail switcher, one-click live-switch + cross-fade, live flag) — projector first.
+
+**Phase 2 — Generative foundry + hotspots** *(MEDIUM)*
+- [ ] Scene generator (cinematic backdrops — generalize the character-backdrop generator).
+- [ ] Decouple map gen: regional (no grid) vs battlemap (top-down, grid); both upload + generate.
+- [ ] Asset typing (regional/cinematic/battlemap/token/handout) + Resources filter.
+- [ ] Hotspot editor (place pins/regions + link/spawn scenes; reuse fog/draw overlay) + gating.
+- [ ] Composite "Generate a Location" (matched cinematic + battlemap + handout).
+
+**Phase 3 — Per-player navigation + presence** *(HIGH)*
+- [ ] Per-player active scene (`current_scene_id` on `game_members`).
+- [ ] Presence per-scene; DM party-overview + gather/move; free-roam vs lock via the toggle.
+- [ ] Hierarchical back/up breadcrumb.
+
+**Phase 4 — Scale: packs, handouts, AI hooks** *(HIGH)*
+- [ ] Premade map packs (bundle map + hotspots + scenes + handouts, share via library #135).
+- [ ] Handout generator (template+content→rendered; AI + SRD data; full template library).
+- [ ] AI-GM tool-calls (#152): spin up locations, push handouts, run scenes, start combat.
+- [ ] Ambient audio + scene transitions + Zen mode.
+
+Standalone backlog that slots in: #153 fog (Phase 3), #154 chat, #155 handout reveal (Phase 4), #156 puzzles (Phase 4), #9 cartographer-as-tool (Phase 4), #152 AI GM (umbrella).
+
+---
+
 *Generated as a session handoff. If resuming in a fresh session: the memory notes (§4) will auto-recall the design direction; this file is the exhaustive record.*
