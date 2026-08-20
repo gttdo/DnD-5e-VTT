@@ -490,34 +490,37 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   position: relative;
 }
 
-/* Left vertical tool rail */
+/* Left vertical tool rail — frosted glass gutter with circular tools (phase 0) */
 .table-rail {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   padding: 10px 8px;
-  border-right: 1px solid var(--border);
-  background: var(--surface-1);
+  border-right: 1px solid var(--glass-hair);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   align-items: center;
   z-index: 15;
 }
 .rail-tool {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--r-pill);
   color: var(--text-dim);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
-.rail-tool:hover { background: var(--surface-3); color: var(--candle); }
+.rail-tool:hover { background: color-mix(in srgb, var(--gold) 13%, transparent); color: var(--gold); }
 .rail-tool.active {
-  background: var(--surface-3);
-  color: var(--candle);
-  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 42%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 22%, transparent);
 }
 .rail-tool:disabled { opacity: 0.3; cursor: not-allowed; }
 /* Contextual destructive tool (remove selected token). */
