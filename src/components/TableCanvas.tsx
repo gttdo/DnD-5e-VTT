@@ -244,6 +244,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     gatherParty,
     isRoaming,
     stageSceneId,
+    renameScene,
     deleteScene,
     setSceneImageUrl,
     setSceneCinematicUrl,
@@ -3560,6 +3561,23 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                         setCardMenuId(null);
                       }}
                     >
+                      <button
+                        onClick={async () => {
+                          setCardMenuId(null);
+                          const name = await prompt({
+                            title: "Rename scene",
+                            subtitle: "Give it a new name",
+                            initialValue: s.name,
+                            confirmLabel: "Rename",
+                          });
+                          if (name && name !== s.name) {
+                            const { error } = await renameScene(s.id, name);
+                            if (error) toast.error(error);
+                          }
+                        }}
+                      >
+                        <Icon name="edit" size={12} /> Rename…
+                      </button>
                       <button
                         onClick={() => {
                           setPickerSceneId(s.id);
