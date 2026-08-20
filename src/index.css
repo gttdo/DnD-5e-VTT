@@ -506,6 +506,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .rail-tool {
   width: 38px;
   height: 38px;
+  padding: 0; /* reset the base button's 6px/12px pad — on a fixed-width border-box button it squeezes the content box narrower than the icon and shoves the glyph off-center */
   display: grid;
   place-items: center;
   background: transparent;
@@ -4746,11 +4747,12 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   margin-bottom: 12px;
 }
 .dice-tray-x {
-  display: grid; place-items: center;
+  display: grid; place-items: center; padding: 0;
   width: 24px; height: 24px; border-radius: 999px;
   background: transparent; border: 1px solid var(--glass-hair); color: var(--text-muted);
   cursor: pointer; transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
+.dice-tray-x svg { display: block; }
 .dice-tray-x:hover { color: var(--gold); border-color: var(--gold); }
 
 /* d20/d12/d100/d10 then d8/d6/d4 — the reference's 4-then-3 arrangement. */
