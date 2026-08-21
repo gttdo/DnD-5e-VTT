@@ -1,16 +1,13 @@
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
-import type { CampaignDoc } from "../state/useCampaign";
 import { HandoutView } from "./HandoutView";
+import type { CampaignDoc } from "../state/useCampaign";
 
 /**
- * The Story drawer (#0041, slice 1e) — the DM's prep, delivered at the table.
- * When a scene is staged, its documents surface here: DM notes to read
- * quietly, read-alouds to ▶ Present onto every player's screen. This is the
- * moment the Campaign Editor pays off in play.
- *
- * Players can open it too — they just see only player-facing material (RLS
- * already filters their doc list), with no Present controls.
+ * The DM's Story drawer at the table (Story/Journal) — this scene's prep,
+ * ready to hand to players. Notes stay the DM's own; read-alouds, handouts,
+ * and the latest recap carry ▶ Share, which shows the artifact live on every
+ * screen AND files it in the party's Journal. One verb.
  */
 
 const KIND_LABEL: Record<CampaignDoc["kind"], string> = {
@@ -21,20 +18,33 @@ const KIND_LABEL: Record<CampaignDoc["kind"], string> = {
   handout: "Handout",
 };
 
-const DocRow = ({ doc, isDM, onPresent }: { doc: CampaignDoc; isDM: boolean; onPresent: (d: CampaignDoc) => void }) => {
-  const presentable = doc.kind === "handout" || Boolean(doc.content.trim());
+const DocRow = ({
+  doc,
+  isShared,
+  onShare,
+}: {
+  doc: CampaignDoc;
+  isShared: boolean;
+  onShare: (d: CampaignDoc) => void;
+}) => {
+  const shareable = doc.kind !== "note" && (doc.kind === "handout" || Boolean(doc.content.trim()));
   return (
     <div className={`story-doc ${doc.kind === "read_aloud" ? "is-readaloud" : ""}`}>
       <div className="story-dochead">
-        <span className={`camped-kind ${doc.visibility === "players" ? "is-players" : ""}`}>{KIND_LABEL[doc.kind]}</span>
+        <span className={`camped-kind ${isShared ? "is-players" : ""}`}>{KIND_LABEL[doc.kind]}</span>
         <span className="story-doctitle">{doc.title || "Untitled"}</span>
         <span style={{ flex: 1 }} />
-        {isDM && doc.visibility === "players" && presentable && (
-          <button className="story-present" onClick={() => onPresent(doc)} title="Show this on every player's screen">
-            ▶ Present
-          </button>
-        )}
-        {isDM && doc.visibility === "dm" && <span className="story-lock">🔒</span>}
+        {shareable &&
+          (isShared ? (
+            <button className="story-present is-shared" onClick={() => onShare(doc)} title="Already in the journal — show it again">
+              ◉ Share again
+            </button>
+          ) : (
+            <button className="story-present" onClick={() => onShare(doc)} title="Show on every player's screen and file it in their journal">
+              ▶ Share
+            </button>
+          ))}
+        {doc.kind === "note" && <span className="story-lock">🔒</span>}
       </div>
       {doc.kind === "handout" ? (
         <HandoutView meta={doc.meta} compact />
@@ -50,16 +60,16 @@ export const StoryDrawer = ({
   sceneDocs,
   campaignDocs,
   latestRecap,
-  isDM,
-  onPresent,
+  isShared,
+  onShare,
   onClose,
 }: {
   sceneName: string;
   sceneDocs: CampaignDoc[];
   campaignDocs: CampaignDoc[];
   latestRecap: CampaignDoc | null;
-  isDM: boolean;
-  onPresent: (doc: CampaignDoc) => void;
+  isShared: (docId: string) => boolean;
+  onShare: (doc: CampaignDoc) => void;
   onClose: () => void;
 }) => {
   const empty = sceneDocs.length === 0 && campaignDocs.length === 0 && !latestRecap;
@@ -68,13 +78,11 @@ export const StoryDrawer = ({
       {empty ? (
         <div className="gamelog-empty">
           <span className="gamelog-empty-icon">
-            <Icon name="library" size={28} />
+            <Icon name="story" size={28} />
           </span>
           <div className="gamelog-empty-title">Nothing written yet</div>
           <p className="gamelog-empty-body">
-            {isDM
-              ? "Prep this scene in the Campaign Editor — its notes and read-alouds will surface here when you stage it."
-              : "The DM hasn't shared any story material yet."}
+            Prep this scene in the Campaign Editor — its notes and read-alouds surface here when you stage it, ready to share.
           </p>
         </div>
       ) : (
@@ -82,14 +90,14 @@ export const StoryDrawer = ({
           {latestRecap && (
             <>
               <div className="story-section">Previously on…</div>
-              <DocRow doc={latestRecap} isDM={isDM} onPresent={onPresent} />
+              <DocRow doc={latestRecap} isShared={isShared(latestRecap.id)} onShare={onShare} />
             </>
           )}
           {sceneDocs.length > 0 && (
             <>
               <div className="story-section">This scene — {sceneName}</div>
               {sceneDocs.map((d) => (
-                <DocRow key={d.id} doc={d} isDM={isDM} onPresent={onPresent} />
+                <DocRow key={d.id} doc={d} isShared={isShared(d.id)} onShare={onShare} />
               ))}
             </>
           )}
@@ -97,7 +105,7 @@ export const StoryDrawer = ({
             <>
               <div className="story-section">Campaign</div>
               {campaignDocs.map((d) => (
-                <DocRow key={d.id} doc={d} isDM={isDM} onPresent={onPresent} />
+                <DocRow key={d.id} doc={d} isShared={isShared(d.id)} onShare={onShare} />
               ))}
             </>
           )}

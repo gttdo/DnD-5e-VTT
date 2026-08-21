@@ -1,10 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../state/useAuth";
 import { useToast } from "../state/Toast";
 import { useConfirm } from "../state/Confirm";
 import { useScenes, type Scene } from "../state/useScenes";
-import { useChapters, useCampaignDocs, type Chapter, type CampaignDoc, type DocKind } from "../state/useCampaign";
+import { useChapters, useCampaignDocs, useDocShares, type Chapter, type CampaignDoc, type DocKind } from "../state/useCampaign";
+
+/**
+ * Share state for the whole editor — which docs have been shared, and the
+ * actions to share/unshare — provided once and consumed by every DocCard,
+ * avoiding prop-drilling through the page components. (Story/Journal.)
+ */
+interface SharesApi {
+  isShared: (docId: string) => boolean;
+  share: (docId: string) => void;
+  unshare: (docId: string) => void;
+}
+const SharesContext = createContext<SharesApi>({ isShared: () => false, share: () => {}, unshare: () => {} });
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useRegionMaps } from "../state/useRegionNav";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
@@ -68,6 +80,19 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
 
   const { chapters, createChapter, updateChapter, moveChapter, deleteChapter } = useChapters(game.id);
   const { docs, createDoc, updateDoc, deleteDoc } = useCampaignDocs(game.id);
+  // Share state (Story/Journal) — sharing a doc files it in players' Journals.
+  const { shares, shareWithParty, unshare: unshareDoc } = useDocShares(game.id);
+  const sharedDocIds = useMemo(() => new Set(shares.map((s) => s.document_id)), [shares]);
+  const sharesApi = useMemo<SharesApi>(
+    () => ({
+      isShared: (id) => sharedDocIds.has(id),
+      share: (id) => {
+        void shareWithParty(id).then(({ error }) => (error ? toast.error(error) : toast.success("Shared with the party — it's in their journal.")));
+      },
+      unshare: (id) => void unshareDoc(id),
+    }),
+    [sharedDocIds, shareWithParty, unshareDoc, toast]
+  );
   const {
     scenes,
     createScene,
@@ -227,6 +252,7 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
 
   // ------------------------------------------------------------------- render
   return (
+    <SharesContext.Provider value={sharesApi}>
     <div className="camped screen-enter">
       {/* Top bar */}
       <div className="camped-topbar">
@@ -565,6 +591,7 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
       {/* Click-away for row menus */}
       {menuFor && <div className="camped-menuveil" onClick={() => setMenuFor(null)} />}
     </div>
+    </SharesContext.Provider>
   );
 };
 
@@ -1119,14 +1146,18 @@ const DocCard = ({
   deleteDoc: (id: string) => Promise<{ error: string | null }>;
 }) => {
   const { confirm } = useConfirm();
+  const shares = useContext(SharesContext);
   const title = useAutosave(doc.title, (v) => void updateDoc(doc.id, { title: v }));
   const content = useAutosave(doc.content, (v) => void updateDoc(doc.id, { content: v }));
   const isRA = doc.kind === "read_aloud";
+  const shared = shares.isShared(doc.id);
+  // Notes are the DM's private working material — no point sharing them.
+  const shareable = doc.kind !== "note";
 
   return (
     <div className={`camped-doc ${isRA ? "is-readaloud" : ""}`}>
       <div className="camped-dochead">
-        <span className={`camped-kind ${doc.visibility === "players" ? "is-players" : ""}`}>{KIND_LABEL[doc.kind]}</span>
+        <span className={`camped-kind ${shared ? "is-players" : ""}`}>{KIND_LABEL[doc.kind]}</span>
         <input
           className="camped-doctitle"
           placeholder={isRA ? "When to read this…" : "Title…"}
@@ -1134,22 +1165,19 @@ const DocCard = ({
           onChange={(e) => title.set(e.target.value)}
           onBlur={title.flush}
         />
-        <div className="camped-visswitch">
-          <button
-            className={doc.visibility === "dm" ? "is-on" : ""}
-            title="Only you can ever see this"
-            onClick={() => void updateDoc(doc.id, { visibility: "dm" })}
-          >
-            🔒 DM
-          </button>
-          <button
-            className={doc.visibility === "players" ? "is-on" : ""}
-            title="Presentable to players at the table"
-            onClick={() => void updateDoc(doc.id, { visibility: "players" })}
-          >
-            ◉ Players
-          </button>
-        </div>
+        {shareable ? (
+          shared ? (
+            <button className="camped-sharebtn is-shared" title="In the party's journal — click to withdraw" onClick={() => shares.unshare(doc.id)}>
+              ◉ Shared with party
+            </button>
+          ) : (
+            <button className="camped-sharebtn" title="Put this in every player's journal" onClick={() => shares.share(doc.id)}>
+              ＋ Share with party
+            </button>
+          )
+        ) : (
+          <span className="camped-private" title="Your private note — never shared">🔒 Private</span>
+        )}
         <button
           className="camped-docdelete"
           title="Delete document"

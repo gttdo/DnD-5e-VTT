@@ -36,12 +36,12 @@ import { attackRangeFt, resolveAttacks } from "../lib/attacks";
 import { applyHeal, applyDamage, applyTempHp } from "../lib/hp";
 import { TableHud, TokenHud, MonsterHud } from "./TableHud";
 import { AttackCursor, CURSOR_SWING_MS, cursorSwingMs, cursorImpactMs, type CursorKind } from "./AttackCursor";
-import { TableModals, JournalModal, type HudModal } from "./TableModals";
+import { TableModals, type HudModal } from "./TableModals";
 import { RegionNavigator } from "./RegionNavigator";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
-import { useDraftSceneIds, useCampaignDocs } from "../state/useCampaign";
+import { useDraftSceneIds, useCampaignDocs, useDocShares } from "../state/useCampaign";
 import { useSessions, sessionDuration } from "../state/useSessions";
 import { appendGameLog } from "../lib/gameLog";
 import { usePartyPresence } from "../state/usePartyPresence";
@@ -55,6 +55,7 @@ import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
 import { StoryDrawer } from "./StoryDrawer";
+import { JournalDrawer } from "./JournalDrawer";
 import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
@@ -1523,7 +1524,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // table: the DM reads notes quietly and presents read-alouds; players' doc
   // list is already RLS-filtered to player-facing material.
   const [storyOpen, setStoryOpen] = useState(false);
-  const { docs: storyDocs, createDoc: createStoryDoc } = useCampaignDocs(game.id);
+  const { docs: storyDocs, createDoc: createStoryDoc, reload: reloadStoryDocs } = useCampaignDocs(game.id);
+  // Shares (Story/Journal) — the DM's Share files a doc in players' Journals;
+  // players read this to know what's theirs.
+  const { shares: docShares, shareWithParty } = useDocShares(game.id);
+  const sharedDocIdSet = useMemo(() => new Set(docShares.map((s) => s.document_id)), [docShares]);
+  // A player gains read access exactly when a share arrives; refetch docs so
+  // the newly-shared one appears in their Journal (no doc-row event fires).
+  const shareCount = docShares.length;
+  useEffect(() => {
+    if (!isDM && shareCount > 0) void reloadStoryDocs();
+  }, [shareCount, isDM, reloadStoryDocs]);
   // Present state is DERIVED FROM THE LOG — a doc_presented system event with
   // a content snapshot, undone by doc_dismissed. No schema, survives refresh,
   // reaches late joiners, and the presentation itself is part of the record.
@@ -4119,8 +4130,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           <button
             className={`rail-tool ${storyOpen ? "active" : ""}`}
             onClick={() => setStoryOpen((v) => !v)}
-            title="Story — this scene's notes and read-alouds (#0041)"
-            aria-label="Story"
+            title={isDM ? "Story — this scene's notes and read-alouds, ready to share" : "Journal — what the DM has shared with you"}
+            aria-label={isDM ? "Story" : "Journal"}
           >
             <Icon name="story" size={18} />
           </button>
@@ -4131,14 +4142,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             aria-label="Region map"
           >
             <GameGlyph src="/icons/board/compass.svg" size={18} />
-          </button>
-          <button
-            className={`rail-tool ${hudModal === "journal" ? "active" : ""}`}
-            onClick={() => setHudModal((v) => (v === "journal" ? null : "journal"))}
-            title="Campaign journal — the party's shared log"
-            aria-label="Campaign journal"
-          >
-            <Icon name="edit" size={18} />
           </button>
           <button
             className={`rail-tool ${rulesOpen ? "active" : ""}`}
@@ -5336,15 +5339,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onClose={() => setHudModal(null)}
             />
           )}
-          {/* The campaign journal needs only a game + an author name, so it opens
-              for anyone — including a DM with no bound character (#20). */}
-          {hudModal === "journal" && (
-            <JournalModal
-              gameId={game.id}
-              authorName={boundCharacter?.name ?? (isDM ? "DM" : "Player")}
-              onClose={() => setHudModal(null)}
-            />
-          )}
+          {/* The old bidirectional campaign journal is retired — players read
+              shared artifacts in the Journal drawer, and write in chat. */}
           {/* Other game-menu modals are sheet-mapped (need a bound character). */}
           {boundCharacter && hudModal && hudModal !== "map" && hudModal !== "journal" && (
             <TableModals
@@ -5783,7 +5779,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         />
       )}
 
-      {storyOpen && (
+      {/* DM authors + shares in Story; players read what's been shared in the
+          Journal (Story/Journal reconciliation). */}
+      {storyOpen && isDM && (
         <StoryDrawer
           sceneName={activeScene?.name ?? "No scene"}
           sceneDocs={storyDocs.filter((d) => d.scene_id === activeScene?.id)}
@@ -5793,10 +5791,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               .filter((d) => d.kind === "recap" && d.session_id)
               .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null
           }
-          isDM={isDM}
-          onPresent={(d) => presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind, meta: d.meta })}
+          isShared={(id) => sharedDocIdSet.has(id)}
+          onShare={(d) => {
+            // One action: file it in every player's Journal AND show it live.
+            void shareWithParty(d.id);
+            presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind, meta: d.meta });
+          }}
           onClose={() => setStoryOpen(false)}
         />
+      )}
+      {storyOpen && !isDM && (
+        <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
       )}
 
       {/* Present overlay (#0041 slice 1e) — the DM's boxed text on every

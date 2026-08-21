@@ -162,6 +162,15 @@ export const useCampaignDocs = (gameId: string | null) => {
   const [docs, setDocs] = useState<CampaignDoc[]>([]);
   const [loading, setLoading] = useState(Boolean(gameId));
 
+  // Re-fetch on demand — a player gains read access to a doc the moment it's
+  // shared, but that grant fires no doc INSERT/UPDATE, so the Journal calls
+  // this when a new share arrives (Story/Journal).
+  const reload = useCallback(async () => {
+    if (!gameId || !supabaseConfigured) return;
+    const { data } = await supabase.from("campaign_documents").select("*").eq("game_id", gameId).order("position", { ascending: true });
+    setDocs((data ?? []) as CampaignDoc[]);
+  }, [gameId]);
+
   useEffect(() => {
     if (!gameId || !supabaseConfigured) {
       setDocs([]);
@@ -253,7 +262,7 @@ export const useCampaignDocs = (gameId: string | null) => {
     return { error: error?.message ?? null };
   }, []);
 
-  return { docs, loading, createDoc, updateDoc, deleteDoc };
+  return { docs, loading, createDoc, updateDoc, deleteDoc, reload };
 };
 
 /**
@@ -265,6 +274,93 @@ export const useCampaignDocs = (gameId: string | null) => {
  * Cheap by design: two small selects + realtime on chapters (a scene changing
  * chapters mid-session is rare; the next mount catches it).
  */
+/**
+ * Document shares (Story/Journal reconciliation) — who a doc has been shared
+ * with. A doc is PRIVATE until shared; sharing targets the party or (later) a
+ * specific player. The player Journal reads this; the editor shows share
+ * status. Slice A ships party sharing only.
+ */
+export interface DocShare {
+  id: string;
+  document_id: string;
+  game_id: string;
+  audience: "party" | "player";
+  recipient_id: string | null;
+  shared_at: string;
+}
+
+export const useDocShares = (gameId: string | null) => {
+  const [shares, setShares] = useState<DocShare[]>([]);
+
+  useEffect(() => {
+    if (!gameId || !supabaseConfigured) {
+      setShares([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("document_shares")
+        .select("*")
+        .eq("game_id", gameId)
+        .order("shared_at", { ascending: false });
+      if (!cancelled) setShares((data ?? []) as DocShare[]);
+    })();
+    const channel = supabase
+      .channel(`doc-shares:${gameId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "document_shares", filter: `game_id=eq.${gameId}` },
+        (p) => {
+          const s = p.new as DocShare;
+          setShares((prev) => (prev.some((x) => x.id === s.id) ? prev : [s, ...prev]));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "document_shares", filter: `game_id=eq.${gameId}` },
+        (p) => {
+          const old = p.old as { id?: string };
+          if (old.id) setShares((prev) => prev.filter((x) => x.id !== old.id));
+        }
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [gameId]);
+
+  /** Share a doc with the whole party (Slice A). Idempotent via the unique key. */
+  const shareWithParty = useCallback(
+    async (documentId: string): Promise<{ error: string | null }> => {
+      if (!gameId) return { error: "No game" };
+      const { data, error } = await supabase
+        .from("document_shares")
+        .upsert(
+          { document_id: documentId, game_id: gameId, audience: "party", recipient_id: null },
+          { onConflict: "document_id,audience,recipient_id" }
+        )
+        .select()
+        .single();
+      if (error) return { error: error.message };
+      const row = data as DocShare;
+      setShares((prev) => (prev.some((x) => x.id === row.id) ? prev : [row, ...prev]));
+      return { error: null };
+    },
+    [gameId]
+  );
+
+  /** Un-share a doc entirely (removes all its share rows). */
+  const unshare = useCallback(async (documentId: string): Promise<{ error: string | null }> => {
+    setShares((prev) => prev.filter((s) => s.document_id !== documentId));
+    const { error } = await supabase.from("document_shares").delete().eq("document_id", documentId);
+    return { error: error?.message ?? null };
+  }, []);
+
+  return { shares, shareWithParty, unshare };
+};
+
 export const useDraftSceneIds = (gameId: string | null) => {
   const [draftChapterIds, setDraftChapterIds] = useState<Set<string>>(new Set());
   const [sceneChapters, setSceneChapters] = useState<Map<string, string | null>>(new Map());
