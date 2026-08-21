@@ -5908,11 +5908,26 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               const asset =
                 libraryAssets.find((a) => a.name.trim().toLowerCase() === term) ??
                 libraryAssets.find((a) => a.name.toLowerCase().includes(term));
+              // Pre-compute distinct cells in a cluster near center — placing
+              // in a tight loop can't rely on findFreeCell (the just-placed
+              // token hasn't registered yet, so it'd stack them all).
+              const cols = activeScene.grid_cols ?? 30;
+              const rows = activeScene.grid_rows ?? 20;
+              const cx = Math.floor(cols / 2);
+              const cy = Math.floor(rows / 2);
+              const cells: Array<{ x: number; y: number }> = [];
+              const w = Math.ceil(Math.sqrt(count));
+              for (let i = 0; i < count; i++) {
+                cells.push({
+                  x: Math.min(cols - 1, cx + (i % w)),
+                  y: Math.min(rows - 1, cy + Math.floor(i / w)),
+                });
+              }
               let placed = 0;
               for (let i = 0; i < count; i++) {
                 const res = asset
-                  ? await placeTokenFromLibrary(asset)
-                  : await addToken({ label: count > 1 ? `${who} ${i + 1}` : who, color: "#b23a24" });
+                  ? await placeTokenFromLibrary(asset, cells[i])
+                  : await addToken({ label: count > 1 ? `${who} ${i + 1}` : who, color: "#b23a24", ...cells[i] });
                 if (!res.error) placed++;
               }
               if (placed === 0) return { ok: false, message: "Couldn't place any." };
