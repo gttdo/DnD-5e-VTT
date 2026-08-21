@@ -53,7 +53,7 @@ import { CombatTurnRail } from "./CombatTurnRail";
 import { RulesReference } from "./RulesReference";
 import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
-import { useDiceLog } from "../state/DiceLog";
+import { useGameLogFeed } from "../state/useGameLogFeed";
 import { RotateHint } from "./RotateHint";
 import { initiative as initiativeMod, saveBonus, abilityMod, abilityModFor, skillBonus, skillCheckChips, attackBonus, damageBonus } from "../lib/calc";
 import { LootDialog } from "./LootDialog";
@@ -325,12 +325,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const [rollerOpen, setRollerOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logSeen, setLogSeen] = useState(0);
-  const { entries: diceLogEntries } = useDiceLog();
-  const unseenRolls = logOpen ? 0 : Math.max(0, diceLogEntries.length - logSeen);
-  const openLog = () => {
-    setLogSeen(diceLogEntries.length);
-    setLogOpen(true);
-  };
+  // unseenRolls/openLog now count the PERSISTENT feed (#0041 slice 1c) — they
+  // are defined after the feed hook mounts, further down.
   const [hudModal, setHudModal] = useState<HudModal | null>(null);
   // Fullscreen: the whole table shell (header + rail + board), not just the
   // svg, so the HUD stays usable. State tracks the browser's own notion of
@@ -1511,6 +1507,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     [game.id, authUser, activeSessionRef]
   );
   const { roll: broadcastRoll, blooms } = useTableRolls(game.id, persistRoll);
+  // The persistent table feed — what the Game Log drawer renders (rolls +
+  // chat + system events), and what the rail badge counts.
+  const gameFeed = useGameLogFeed(game.id, { authorName: myName, sessionRef: activeSessionRef });
+  const unseenRolls = logOpen ? 0 : Math.max(0, gameFeed.entries.length - logSeen);
+  const openLog = () => {
+    setLogSeen(gameFeed.entries.length);
+    setLogOpen(true);
+  };
   const saves = useSaveRequests(game.id);
   const { tables, classes } = useRules();
   // Reaction interrupt (Shield): the attacker's continuation per open window, a
@@ -5669,7 +5673,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           onRolled={(label, result) => broadcastRoll(myName, [{ label, result }])}
         />
       )}
-      {logOpen && <GameLog onClose={() => setLogOpen(false)} canClear={isDM} />}
+      {logOpen && (
+        <GameLog
+          entries={gameFeed.entries}
+          myUserId={authUser?.id ?? null}
+          onSend={gameFeed.sendChat}
+          onClose={() => setLogOpen(false)}
+        />
+      )}
 
       {tokenPickerOpen && activeScene && (
         <TokenPickerDialog

@@ -7683,3 +7683,49 @@ button.topbar-stat {
   border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
   border-radius: 4px; padding: 1px 6px; flex: none;
 }
+
+/* ---- Table feed (#0041 slice 1c): chat + rolls + system, one stream ---- */
+.feed-filters { display: flex; gap: 4px; margin-bottom: 10px; }
+.feed-filters button {
+  background: none; border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; padding: 4px 14px; color: var(--text-muted);
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.feed-filters button.is-on {
+  background: color-mix(in srgb, var(--candle) 13%, transparent);
+  color: var(--candle-bright);
+  border-color: color-mix(in srgb, var(--candle) 50%, transparent);
+}
+.feed-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.feed-system {
+  text-align: center; font-size: 11px; letter-spacing: 0.08em;
+  color: var(--text-muted); font-style: italic; padding: 2px 0;
+}
+.feed-chat { display: flex; flex-direction: column; align-items: flex-start; max-width: 88%; }
+.feed-chat.is-mine { align-self: flex-end; align-items: flex-end; }
+.feed-author {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--candle); margin: 0 4px 2px;
+}
+.feed-bubble {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 12px 12px 12px 4px; padding: 8px 12px; font-size: 13.5px;
+  color: var(--text); line-height: 1.45; word-break: break-word;
+}
+.feed-chat.is-mine .feed-bubble {
+  border-radius: 12px 12px 4px 12px;
+  background: color-mix(in srgb, var(--candle) 12%, var(--surface-1));
+  border-color: color-mix(in srgb, var(--candle) 35%, var(--border));
+}
+.feed-time { font-size: 10px; color: var(--text-muted); margin: 3px 4px 0; }
+.feed-chat.is-offrecord .feed-bubble, .gamelog-entry.is-offrecord { opacity: 0.75; }
+.feed-composer { display: flex; gap: 8px; width: 100%; }
+.feed-composer input { flex: 1; min-width: 0; }
+.feed-send {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 36px; border-radius: 8px; border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--candle) 14%, transparent);
+  color: var(--candle-bright); cursor: pointer;
+}
+.feed-send:disabled { opacity: 0.4; cursor: default; }
