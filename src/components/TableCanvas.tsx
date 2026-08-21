@@ -57,6 +57,7 @@ import { useGameLogFeed } from "../state/useGameLogFeed";
 import { StoryDrawer } from "./StoryDrawer";
 import { JournalDrawer } from "./JournalDrawer";
 import { CoDMDrawer } from "./CoDMDrawer";
+import { AudioSettingsPopover } from "./AudioSettings";
 import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
@@ -1563,6 +1564,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // list is already RLS-filtered to player-facing material.
   const [storyOpen, setStoryOpen] = useState(false);
   const [coDMOpen, setCoDMOpen] = useState(false); // Co-DM drawer (P3, DM-only)
+  const [audioOpen, setAudioOpen] = useState(false); // per-device audio mixer
   // The DM's token library — so the Co-DM's place_tokens proposals can resolve
   // a creature name to real art (else a labeled marker).
   const { assets: libraryAssets } = useTokenAssets();
@@ -4181,6 +4183,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             </button>
           )}
           <button
+            className={`rail-tool ${audioOpen ? "active" : ""}`}
+            onClick={() => setAudioOpen((v) => !v)}
+            title="Audio — your volume for narration and ambiance"
+            aria-label="Audio settings"
+          >
+            <Icon name="volume" size={18} />
+          </button>
+          <button
             className={`rail-tool ${hudModal === "map" ? "active" : ""}`}
             onClick={() => setHudModal((v) => (v === "map" ? null : "map"))}
             title="Region map — the world map the DM shares"
@@ -5849,6 +5859,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {storyOpen && !isDM && (
         <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
       )}
+      {audioOpen && <AudioSettingsPopover onClose={() => setAudioOpen(false)} />}
       {coDMOpen && isDM && (
         <CoDMDrawer
           gameId={game.id}
