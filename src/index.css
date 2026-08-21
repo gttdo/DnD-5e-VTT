@@ -8175,3 +8175,16 @@ button.topbar-stat {
 .audio-ch-body input[type="range"].is-muted { accent-color: var(--text-faint, var(--ink-faint)); opacity: 0.5; }
 .audio-ch-pct { flex: none; width: 34px; text-align: right; font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .audio-pop-note { margin-top: 8px; font-size: 11.5px; font-style: italic; color: var(--text-muted); }
+
+/* ---- Read-aloud voice control in the editor ---- */
+.camped-voice { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.camped-voice-player { height: 30px; max-width: 220px; }
+.camped-voice-btn {
+  background: color-mix(in srgb, var(--candle) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 6px; cursor: pointer; padding: 5px 12px;
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--candle-bright);
+}
+.camped-voice-btn:hover { background: color-mix(in srgb, var(--candle) 20%, transparent); }
+.camped-voice-btn:disabled { opacity: 0.55; cursor: default; }

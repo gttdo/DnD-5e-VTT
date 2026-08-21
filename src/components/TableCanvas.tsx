@@ -58,6 +58,7 @@ import { StoryDrawer } from "./StoryDrawer";
 import { JournalDrawer } from "./JournalDrawer";
 import { CoDMDrawer } from "./CoDMDrawer";
 import { AudioSettingsPopover } from "./AudioSettings";
+import { audioBus } from "../lib/audioBus";
 import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
@@ -1604,6 +1605,32 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   }, [gameFeed.entries]);
   // A player can wave the overlay away locally; the DM's ✕ dismisses for all.
   const [presentHiddenFor, setPresentHiddenFor] = useState<string | null>(null);
+
+  // Narration playback: when a doc with a cached voice is presented (and not
+  // hidden for this viewer), play it through the Narrator channel. Autoplay
+  // may be blocked for a player who hasn't interacted yet — fail quietly.
+  const narrationRef = useRef<HTMLAudioElement | null>(null);
+  const presentedAudioUrl = presented && presentHiddenFor !== presented.eventId
+    ? ((presented.meta as { audio_url?: string } | undefined)?.audio_url ?? null)
+    : null;
+  useEffect(() => {
+    narrationRef.current?.pause();
+    narrationRef.current = null;
+    if (!presentedAudioUrl) return;
+    const el = new Audio(presentedAudioUrl);
+    el.volume = audioBus.level("narrator");
+    narrationRef.current = el;
+    void el.play().catch(() => {/* autoplay blocked — the overlay text still shows */});
+    // Live-apply mixer changes to the playing narration.
+    const unsub = audioBus.subscribe(() => {
+      if (narrationRef.current) narrationRef.current.volume = audioBus.level("narrator");
+    });
+    return () => {
+      unsub();
+      el.pause();
+      narrationRef.current = null;
+    };
+  }, [presentedAudioUrl]);
   const presentDoc = (doc: { id: string; title: string; content: string; kind: string; meta?: Record<string, unknown> }) => {
     if (!authUser) return;
     appendGameLog({

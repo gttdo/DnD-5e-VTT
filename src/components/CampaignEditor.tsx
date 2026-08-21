@@ -23,6 +23,7 @@ import { useRegionMaps } from "../state/useRegionNav";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
 import { HandoutDocBody } from "./HandoutEditor";
 import { EMPTY_FIELDS } from "../lib/handouts";
+import { generateNarration } from "../lib/narrate";
 import type { Game } from "../state/useGames";
 import type { MapAsset } from "../state/useMaps";
 import { MapPickerDialog } from "./MapPickerDialog";
@@ -1239,10 +1240,11 @@ const DocCard = ({
   deleteDoc,
 }: {
   doc: CampaignDoc;
-  updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility">>) => Promise<{ error: string | null }>;
+  updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility" | "meta">>) => Promise<{ error: string | null }>;
   deleteDoc: (id: string) => Promise<{ error: string | null }>;
 }) => {
   const { confirm } = useConfirm();
+  const toast = useToast();
   const shares = useContext(SharesContext);
   const title = useAutosave(doc.title, (v) => void updateDoc(doc.id, { title: v }));
   const content = useAutosave(doc.content, (v) => void updateDoc(doc.id, { content: v }));
@@ -1250,6 +1252,28 @@ const DocCard = ({
   const shared = shares.isShared(doc.id);
   // Notes are the DM's private working material — no point sharing them.
   const shareable = doc.kind !== "note";
+  // Narration (the Narrator channel): read-alouds and recaps can carry a
+  // pre-generated voice, cached on meta.audio_url and played when Presented.
+  const narratable = doc.kind === "read_aloud" || doc.kind === "recap";
+  const audioUrl = (doc.meta as { audio_url?: string } | undefined)?.audio_url ?? null;
+  const [voicing, setVoicing] = useState(false);
+  const genVoice = async () => {
+    content.flush();
+    const text = content.value.trim();
+    if (!text) {
+      toast.info("Write the read-aloud first — then I'll give it a voice.");
+      return;
+    }
+    setVoicing(true);
+    const { url, error } = await generateNarration(doc.game_id, text);
+    setVoicing(false);
+    if (error || !url) {
+      toast.error(error ?? "Couldn't generate the voice.");
+      return;
+    }
+    await updateDoc(doc.id, { meta: { ...(doc.meta ?? {}), audio_url: url } });
+    toast.success("Voice ready — it'll play when you Present this.");
+  };
 
   return (
     <div className={`camped-doc ${isRA ? "is-readaloud" : ""}`}>
@@ -1307,6 +1331,22 @@ const DocCard = ({
           onBlur={content.flush}
           rows={isRA ? 3 : 4}
         />
+      )}
+      {narratable && (
+        <div className="camped-voice">
+          {audioUrl ? (
+            <>
+              <audio src={audioUrl} controls className="camped-voice-player" preload="none" />
+              <button className="camped-voice-btn" onClick={() => void genVoice()} disabled={voicing}>
+                {voicing ? "Revoicing…" : "↻ Regenerate"}
+              </button>
+            </>
+          ) : (
+            <button className="camped-voice-btn" onClick={() => void genVoice()} disabled={voicing}>
+              {voicing ? "Giving it a voice…" : "🔊 Generate voice"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
