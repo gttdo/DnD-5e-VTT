@@ -14,6 +14,10 @@ export const TOKEN_DRAG_MIME = "application/x-vtt-token";
 
 interface Props {
   onPick: (asset: TokenAsset) => void;
+  /** Opens the quick-marker form (labeled colored disc — "Goblin A") instead
+   *  of placing library art. Lives here since the IA demotion of the rail's
+   *  "Add custom token" button (user, 2026-08-21). */
+  onQuickMarker?: () => void;
   onClose: () => void;
 }
 
@@ -54,7 +58,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
  * Click one → places it on the active scene at grid center. An internal scroll
  * keeps the dialog from growing past the viewport.
  */
-export const TokenPickerDialog = ({ onPick, onClose }: Props) => {
+export const TokenPickerDialog = ({ onPick, onQuickMarker, onClose }: Props) => {
   const { assets, loading } = useTokenAssets();
   const [tab, setTab] = useState<Kind>("monster");
   const [q, setQ] = useState("");
@@ -132,7 +136,22 @@ export const TokenPickerDialog = ({ onPick, onClose }: Props) => {
   const tabLabel = KIND_TABS.find((t) => t.key === tab)?.label ?? "tokens";
 
   return (
-    <Dialog onClose={onClose} size="lg" title="Place a token" subtitle="From your library.">
+    <Dialog onClose={onClose} size="lg" title="Place a token" subtitle="From your library — or drop a quick marker.">
+      {onQuickMarker && (
+        <button
+          className="map-clear-tile"
+          style={{ width: "100%", marginBottom: 12 }}
+          onClick={() => {
+            onClose();
+            onQuickMarker();
+          }}
+          title="A labeled colored disc — 'Goblin A' — no art needed"
+        >
+          <Icon name="add" size={18} />
+          <span>Quick marker</span>
+          <span className="map-clear-tile-sub">A labeled disc for improvised foes, traps, and points of interest.</span>
+        </button>
+      )}
       {loading && <div className="dim">Loading library…</div>}
 
       {!loading && assets.length === 0 && (

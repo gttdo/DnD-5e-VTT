@@ -192,7 +192,12 @@ export const useTokens = (gameId: string | null, sceneId: string | null) => {
         { event: "UPDATE", schema: "public", table: "tokens", filter: `scene_id=eq.${sceneId}` },
         (payload) => {
           const t = payload.new as Token;
-          setTokens((prev) => prev.map((p) => (p.id === t.id ? t : p)));
+          // Add-if-missing: a token that CHANGED SCENE into this one arrives
+          // as an UPDATE (the filter matches the new row), not an INSERT —
+          // "tokens follow the party" moves land here for bystanders.
+          setTokens((prev) =>
+            prev.some((p) => p.id === t.id) ? prev.map((p) => (p.id === t.id ? t : p)) : [...prev, t]
+          );
         }
       )
       .on(

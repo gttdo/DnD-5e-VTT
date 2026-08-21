@@ -1520,6 +1520,43 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     setLogOpen(true);
   };
 
+  // Tokens follow the party (user, 2026-08-21): when THIS member's effective
+  // scene changes — self-travel, DM Gather, or the stage moving under them —
+  // their character's token comes along, clamped to the destination grid.
+  // Each client moves only its OWN token; the DM is exempt (they roam to
+  // author, and their tokens are props, not a person). Bystanders left in the
+  // origin scene won't see the departure until they change scenes (realtime
+  // UPDATE filters match the new row only) — a known, mild limitation.
+  const prevEffectiveSceneRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sceneId = activeScene?.id ?? null;
+    const prev = prevEffectiveSceneRef.current;
+    prevEffectiveSceneRef.current = sceneId;
+    if (isDM || !prev || !sceneId || prev === sceneId) return;
+    const myCharId = game.my_character_id;
+    if (!myCharId) return;
+    const cols = activeScene?.grid_cols ?? 30;
+    const rows = activeScene?.grid_rows ?? 20;
+    void (async () => {
+      const { data: mine } = await supabase
+        .from("tokens")
+        .select("id, x, y")
+        .eq("scene_id", prev)
+        .eq("character_id", myCharId);
+      for (const t of mine ?? []) {
+        await supabase
+          .from("tokens")
+          .update({
+            scene_id: sceneId,
+            x: Math.min(Math.max(0, t.x as number), cols - 1),
+            y: Math.min(Math.max(0, t.y as number), rows - 1),
+          })
+          .eq("id", t.id);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScene?.id]);
+
   // Story drawer + Present (#0041 slice 1e). The campaign's documents at the
   // table: the DM reads notes quietly and presents read-alouds; players' doc
   // list is already RLS-filtered to player-facing material.
@@ -4098,15 +4135,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               </button>
             </>
           )}
-          <button
-            className={`rail-tool ${addOpen ? "active" : ""}`}
-            onClick={() => setAddOpen((v) => !v)}
-            title="Add a custom token"
-            aria-label="Add custom token"
-          >
-            <Icon name="add" size={18} />
-          </button>
-
+          {/* Quick markers moved into the token picker (IA demotion,
+              user 2026-08-21) — the rail slot is freed. */}
           <div className="rail-divider" />
           <div className="rail-group-label">Panels</div>
 
@@ -5835,6 +5865,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
       {tokenPickerOpen && activeScene && (
         <TokenPickerDialog
+          onQuickMarker={() => setAddOpen(true)}
           onPick={async (a) => {
             const { error } = await placeTokenFromLibrary(a);
             if (error) toast.error(error);
