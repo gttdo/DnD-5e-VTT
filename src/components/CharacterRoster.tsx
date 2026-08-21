@@ -31,8 +31,12 @@ export const CharacterRoster = ({
   onClone,
 }: Props) => {
   const { confirm } = useConfirm();
-  const mineCount = characters.filter((c) => ownedIds.has(c.id)).length;
-  const premadeCount = characters.filter((c) => !ownedIds.has(c.id) && publicIds.has(c.id)).length;
+  // The personal roster shows YOUR characters plus published premades — never
+  // fellow game-members' private sheets. Those rows are readable (the VTT's
+  // RLS lets the table render the party) but don't belong on this page.
+  const shown = characters.filter((c) => ownedIds.has(c.id) || publicIds.has(c.id));
+  const mineCount = shown.filter((c) => ownedIds.has(c.id)).length;
+  const premadeCount = shown.filter((c) => !ownedIds.has(c.id) && publicIds.has(c.id)).length;
   return (
   <div className="screen-enter" style={{ padding: 24 }}>
     <LibraryBanner
@@ -42,7 +46,7 @@ export const CharacterRoster = ({
       subtitle={
         premadeCount > 0
           ? `${mineCount} character${mineCount === 1 ? "" : "s"} · ${premadeCount} premade`
-          : `${characters.length} character${characters.length === 1 ? "" : "s"}`
+          : `${shown.length} character${shown.length === 1 ? "" : "s"}`
       }
     >
       <Button variant="primary" size="lg" icon="add" onClick={onCreate}>
@@ -50,7 +54,7 @@ export const CharacterRoster = ({
       </Button>
     </LibraryBanner>
 
-    {characters.length === 0 ? (
+    {shown.length === 0 ? (
       <EmptyState
         icon="users"
         title="No characters yet"
@@ -67,7 +71,7 @@ export const CharacterRoster = ({
           gap: 16,
         }}
       >
-        {characters.map((c) => {
+        {shown.map((c) => {
           const initials = c.name
             .split(/\s+/)
             .map((w) => w[0])
