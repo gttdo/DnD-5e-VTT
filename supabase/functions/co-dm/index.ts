@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
     "- Track what players KNOW: documents are marked shared or unshared. Don't confuse what's true with what's been revealed.",
     "- Be table-fast: answer in 2–5 sentences unless the DM asks for depth. No preamble, no filler.",
     "- Never invent rules text; for rules questions, reason from standard 5e practice and say when you're unsure.",
-    "- You cannot take actions at the table (staging scenes, sharing documents) — if the DM asks, tell them where the control lives and what you'd suggest.",
+    "- You may PROPOSE one action — staging a different scene — using the stage_scene tool, but ONLY when the DM's message makes it clear the party is moving there (e.g. 'they head down to the cellar'). The DM must approve before anything happens; never stage unprompted, and never propose a scene that isn't in the campaign. When you propose, also say in one sentence why.",
     "",
     "THE CAMPAIGN:",
     ...world,
@@ -214,6 +214,25 @@ Deno.serve(async (req) => {
     content: clip(m.content, 4000),
   }));
 
+  // The Co-DM may PROPOSE a scene change (3c) — a suggestion the DM approves,
+  // never an autonomous act. Stateless payoff: no tool_result round-trip is
+  // needed, because next turn re-reads the world and sees the staged scene.
+  const tools = [
+    {
+      name: "stage_scene",
+      description:
+        "Propose moving the whole table to a different scene (everyone's view changes). Only when the DM's message makes clear the party is going there. The DM approves before it happens.",
+      input_schema: {
+        type: "object",
+        properties: {
+          scene_name: { type: "string", description: "the exact scene name, from the campaign above" },
+          reason: { type: "string", description: "one short phrase: why now" },
+        },
+        required: ["scene_name"],
+      },
+    },
+  ];
+
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -221,21 +240,26 @@ Deno.serve(async (req) => {
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1000, system, messages: turns }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 1000, system, tools, messages: turns }),
   });
   if (!resp.ok) {
     const detail = await resp.text().catch(() => "");
     return json({ error: `anthropic ${resp.status}: ${clip(detail, 300)}` }, 502);
   }
-  const data = (await resp.json()) as { content?: Array<{ type: string; text?: string }> };
+  const data = (await resp.json()) as {
+    content?: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }>;
+  };
   const text = (data.content ?? [])
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
     .join("")
     .trim();
-  if (!text) return json({ error: "empty response from the model" }, 502);
+  const proposals = (data.content ?? [])
+    .filter((c) => c.type === "tool_use" && c.name)
+    .map((c) => ({ tool: c.name!, input: c.input ?? {} }));
 
-  return json({ text });
+  if (!text && proposals.length === 0) return json({ error: "empty response from the model" }, 502);
+  return json({ text, proposals });
 });
 
 function json(payload: unknown, status = 200): Response {

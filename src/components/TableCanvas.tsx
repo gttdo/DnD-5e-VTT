@@ -5862,6 +5862,36 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             if (error) toast.error(error);
             else toast.success(`Saved to ${activeScene.name} — find it in Story.`);
           }}
+          proposalLabel={(p) => {
+            if (p.tool === "stage_scene") {
+              const name = String(p.input.scene_name ?? "a scene");
+              const why = p.input.reason ? ` — ${String(p.input.reason)}` : "";
+              return `Stage "${name}" for everyone${why}?`;
+            }
+            return `Run ${p.tool}?`;
+          }}
+          onProposal={async (p) => {
+            // 3c — execute an APPROVED proposal via the same paths the DM's
+            // own controls use. Only stage_scene exists this slice.
+            if (p.tool === "stage_scene") {
+              const wanted = String(p.input.scene_name ?? "").trim().toLowerCase();
+              const target = scenes.find((s) => s.name.trim().toLowerCase() === wanted);
+              if (!target) return { ok: false, message: `No scene named "${p.input.scene_name}".` };
+              if (target.id === activeScene?.id) return { ok: false, message: "Already staged there." };
+              await setActiveScene(target.id);
+              if (authUser)
+                appendGameLog({
+                  game_id: game.id,
+                  session_id: activeSessionRef.current?.id ?? null,
+                  kind: "system",
+                  author_id: authUser.id,
+                  author_name: myName,
+                  body: { type: "scene_staged", scene: target.name },
+                });
+              return { ok: true, message: `Staged ${target.name}.` };
+            }
+            return { ok: false, message: `Unknown action: ${p.tool}` };
+          }}
           onClose={() => setCoDMOpen(false)}
         />
       )}

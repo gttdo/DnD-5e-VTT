@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
-import { askCoDM, type CoDMTurn } from "../lib/coDM";
+import { askCoDM, type CoDMTurn, type CoDMProposal } from "../lib/coDM";
 import type { DocKind } from "../state/useCampaign";
 
 /**
- * The Co-DM drawer (P3 slice 3a) — a DM-only second chair that has read the
- * whole campaign. Ask it anything; it answers grounded in your own notes and
- * secrets. Assist mode: conversation only — no table effects yet.
+ * The Co-DM drawer (P3 slices 3a–3c) — a DM-only second chair that has read
+ * the whole campaign. It answers (3a), drafts you can harvest onto a scene
+ * (3b), and PROPOSES table actions as approval cards you must confirm (3c).
+ * Nothing it proposes reaches the players without your click.
  *
  * Conversation is per-session UI state (in memory) for now; a durable
- * per-campaign thread arrives with the tool slices.
+ * per-campaign thread arrives with a later slice.
  */
+
+interface CoDMMsg extends CoDMTurn {
+  proposals?: CoDMProposal[];
+  /** Proposal outcomes once the DM acts, by proposal index → status line. */
+  done?: Record<number, string>;
+}
 
 const STARTERS = [
   "What's the party heading toward, and what have I prepped for it?",
@@ -25,6 +32,8 @@ export const CoDMDrawer = ({
   sceneId,
   sceneName,
   onSaveToScene,
+  onProposal,
+  proposalLabel,
   onClose,
 }: {
   gameId: string;
@@ -33,9 +42,13 @@ export const CoDMDrawer = ({
   sceneName: string | null;
   /** Create a doc on the current scene from a drafted message. */
   onSaveToScene: (kind: DocKind, content: string) => void;
+  /** Execute an approved proposal (3c). Returns a short status line. */
+  onProposal: (p: CoDMProposal) => Promise<{ ok: boolean; message: string }>;
+  /** Human-readable summary of a proposal for its approval card. */
+  proposalLabel: (p: CoDMProposal) => string;
   onClose: () => void;
 }) => {
-  const [turns, setTurns] = useState<CoDMTurn[]>([]);
+  const [msgs, setMsgs] = useState<CoDMMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set());
@@ -44,18 +57,34 @@ export const CoDMDrawer = ({
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [turns.length, thinking]);
+  }, [msgs.length, thinking]);
 
   const send = async (text: string) => {
     const q = text.trim();
     if (!q || thinking) return;
-    const next: CoDMTurn[] = [...turns, { role: "user", content: q }];
-    setTurns(next);
+    const next: CoDMMsg[] = [...msgs, { role: "user", content: q }];
+    setMsgs(next);
     setDraft("");
     setThinking(true);
-    const { text: answer, error } = await askCoDM(gameId, next);
+    const { text: answer, proposals, error } = await askCoDM(
+      gameId,
+      next.map((m) => ({ role: m.role, content: m.content }))
+    );
     setThinking(false);
-    setTurns((prev) => [...prev, { role: "assistant", content: error ? `⚠︎ ${error}` : answer ?? "" }]);
+    setMsgs((prev) => [
+      ...prev,
+      { role: "assistant", content: error ? `⚠︎ ${error}` : answer ?? "", proposals: error ? [] : proposals },
+    ]);
+  };
+
+  const act = async (msgIdx: number, propIdx: number, p: CoDMProposal) => {
+    const { ok, message } = await onProposal(p);
+    setMsgs((prev) =>
+      prev.map((m, i) => (i === msgIdx ? { ...m, done: { ...(m.done ?? {}), [propIdx]: (ok ? "✓ " : "⚠︎ ") + message } } : m))
+    );
+  };
+  const dismiss = (msgIdx: number, propIdx: number) => {
+    setMsgs((prev) => prev.map((m, i) => (i === msgIdx ? { ...m, done: { ...(m.done ?? {}), [propIdx]: "Dismissed" } } : m)));
   };
 
   return (
@@ -81,7 +110,7 @@ export const CoDMDrawer = ({
         </div>
       }
     >
-      {turns.length === 0 && !thinking ? (
+      {msgs.length === 0 && !thinking ? (
         <div className="codm-intro">
           <div className="codm-intro-icon">
             <Icon name="sparkles" size={26} />
@@ -99,12 +128,26 @@ export const CoDMDrawer = ({
         </div>
       ) : (
         <div className="codm-thread" ref={listRef}>
-          {turns.map((t, i) => (
+          {msgs.map((t, i) => (
             <div key={i} className={`codm-msg ${t.role === "user" ? "is-dm" : "is-ai"}`}>
               {t.role === "assistant" && <span className="codm-who">Co-DM</span>}
-              <div className="codm-bubble">{t.content}</div>
+              {t.content && <div className="codm-bubble">{t.content}</div>}
+              {/* 3c — gated action proposals: nothing runs until the DM taps. */}
+              {t.proposals?.map((p, pi) => (
+                <div key={pi} className="codm-proposal">
+                  <div className="codm-proposal-t">{proposalLabel(p)}</div>
+                  {t.done?.[pi] ? (
+                    <div className="codm-proposal-done">{t.done[pi]}</div>
+                  ) : (
+                    <div className="codm-proposal-btns">
+                      <button className="y" onClick={() => void act(i, pi, p)}>✓ Do it</button>
+                      <button className="n" onClick={() => dismiss(i, pi)}>Dismiss</button>
+                    </div>
+                  )}
+                </div>
+              ))}
               {/* 3b — harvest a drafted answer onto the current scene. */}
-              {t.role === "assistant" && !t.content.startsWith("⚠︎") && sceneId && (
+              {t.role === "assistant" && t.content && !t.content.startsWith("⚠︎") && sceneId && (
                 savedIdx.has(i) ? (
                   <span className="codm-saved">✓ Saved to {sceneName}</span>
                 ) : (

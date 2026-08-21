@@ -12,16 +12,23 @@ export interface CoDMTurn {
   content: string;
 }
 
+/** A gated action the Co-DM proposes (3c) — nothing runs until the DM approves. */
+export interface CoDMProposal {
+  tool: string;
+  input: Record<string, unknown>;
+}
+
 export const askCoDM = async (
   gameId: string,
   messages: CoDMTurn[]
-): Promise<{ text: string | null; error: string | null }> => {
+): Promise<{ text: string | null; proposals: CoDMProposal[]; error: string | null }> => {
   const { data, error } = await supabase.functions.invoke("co-dm", {
     body: { game_id: gameId, messages },
   });
-  if (error) return { text: null, error: await readFnError(error) };
-  const payload = data as { text?: string; error?: string };
-  if (payload.error) return { text: null, error: payload.error };
-  if (!payload.text) return { text: null, error: "The Co-DM had nothing to say" };
-  return { text: payload.text, error: null };
+  if (error) return { text: null, proposals: [], error: await readFnError(error) };
+  const payload = data as { text?: string; proposals?: CoDMProposal[]; error?: string };
+  if (payload.error) return { text: null, proposals: [], error: payload.error };
+  const proposals = payload.proposals ?? [];
+  if (!payload.text && proposals.length === 0) return { text: null, proposals: [], error: "The Co-DM had nothing to say" };
+  return { text: payload.text ?? "", proposals, error: null };
 };
