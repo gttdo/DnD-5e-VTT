@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { HANDOUT_TEMPLATES, readHandoutMeta, templateDef, type HandoutFields, type HandoutMeta, type HandoutTemplate } from "../lib/handouts";
+import { presetsFor, samplePool } from "../lib/shopGoods";
 import { HandoutView } from "./HandoutView";
 import type { CampaignDoc } from "../state/useCampaign";
 
@@ -77,6 +78,29 @@ export const HandoutDocBody = ({
               onChange={(e) => setField("lines", e.target.value.split("\n"))}
             />
           </label>
+        )}
+        {label("lines") && presetsFor(meta.template).length > 0 && (
+          <div className="handout-fillrow">
+            {presetsFor(meta.template).map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                title={`Stock the sheet with ${p.label.toLowerCase()} at book prices — prune and reprice freely`}
+                onClick={() =>
+                  save({
+                    ...meta,
+                    fields: {
+                      ...meta.fields,
+                      lines: samplePool(p),
+                      footer: meta.fields.footer || p.footer,
+                    },
+                  })
+                }
+              >
+                ⚒ Fill: {p.label}
+              </button>
+            ))}
+          </div>
         )}
         {label("footer") && (
           <label className="handout-field">

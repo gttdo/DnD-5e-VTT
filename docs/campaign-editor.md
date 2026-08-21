@@ -1,6 +1,8 @@
 # Campaign Editor — design & implementation plan
 
-*Status: design locked 2026-08-20 · implementation not started.*
+*Status: SHIPPED 2026-08-20 — slices 1a–1e all live and verified, plus the
+handout generator (0042). Implementation notes at the bottom record where
+the build deviated from this design.*
 *Mockup (v3) and research references at the bottom.*
 
 The Campaign Editor is the narrative layer of The Table: the DM-side authoring
@@ -254,7 +256,38 @@ format).
 
 ---
 
-## 9. References
+## 9. Implementation notes (2026-08-20)
+
+All five slices shipped same-day (36b7259 → c740bb6), plus handouts
+(bf402c2, migration 0042). Deltas from the design above, all deliberate:
+
+- **Present rides the game log**, not new schema: `doc_presented` /
+  `doc_dismissed` system events carry a content snapshot. Survives refresh,
+  reaches late joiners, and presentations join the session record (the
+  Scribe's recap mode reads them).
+- **Handouts became a document kind** (`kind='handout'` + `meta jsonb`
+  holding `{template, fields}`), not a separate Resources tool — they
+  inherit visibility, RLS, the Story drawer, and Present for free. Five
+  templates (letter, notice, menu, price sheet, services), client-rendered;
+  stock presets fill price lines from book-price pools (`lib/shopGoods.ts`).
+- **The Story drawer** (sparkles rail button) is the editor's payoff surface
+  at the table: latest recap + the staged scene's docs + campaign docs.
+- **The standalone dice roller** was local-only (never broadcast, never
+  logged); it now goes through the table pipeline. Behavior change, on
+  purpose — a table roll is a shared event.
+- **Chapter hub page**: clicking a chapter title opens the derived
+  "Getting Started" index (scene · first-line hook · face glyphs · prep
+  depth) plus chapter-level docs.
+- **Scribe** runs `claude-sonnet-5`; first live drafts hit the canonical
+  sizes (32-word read-aloud, 141-word recap) with secrets hinted, not named.
+- Lesson for future hooks: **creates must be optimistic** — realtime
+  channels subscribed before their table existed stay dead until remount.
+
+Still open: two-window live checks (draft-gate pins, combat nav-lock,
+player-side Present hide), SRD illustrations/ornate borders on handouts,
+Scribe-authored handout content, keyed pins on battlemaps.
+
+## 10. References
 
 - Mockup v3 (private artifact): https://claude.ai/code/artifact/f4728905-3d52-481f-85ac-7f61f758d6c0
 - *Heroes of the Borderlands* structural teardown (private artifact): https://claude.ai/code/artifact/fd55d52c-133c-4228-b69d-62ece7332495

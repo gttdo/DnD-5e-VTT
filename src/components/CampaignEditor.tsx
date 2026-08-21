@@ -33,7 +33,11 @@ interface Props {
   onBack: () => void;
 }
 
-type Selection = { type: "overview" } | { type: "scene"; id: string } | { type: "session"; id: string };
+type Selection =
+  | { type: "overview" }
+  | { type: "scene"; id: string }
+  | { type: "chapter"; id: string }
+  | { type: "session"; id: string };
 
 const KIND_LABEL: Record<DocKind, string> = {
   note: "Note",
@@ -330,9 +334,13 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
                           onKeyDown={(e) => e.key === "Enter" && commitRename()}
                         />
                       ) : (
-                        <span className="camped-chtitle">
+                        <button
+                          className={`camped-chtitle is-link ${selection.type === "chapter" && selection.id === ch.id ? "is-sel" : ""}`}
+                          onClick={() => setSelection({ type: "chapter", id: ch.id })}
+                          title="Open this chapter's hub"
+                        >
                           {i + 1} · {ch.title}
-                        </span>
+                        </button>
                       )}
                       {ch.status === "draft" && <span className="camped-draft">Draft</span>}
                       <button className="camped-dots" onClick={() => setMenuFor(menuFor === ch.id ? null : ch.id)}>
@@ -463,6 +471,20 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
             <div className="dim" style={{ padding: 32 }}>
               That scene is gone — pick another from the story tree.
             </div>
+          )}
+          {selection.type === "chapter" && (
+            <ChapterPage
+              chapter={chapters.find((c) => c.id === selection.id) ?? null}
+              index={chapters.findIndex((c) => c.id === selection.id)}
+              scenes={selection.type === "chapter" ? scenesOf(selection.id) : []}
+              docs={docs}
+              onOpenScene={(id) => setSelection({ type: "scene", id })}
+              onPublish={(ch) => void publishFlow(ch)}
+              onAddScene={(chapterId) => void addScene(chapterId)}
+              createDoc={createDoc}
+              updateDoc={updateDoc}
+              deleteDoc={deleteDoc}
+            />
           )}
           {selection.type === "session" && (
             <SessionPage
@@ -836,6 +858,119 @@ const ScenePage = ({
           onClose={() => setGenerator(null)}
         />
       )}
+    </>
+  );
+};
+
+// ============================================================================
+/** The chapter hub — the Borderlands "Getting Started" index, derived live:
+ *  every sub-place with its one-line hook, map status, and prep depth. */
+const ChapterPage = ({
+  chapter,
+  index,
+  scenes,
+  docs,
+  onOpenScene,
+  onPublish,
+  onAddScene,
+  createDoc,
+  updateDoc,
+  deleteDoc,
+}: {
+  chapter: Chapter | null;
+  index: number;
+  scenes: Scene[];
+  docs: CampaignDoc[];
+  onOpenScene: (id: string) => void;
+  onPublish: (ch: Chapter) => void;
+  onAddScene: (chapterId: string) => void;
+  createDoc: (init: Partial<Pick<CampaignDoc, "kind" | "title" | "content" | "visibility" | "chapter_id" | "meta">>) => Promise<{ doc: CampaignDoc | null; error: string | null }>;
+  updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility">>) => Promise<{ error: string | null }>;
+  deleteDoc: (id: string) => Promise<{ error: string | null }>;
+}) => {
+  if (!chapter) return <div className="dim" style={{ padding: 32 }}>That chapter is gone.</div>;
+  const chapterDocs = docs.filter((d) => d.chapter_id === chapter.id);
+  const hook = (s: Scene) => {
+    const line = (s.description ?? "").split(/[.\n]/)[0].trim();
+    return line || "—";
+  };
+  return (
+    <>
+      <div className="camped-scenehead">
+        <span className="camped-scenetitle">
+          {index + 1} · {chapter.title}
+        </span>
+        {chapter.status === "draft" ? (
+          <span className="camped-draft">Draft</span>
+        ) : (
+          <span className="camped-chapchip">Published</span>
+        )}
+        <span style={{ flex: 1 }} />
+        <Button variant={chapter.status === "draft" ? "primary" : "ghost"} size="sm" onClick={() => onPublish(chapter)}>
+          {chapter.status === "draft" ? "Publish chapter…" : "Unpublish"}
+        </Button>
+      </div>
+      <p className="dim" style={{ fontSize: 14, maxWidth: "62ch", margin: "6px 0 16px" }}>
+        {chapter.status === "draft"
+          ? "Backstage — players can't reach these scenes until you publish."
+          : "Live — players can travel to these scenes."}
+      </p>
+
+      <div className="camped-sechead">
+        <h5>Scenes</h5>
+      </div>
+      {scenes.length === 0 ? (
+        <div className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>No scenes yet.</div>
+      ) : (
+        <div className="camped-hub">
+          <div className="camped-hubrow is-head">
+            <span>Scene</span>
+            <span>Hook</span>
+            <span>Maps</span>
+            <span>Prep</span>
+          </div>
+          {scenes.map((s) => {
+            const sceneDocs = docs.filter((d) => d.scene_id === s.id);
+            const ra = sceneDocs.filter((d) => d.kind === "read_aloud" && d.content.trim()).length;
+            return (
+              <button key={s.id} className="camped-hubrow" onClick={() => onOpenScene(s.id)}>
+                <span className="camped-hubname">{s.name}</span>
+                <span className="camped-hubhook">{hook(s)}</span>
+                <span className="camped-hubmaps">
+                  <span className={s.cinematic_url ? "is-ok" : ""} title="Backdrop">◐</span>
+                  <span className={s.image_url ? "is-ok" : ""} title="Battlemap">▦</span>
+                </span>
+                <span className="camped-hubprep">
+                  {sceneDocs.length} doc{sceneDocs.length === 1 ? "" : "s"}
+                  {ra > 0 ? " · ❝" : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="camped-adddocs" style={{ marginTop: 8 }}>
+        <button onClick={() => onAddScene(chapter.id)}>＋ Scene</button>
+      </div>
+
+      <div className="camped-sechead">
+        <h5>Chapter notes</h5>
+      </div>
+      {chapterDocs.length === 0 && (
+        <div className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>
+          The chapter's own material — how to run it, what ties its scenes together.
+        </div>
+      )}
+      {chapterDocs.map((d) => (
+        <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
+      ))}
+      <div className="camped-adddocs">
+        {(["note", "quest"] as DocKind[]).map((k) => (
+          <button key={k} onClick={() => void createDoc({ kind: k, chapter_id: chapter.id, title: "" })}>
+            ＋ {KIND_LABEL[k]}
+          </button>
+        ))}
+      </div>
     </>
   );
 };
