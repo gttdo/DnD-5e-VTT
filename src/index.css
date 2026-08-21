@@ -7797,3 +7797,20 @@ button.topbar-stat {
 }
 .present-close:hover { color: var(--text); border-color: var(--border-strong); }
 @media (prefers-reduced-motion: reduce) { .present-veil { animation: none; } }
+
+/* ---- Scribe controls (#0041 slice 1d) ---- */
+.camped-scribebtn {
+  background: color-mix(in srgb, var(--candle) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--candle) 50%, transparent);
+  border-radius: 6px; cursor: pointer; padding: 5px 13px;
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--candle-bright);
+}
+.camped-scribebtn:hover { background: color-mix(in srgb, var(--candle) 20%, transparent); }
+.camped-scribebtn:disabled { opacity: 0.55; cursor: default; }
+.camped-genresel {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-dim);
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px;
+}

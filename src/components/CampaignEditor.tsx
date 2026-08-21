@@ -7,6 +7,7 @@ import { useScenes, type Scene } from "../state/useScenes";
 import { useChapters, useCampaignDocs, type Chapter, type CampaignDoc, type DocKind } from "../state/useCampaign";
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useRegionMaps } from "../state/useRegionNav";
+import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
 import type { Game } from "../state/useGames";
 import type { MapAsset } from "../state/useMaps";
 import { MapPickerDialog } from "./MapPickerDialog";
@@ -668,6 +669,34 @@ const ScenePage = ({
   const desc = useAutosave(scene.description ?? "", (v) => void updateSceneMeta(scene.id, { description: v }));
   const [picker, setPicker] = useState<"battlemap" | "backdrop" | null>(null);
   const [generator, setGenerator] = useState<"battlemap" | "backdrop" | null>(null);
+  // The Scribe (#0041 slice 1d): draft the ~25-word arrival read-aloud from
+  // the description above — the description is the canonical source.
+  const toast = useToast();
+  const [genre, setGenre] = useState<ScribeGenre>("auto");
+  const [drafting, setDrafting] = useState(false);
+  const draftRA = async () => {
+    if (drafting) return;
+    desc.flush();
+    if (!desc.value.trim()) {
+      toast.info("Write the scene description first — the Scribe drafts from it.");
+      return;
+    }
+    setDrafting(true);
+    const { text, error } = await draftReadAloud(scene.game_id, scene.id, genre);
+    setDrafting(false);
+    if (error || !text) {
+      toast.error(error ?? "The Scribe returned nothing");
+      return;
+    }
+    const { error: createErr } = await createDoc({
+      kind: "read_aloud",
+      scene_id: scene.id,
+      title: "Arrival",
+      content: text,
+    });
+    if (createErr) toast.error(createErr);
+    else toast.success("Read-aloud drafted — edit it like any note.");
+  };
 
   const applyFace = async (slot: "battlemap" | "backdrop", map: MapAsset) => {
     if (slot === "battlemap") {
@@ -696,9 +725,21 @@ const ScenePage = ({
       <div className="camped-sechead">
         <h5>Scene description</h5>
         <span style={{ flex: 1 }} />
-        <span className="camped-scribehint" title="The Scribe arrives in a later slice">
-          ✎ Draft read-aloud · soon
-        </span>
+        <select
+          className="camped-genresel"
+          value={genre}
+          onChange={(e) => setGenre(e.target.value as ScribeGenre)}
+          title="The Scribe's tone for this draft"
+        >
+          {SCRIBE_GENRES.map((g) => (
+            <option key={g.key} value={g.key}>
+              {g.label}
+            </option>
+          ))}
+        </select>
+        <button className="camped-scribebtn" onClick={() => void draftRA()} disabled={drafting}>
+          {drafting ? "Drafting…" : "✎ Draft read-aloud"}
+        </button>
       </div>
       <textarea
         className="camped-desc"
@@ -800,6 +841,8 @@ const SessionPage = ({
   updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility">>) => Promise<{ error: string | null }>;
   deleteDoc: (id: string) => Promise<{ error: string | null }>;
 }) => {
+  const toast = useToast();
+  const [drafting, setDrafting] = useState(false);
   if (!session) return <div className="dim" style={{ padding: 32 }}>That session is gone.</div>;
   const started = new Date(session.started_at).toLocaleDateString(undefined, {
     weekday: "short",
@@ -807,6 +850,25 @@ const SessionPage = ({
     day: "numeric",
     year: "numeric",
   });
+  const draft = async () => {
+    if (drafting) return;
+    setDrafting(true);
+    const { text, error } = await draftRecap(session.game_id, session.id);
+    setDrafting(false);
+    if (error || !text) {
+      toast.error(error ?? "The Scribe returned nothing");
+      return;
+    }
+    const { error: createErr } = await createDoc({
+      kind: "recap",
+      session_id: session.id,
+      title: `Session ${session.number} recap`,
+      content: text,
+      visibility: "players",
+    });
+    if (createErr) toast.error(createErr);
+    else toast.success("Recap drafted from the session log — edit it, then present it next session.");
+  };
   return (
     <>
       <div className="camped-scenehead">
@@ -825,6 +887,9 @@ const SessionPage = ({
       ))}
       {session.ended_at && docs.length === 0 && (
         <div className="camped-adddocs">
+          <button className="camped-scribebtn" onClick={() => void draft()} disabled={drafting}>
+            {drafting ? "The Scribe is reading the log…" : "✎ Draft recap"}
+          </button>
           <button
             onClick={() =>
               void createDoc({
@@ -835,11 +900,8 @@ const SessionPage = ({
               })
             }
           >
-            ＋ Recap
+            ＋ Blank recap
           </button>
-          <span className="dim" style={{ fontSize: 12, alignSelf: "center" }}>
-            Written by hand for now — the Scribe will draft these from the log soon.
-          </span>
         </div>
       )}
     </>

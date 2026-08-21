@@ -55,6 +55,7 @@ import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
 import { StoryDrawer } from "./StoryDrawer";
+import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
 import { initiative as initiativeMod, saveBonus, abilityMod, abilityModFor, skillBonus, skillCheckChips, attackBonus, damageBonus } from "../lib/calc";
 import { LootDialog } from "./LootDialog";
@@ -1521,7 +1522,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // table: the DM reads notes quietly and presents read-alouds; players' doc
   // list is already RLS-filtered to player-facing material.
   const [storyOpen, setStoryOpen] = useState(false);
-  const { docs: storyDocs } = useCampaignDocs(game.id);
+  const { docs: storyDocs, createDoc: createStoryDoc } = useCampaignDocs(game.id);
   // Present state is DERIVED FROM THE LOG — a doc_presented system event with
   // a content snapshot, undone by doc_dismissed. No schema, survives refresh,
   // reaches late joiners, and the presentation itself is part of the record.
@@ -3572,8 +3573,34 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                       })
                     ) {
                       const { error } = await endSession(activeSession.id);
-                      if (error) toast.error(error);
-                      else toast.success(`Session ${activeSession.number} ended — ${sessionDuration(activeSession)} on the record.`);
+                      if (error) {
+                        toast.error(error);
+                        return;
+                      }
+                      // The recap moment (#0041 slice 1d): the Scribe reads
+                      // exactly this session's log while it's fresh.
+                      if (
+                        await confirm({
+                          title: `Session ${activeSession.number} ended`,
+                          message: `${sessionDuration(activeSession)} on the record. Have the Scribe draft a player-facing recap from the log now? You can edit it on the campaign Timeline.`,
+                          confirmLabel: "Draft a recap",
+                        })
+                      ) {
+                        toast.info("The Scribe is reading the session log…");
+                        const { text, error: scribeErr } = await draftRecap(game.id, activeSession.id);
+                        if (scribeErr || !text) toast.error(scribeErr ?? "The Scribe returned nothing");
+                        else {
+                          const { error: docErr } = await createStoryDoc({
+                            kind: "recap",
+                            session_id: activeSession.id,
+                            title: `Session ${activeSession.number} recap`,
+                            content: text,
+                            visibility: "players",
+                          });
+                          if (docErr) toast.error(docErr);
+                          else toast.success("Recap drafted — find it on the campaign Timeline, or present it next session.");
+                        }
+                      }
                     }
                   }}
                 >
