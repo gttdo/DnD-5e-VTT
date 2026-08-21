@@ -106,7 +106,11 @@ export const useChapters = (gameId: string | null) => {
         .select()
         .single();
       if (error || !data) return { chapter: null, error: error?.message ?? "Insert failed" };
-      return { chapter: data as Chapter, error: null };
+      // Optimistic append — never depend on the realtime echo for our own
+      // writes (the INSERT handler dedupes when the echo lands).
+      const created = data as Chapter;
+      setChapters((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created].sort((a, b) => a.position - b.position)));
+      return { chapter: created, error: null };
     },
     [user, gameId, chapters]
   );
@@ -223,7 +227,10 @@ export const useCampaignDocs = (gameId: string | null) => {
         .select()
         .single();
       if (error || !data) return { doc: null, error: error?.message ?? "Insert failed" };
-      return { doc: data as CampaignDoc, error: null };
+      // Optimistic append — same reasoning as createChapter.
+      const created = data as CampaignDoc;
+      setDocs((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created].sort((a, b) => a.position - b.position)));
+      return { doc: created, error: null };
     },
     [user, gameId, docs]
   );
