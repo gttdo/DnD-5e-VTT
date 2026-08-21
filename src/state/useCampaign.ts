@@ -286,6 +286,8 @@ export interface DocShare {
   game_id: string;
   audience: "party" | "player";
   recipient_id: string | null;
+  /** The session live when this was shared (Journal grouping); null = off the record. */
+  session_id: string | null;
   shared_at: string;
 }
 
@@ -331,14 +333,15 @@ export const useDocShares = (gameId: string | null) => {
     };
   }, [gameId]);
 
-  /** Share a doc with the whole party (Slice A). Idempotent via the unique key. */
+  /** Share a doc with the whole party (Slice A). Idempotent via the unique key.
+   *  `sessionId` stamps the live session for Journal-by-session grouping. */
   const shareWithParty = useCallback(
-    async (documentId: string): Promise<{ error: string | null }> => {
+    async (documentId: string, sessionId?: string | null): Promise<{ error: string | null }> => {
       if (!gameId) return { error: "No game" };
       const { data, error } = await supabase
         .from("document_shares")
         .upsert(
-          { document_id: documentId, game_id: gameId, audience: "party", recipient_id: null },
+          { document_id: documentId, game_id: gameId, audience: "party", recipient_id: null, session_id: sessionId ?? null },
           { onConflict: "document_id,audience,recipient_id" }
         )
         .select()

@@ -5794,7 +5794,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           isShared={(id) => sharedDocIdSet.has(id)}
           onShare={(d) => {
             // One action: file it in every player's Journal AND show it live.
-            void shareWithParty(d.id);
+            void shareWithParty(d.id, activeSessionRef.current?.id ?? null);
             presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind, meta: d.meta });
           }}
           onClose={() => setStoryOpen(false)}
