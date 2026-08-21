@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
 import { findSize, TOKEN_SIZES } from "../lib/tokenSmith";
-import { Card, CardMedia, CardBody, CardTitle, CardMeta } from "./ui/Card";
 import { Dialog } from "./ui/Dialog";
 import { EmptyState } from "./ui/EmptyState";
 import { Icon, type IconName } from "./ui/Icon";
@@ -139,17 +138,16 @@ export const TokenPickerDialog = ({ onPick, onQuickMarker, onClose }: Props) => 
     <Dialog onClose={onClose} size="lg" title="Place a token" subtitle="From your library — or drop a quick marker.">
       {onQuickMarker && (
         <button
-          className="map-clear-tile"
-          style={{ width: "100%", marginBottom: 12 }}
+          className="tpk-marker-row"
           onClick={() => {
             onClose();
             onQuickMarker();
           }}
           title="A labeled colored disc — 'Goblin A' — no art needed"
         >
-          <Icon name="add" size={18} />
-          <span>Quick marker</span>
-          <span className="map-clear-tile-sub">A labeled disc for improvised foes, traps, and points of interest.</span>
+          <Icon name="add" size={15} />
+          <span className="tpk-marker-label">Quick marker</span>
+          <span className="tpk-marker-sub">a labeled disc for improvised foes, traps, and points of interest</span>
         </button>
       )}
       {loading && <div className="dim">Loading library…</div>}
@@ -247,19 +245,11 @@ export const TokenPickerDialog = ({ onPick, onQuickMarker, onClose }: Props) => 
               {q ? `Nothing in this tab matches “${q}”.` : <>Create some in the <strong>Resources</strong> tab.</>}
             </EmptyState>
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(124px, 1fr))",
-                gap: 10,
-                maxHeight: "46vh",
-                overflowY: "auto",
-                paddingRight: 4,
-              }}
-            >
+            <div className="tpk-grid">
               {filtered.map((a) => (
-                <Card
+                <button
                   key={a.id}
+                  className="tpk-tile"
                   onClick={() => onPick(a)}
                   title={`${a.prompt ?? a.name} — click to place, or drag onto a cell`}
                   draggable
@@ -272,12 +262,16 @@ export const TokenPickerDialog = ({ onPick, onQuickMarker, onClose }: Props) => 
                     setTimeout(onClose, 0);
                   }}
                 >
-                  <CardMedia src={a.image_url} alt={a.name} shape="circle" />
-                  <CardBody>
-                    <CardTitle>{a.name}</CardTitle>
-                    <CardMeta>{metaOf(a)}</CardMeta>
-                  </CardBody>
-                </Card>
+                  <span className="tpk-art">
+                    {a.image_url ? (
+                      <img src={a.image_url} alt="" loading="lazy" draggable={false} />
+                    ) : (
+                      <span className="tpk-initial">{a.name.charAt(0).toUpperCase()}</span>
+                    )}
+                  </span>
+                  <span className="tpk-name">{a.name}</span>
+                  <span className="tpk-meta">{metaOf(a)}</span>
+                </button>
               ))}
             </div>
           )}
