@@ -4,8 +4,10 @@ import { sampleCharacter } from "../data/sampleCharacter";
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import { applyPlan, type LevelUpPlan } from "../lib/levelUp";
 import { applyHeal, applyDamage, applyTempHp } from "../lib/hp";
+import { useToast } from "./Toast";
 
 export const useCharacter = (id: string | null) => {
+  const toast = useToast();
   const [character, setCharacter] = useState<Character>(sampleCharacter);
   const [loading, setLoading] = useState<boolean>(!!id);
   const saveTimer = useRef<number | null>(null);
@@ -55,6 +57,15 @@ export const useCharacter = (id: string | null) => {
         .eq("id", id);
       if (!error) {
         lastSavedSerialized.current = serialized;
+      } else {
+        // NEVER swallow a failed save — the sheet keeps showing the edit
+        // locally, then silently reverts on refresh (the avatar bug). The
+        // usual cause: editing a character you don't own (RLS denies).
+        toast.error(
+          /denied|policy|permission|403/i.test(error.message)
+            ? "This character isn't yours to edit — changes won't be saved."
+            : `Couldn't save the character: ${error.message}`
+        );
       }
     }, 600);
     return () => {
