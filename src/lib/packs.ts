@@ -207,7 +207,10 @@ export const installPack = async (
         game_id: gameId,
         title: c.title,
         position: c.position,
-        status: opts?.autoPublish ? "published" : c.status,
+        // Human-DM install: everything arrives as a DRAFT — reviewing then
+        // publishing each chapter IS the unboxing (per the packs proposal).
+        // Solo install auto-publishes (no human to unbox it).
+        status: opts?.autoPublish ? "published" : "draft",
         region_map_id: c.region_map_ref ? idMap.get(c.region_map_ref) ?? null : null,
         created_by: userId,
       })
