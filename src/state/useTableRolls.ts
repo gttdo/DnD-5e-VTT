@@ -47,7 +47,13 @@ interface RollPayload {
   bloom?: BloomSeed & { text: string };
 }
 
-export const useTableRolls = (gameId: string | null) => {
+export const useTableRolls = (
+  gameId: string | null,
+  /** Called once per LOCAL roll (never for broadcast receives) — the hook
+   *  point where TableCanvas persists the roll to game_log (#0041). Only the
+   *  roller writes the row, so the table gets exactly one copy. */
+  onLocalRoll?: (by: string, entries: RollEntry[]) => void
+) => {
   const { push } = useDiceLog();
   const [blooms, setBlooms] = useState<RollBloom[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -112,12 +118,13 @@ export const useTableRolls = (gameId: string | null) => {
         : undefined;
       const payload: RollPayload = { by, entries, bloom };
       ingest(payload); // instant, transport-independent
+      onLocalRoll?.(by, entries); // persist to game_log — roller only (#0041)
       const channel = channelRef.current;
       if (channel && joinedRef.current) {
         void channel.send({ type: "broadcast", event: "roll", payload });
       }
     },
-    [ingest]
+    [ingest, onLocalRoll]
   );
 
   return { roll, blooms };

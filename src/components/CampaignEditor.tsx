@@ -5,6 +5,7 @@ import { useToast } from "../state/Toast";
 import { useConfirm } from "../state/Confirm";
 import { useScenes, type Scene } from "../state/useScenes";
 import { useChapters, useCampaignDocs, type Chapter, type CampaignDoc, type DocKind } from "../state/useCampaign";
+import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useRegionMaps } from "../state/useRegionNav";
 import type { Game } from "../state/useGames";
 import type { MapAsset } from "../state/useMaps";
@@ -29,7 +30,7 @@ interface Props {
   onBack: () => void;
 }
 
-type Selection = { type: "overview" } | { type: "scene"; id: string };
+type Selection = { type: "overview" } | { type: "scene"; id: string } | { type: "session"; id: string };
 
 const KIND_LABEL: Record<DocKind, string> = {
   note: "Note",
@@ -70,6 +71,9 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
   } = useScenes(game.id, game.active_scene_id ?? null);
   const { regionMaps } = useRegionMaps(game.id);
   const rootRegionMap = regionMaps[0] ?? null;
+  // Table-time (#0041 §5): sessions for the Timeline tab. canManage lets a
+  // stale forgotten session auto-close from the editor too.
+  const { sessions } = useSessions(game.id, { canManage: true });
 
   const [tab, setTab] = useState<"story" | "timeline">("story");
   const [selection, setSelection] = useState<Selection>({ type: "overview" });
@@ -251,12 +255,32 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
             </button>
           </div>
 
-          {tab === "timeline" && (
+          {tab === "timeline" && sessions.length === 0 && (
             <EmptyState icon="rules" title="No sessions yet" compact>
               Start a session from the table to begin the record — recaps will
               collect here.
             </EmptyState>
           )}
+          {tab === "timeline" &&
+            sessions.map((s) => {
+              const hasRecap = docs.some((d) => d.kind === "recap" && d.session_id === s.id);
+              const isSel = selection.type === "session" && selection.id === s.id;
+              return (
+                <button
+                  key={s.id}
+                  className={`camped-sessionrow ${isSel ? "is-sel" : ""}`}
+                  onClick={() => setSelection({ type: "session", id: s.id })}
+                >
+                  <span className="camped-sessionnum">Session {s.number}</span>
+                  <span className="camped-sessionmeta">
+                    {new Date(s.started_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })} ·{" "}
+                    {s.ended_at ? sessionDuration(s) : "live now"}
+                  </span>
+                  {!s.ended_at && <span className="camped-sessionlive" />}
+                  {hasRecap && s.ended_at && <span className="camped-sessionrecap">Recap ✓</span>}
+                </button>
+              );
+            })}
 
           {tab === "story" && (
             <>
@@ -435,6 +459,15 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
             <div className="dim" style={{ padding: 32 }}>
               That scene is gone — pick another from the story tree.
             </div>
+          )}
+          {selection.type === "session" && (
+            <SessionPage
+              session={sessions.find((s) => s.id === selection.id) ?? null}
+              docs={docs.filter((d) => d.kind === "recap" && d.session_id === selection.id)}
+              createDoc={createDoc}
+              updateDoc={updateDoc}
+              deleteDoc={deleteDoc}
+            />
           )}
         </div>
       </div>
@@ -748,6 +781,66 @@ const ScenePage = ({
           applyToScene={{ onApply: (m) => applyFace(generator, m) }}
           onClose={() => setGenerator(null)}
         />
+      )}
+    </>
+  );
+};
+
+// ============================================================================
+const SessionPage = ({
+  session,
+  docs,
+  createDoc,
+  updateDoc,
+  deleteDoc,
+}: {
+  session: GameSession | null;
+  docs: CampaignDoc[];
+  createDoc: (init: Partial<Pick<CampaignDoc, "kind" | "title" | "content" | "visibility" | "session_id">>) => Promise<{ doc: CampaignDoc | null; error: string | null }>;
+  updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility">>) => Promise<{ error: string | null }>;
+  deleteDoc: (id: string) => Promise<{ error: string | null }>;
+}) => {
+  if (!session) return <div className="dim" style={{ padding: 32 }}>That session is gone.</div>;
+  const started = new Date(session.started_at).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return (
+    <>
+      <div className="camped-scenehead">
+        <span className="camped-scenetitle">Session {session.number}</span>
+        <span className="camped-chapchip">
+          {started} · {session.ended_at ? sessionDuration(session) : "live now"}
+        </span>
+      </div>
+      <p className="dim" style={{ fontSize: 14, maxWidth: "62ch", margin: "6px 0 18px" }}>
+        {session.ended_at
+          ? "The record of this session. A player-facing recap makes a great “previously on…” to open the next one."
+          : "This session is recording right now — rolls, chat, and scene changes are going on the record."}
+      </p>
+      {docs.map((d) => (
+        <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
+      ))}
+      {session.ended_at && docs.length === 0 && (
+        <div className="camped-adddocs">
+          <button
+            onClick={() =>
+              void createDoc({
+                kind: "recap",
+                session_id: session.id,
+                title: `Session ${session.number} recap`,
+                visibility: "players",
+              })
+            }
+          >
+            ＋ Recap
+          </button>
+          <span className="dim" style={{ fontSize: 12, alignSelf: "center" }}>
+            Written by hand for now — the Scribe will draft these from the log soon.
+          </span>
+        </div>
       )}
     </>
   );

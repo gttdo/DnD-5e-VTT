@@ -7635,3 +7635,51 @@ button.topbar-stat {
 .campcard-divider { width: 100%; border-top: 1px solid var(--border); opacity: 0.7; margin: 14px 0 12px; }
 .campcard-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .campcard-actions.is-quiet { margin-top: 8px; }
+
+/* ---- Sessions (#0041 slice 1b): DM recording chip + editor timeline ---- */
+.session-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-dim); cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px;
+  background: transparent;
+}
+.session-chip:hover { color: var(--candle-bright); border-color: color-mix(in srgb, var(--candle) 50%, transparent); }
+.session-chip.is-live {
+  color: var(--candle-bright);
+  border-color: color-mix(in srgb, var(--candle) 55%, transparent);
+  background: color-mix(in srgb, var(--candle) 9%, transparent);
+}
+.session-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ember);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ember) 80%, transparent);
+  animation: session-pulse 2s ease-in-out infinite;
+}
+@keyframes session-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .session-dot { animation: none; } }
+
+.camped-sessionrow {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; border-radius: 7px; padding: 9px 10px;
+  cursor: pointer; text-align: left; flex: none;
+}
+.camped-sessionrow:hover { background: var(--surface-1); }
+.camped-sessionrow.is-sel {
+  background: color-mix(in srgb, var(--candle) 13%, transparent);
+  box-shadow: inset 2px 0 0 var(--candle);
+}
+.camped-sessionnum {
+  font-family: var(--font-display); font-size: 12px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text);
+}
+.camped-sessionmeta { flex: 1; font-size: 12.5px; color: var(--text-muted); }
+.camped-sessionlive {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ember);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ember) 80%, transparent); flex: none;
+}
+.camped-sessionrecap {
+  font-family: var(--font-display); font-size: 8.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--candle);
+  border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 4px; padding: 1px 6px; flex: none;
+}

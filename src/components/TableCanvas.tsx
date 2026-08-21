@@ -42,6 +42,8 @@ import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
 import { useDraftSceneIds } from "../state/useCampaign";
+import { useSessions, sessionDuration } from "../state/useSessions";
+import { appendGameLog } from "../lib/gameLog";
 import { usePartyPresence } from "../state/usePartyPresence";
 import { PartyPanel } from "./PartyPanel";
 import { useAuth } from "../state/useAuth";
@@ -1477,9 +1479,38 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     [visibleTokens, selectedId]
   );
 
+  // Sessions (#0041): the DM's recording boundary. Rolls/chat/system events
+  // made while one is live carry its id; everything else is off the record.
+  const myName = party.find((m) => m.user_id === authUser?.id)?.name ?? (isDM ? "DM" : "Player");
+  const { sessions, activeSession, activeSessionRef, startSession, endSession } = useSessions(game.id, {
+    canManage: isDM,
+    dmName: myName,
+  });
   // Table-wide dice: every HUD roll logs + blooms locally and broadcasts to the
-  // whole table. Single consumer of the rolls:{gameId} topic.
-  const { roll: broadcastRoll, blooms } = useTableRolls(game.id);
+  // whole table. Single consumer of the rolls:{gameId} topic. The roller (and
+  // only the roller) also persists the roll to game_log.
+  const persistRoll = useCallback(
+    (by: string, entries: RollEntry[]) => {
+      if (!authUser) return;
+      appendGameLog({
+        game_id: game.id,
+        session_id: activeSessionRef.current?.id ?? null,
+        kind: "roll",
+        author_id: authUser.id,
+        author_name: by,
+        body: {
+          entries: entries.map((e) => ({
+            label: e.label,
+            expression: e.result.expression,
+            total: e.result.total,
+            detail: e.result.detail,
+          })),
+        },
+      });
+    },
+    [game.id, authUser, activeSessionRef]
+  );
+  const { roll: broadcastRoll, blooms } = useTableRolls(game.id, persistRoll);
   const saves = useSaveRequests(game.id);
   const { tables, classes } = useRules();
   // Reaction interrupt (Shield): the attacker's continuation per open window, a
@@ -3472,6 +3503,45 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <span className="scene-name">{activeScene?.name ?? "No scene"}</span>
             {isDM && <Icon name="down" size={14} />}
           </button>
+          {/* Session control (#0041) — the DM's recording boundary. */}
+          {isDM && (
+            <span style={{ marginLeft: 8 }}>
+              {activeSession ? (
+                <button
+                  className="session-chip is-live"
+                  title={`Recording since ${new Date(activeSession.started_at).toLocaleTimeString()} — click to end`}
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: `End Session ${activeSession.number}?`,
+                        message: `${sessionDuration(activeSession)} recorded. The log keeps working between sessions, but it's off the record until you start the next one.`,
+                        confirmLabel: "End session",
+                      })
+                    ) {
+                      const { error } = await endSession(activeSession.id);
+                      if (error) toast.error(error);
+                      else toast.success(`Session ${activeSession.number} ended — ${sessionDuration(activeSession)} on the record.`);
+                    }
+                  }}
+                >
+                  <span className="session-dot" />
+                  Session {activeSession.number} · recording
+                </button>
+              ) : (
+                <button
+                  className="session-chip"
+                  title="Start recording — rolls, chat, and scene changes go on the record for the recap"
+                  onClick={async () => {
+                    const { session, error } = await startSession();
+                    if (error) toast.error(error);
+                    else if (session) toast.success(`Session ${session.number} started — the table is on the record.`);
+                  }}
+                >
+                  ▶ Start session{sessions.length ? ` ${sessions.length + 1}` : ""}
+                </button>
+              )}
+            </span>
+          )}
           {scenesOpen && (
             <div
               className="panel"
@@ -3501,7 +3571,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   tabIndex={0}
                   aria-current={isActive}
                   onClick={async () => {
-                    if (isDM && !isActive) await setActiveScene(s.id);
+                    if (isDM && !isActive) {
+                      await setActiveScene(s.id);
+                      // System event (#0041): scene changes are part of the
+                      // session record — they let recaps and chapter progress
+                      // know where the party actually went.
+                      if (authUser)
+                        appendGameLog({
+                          game_id: game.id,
+                          session_id: activeSessionRef.current?.id ?? null,
+                          kind: "system",
+                          author_id: authUser.id,
+                          author_name: myName,
+                          body: { type: "scene_staged", scene: s.name },
+                        });
+                    }
                     setScenesOpen(false);
                   }}
                   title={isDM ? "Switch to this scene" : isActive ? "Current scene" : "Only the DM can switch scenes"}
@@ -3631,7 +3715,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   });
                   if (!name) return;
                   const { scene, error } = await createScene(name);
-                  if (scene) await setActiveScene(scene.id);
+                  if (scene) {
+                    await setActiveScene(scene.id);
+                    if (authUser)
+                      appendGameLog({
+                        game_id: game.id,
+                        session_id: activeSessionRef.current?.id ?? null,
+                        kind: "system",
+                        author_id: authUser.id,
+                        author_name: myName,
+                        body: { type: "scene_staged", scene: scene.name },
+                      });
+                  }
                   if (error) toast.error(error);
                 }}
                 style={{ fontSize: 12, marginTop: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}
@@ -5568,7 +5663,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       </div>
 
       {rulesOpen && <RulesReference onClose={() => setRulesOpen(false)} />}
-      {rollerOpen && <DiceRoller onClose={() => setRollerOpen(false)} />}
+      {rollerOpen && (
+        <DiceRoller
+          onClose={() => setRollerOpen(false)}
+          onRolled={(label, result) => broadcastRoll(myName, [{ label, result }])}
+        />
+      )}
       {logOpen && <GameLog onClose={() => setLogOpen(false)} canClear={isDM} />}
 
       {tokenPickerOpen && activeScene && (

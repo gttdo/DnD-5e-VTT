@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { roll } from "../lib/dice";
+import { roll, type RollResult } from "../lib/dice";
 import { useDiceLog } from "../state/DiceLog";
 import { Icon } from "./ui/Icon";
 
@@ -32,9 +32,13 @@ const DieGlyph = ({ d }: { d: Die }) => (
 
 interface Props {
   onClose: () => void;
+  /** When set, rolls go through the TABLE pipeline (broadcast to everyone +
+   *  persisted to game_log #0041) instead of only the local in-memory log —
+   *  a table roll is a shared event, not a private scratchpad. */
+  onRolled?: (label: string, result: RollResult) => void;
 }
 
-export const DiceRoller = ({ onClose }: Props) => {
+export const DiceRoller = ({ onClose, onRolled }: Props) => {
   // die -> how many of it are in the pool
   const [pool, setPool] = useState<Partial<Record<Die, number>>>({});
   const [modifier, setModifier] = useState(0);
@@ -68,7 +72,7 @@ export const DiceRoller = ({ onClose }: Props) => {
     for (const d of entries) rolls.push(...roll(`${pool[d]}d${d}`).rolls);
     const sum = rolls.reduce((a, b) => a + b, 0);
     const total = sum + modifier;
-    push(label, {
+    const result: RollResult = {
       expression: label,
       rolls,
       modifier,
@@ -77,7 +81,10 @@ export const DiceRoller = ({ onClose }: Props) => {
         `[${rolls.join(", ")}]` +
         (modifier ? ` ${modifier >= 0 ? "+" : "−"} ${Math.abs(modifier)}` : "") +
         ` = ${total}`,
-    });
+    };
+    // Table pipeline when wired (broadcast + persist); local log otherwise.
+    if (onRolled) onRolled(label, result);
+    else push(label, result);
   };
 
   return (
