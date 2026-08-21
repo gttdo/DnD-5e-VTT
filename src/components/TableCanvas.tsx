@@ -6,7 +6,7 @@ import { MapPickerDialog } from "./MapPickerDialog";
 import { TokenPickerDialog, TOKEN_DRAG_MIME } from "./TokenPickerDialog";
 import { supabase } from "../lib/supabase";
 import type { MapAsset } from "../state/useMaps";
-import type { TokenAsset } from "../state/useTokenAssets";
+import { useTokenAssets, type TokenAsset } from "../state/useTokenAssets";
 import { findSize } from "../lib/tokenSmith";
 import { Icon } from "./ui/Icon";
 import { GameGlyph } from "./ui/GameGlyph";
@@ -1563,6 +1563,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // list is already RLS-filtered to player-facing material.
   const [storyOpen, setStoryOpen] = useState(false);
   const [coDMOpen, setCoDMOpen] = useState(false); // Co-DM drawer (P3, DM-only)
+  // The DM's token library — so the Co-DM's place_tokens proposals can resolve
+  // a creature name to real art (else a labeled marker).
+  const { assets: libraryAssets } = useTokenAssets();
   const { docs: storyDocs, createDoc: createStoryDoc, reload: reloadStoryDocs } = useCampaignDocs(game.id);
   // Shares (Story/Journal) — the DM's Share files a doc in players' Journals;
   // players read this to know what's theirs.
@@ -5868,6 +5871,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               const why = p.input.reason ? ` — ${String(p.input.reason)}` : "";
               return `Stage "${name}" for everyone${why}?`;
             }
+            if (p.tool === "place_tokens") {
+              const n = Number(p.input.count ?? 1);
+              const who = String(p.input.creature_name ?? "token");
+              return `Place ${n}× ${who} on the board?`;
+            }
             return `Run ${p.tool}?`;
           }}
           onProposal={async (p) => {
@@ -5889,6 +5897,29 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   body: { type: "scene_staged", scene: target.name },
                 });
               return { ok: true, message: `Staged ${target.name}.` };
+            }
+            if (p.tool === "place_tokens") {
+              if (!activeScene?.id) return { ok: false, message: "No scene staged." };
+              const who = String(p.input.creature_name ?? "").trim();
+              const count = Math.min(Math.max(1, Number(p.input.count ?? 1)), 12);
+              if (!who) return { ok: false, message: "No creature named." };
+              // Resolve against the library: exact name, else contains-match.
+              const term = who.toLowerCase();
+              const asset =
+                libraryAssets.find((a) => a.name.trim().toLowerCase() === term) ??
+                libraryAssets.find((a) => a.name.toLowerCase().includes(term));
+              let placed = 0;
+              for (let i = 0; i < count; i++) {
+                const res = asset
+                  ? await placeTokenFromLibrary(asset)
+                  : await addToken({ label: count > 1 ? `${who} ${i + 1}` : who, color: "#b23a24" });
+                if (!res.error) placed++;
+              }
+              if (placed === 0) return { ok: false, message: "Couldn't place any." };
+              return {
+                ok: true,
+                message: `Placed ${placed}× ${asset ? asset.name : who}${asset ? "" : " (marker)"} — drag them into position.`,
+              };
             }
             return { ok: false, message: `Unknown action: ${p.tool}` };
           }}

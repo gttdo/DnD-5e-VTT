@@ -202,7 +202,10 @@ Deno.serve(async (req) => {
     "- Track what players KNOW: documents are marked shared or unshared. Don't confuse what's true with what's been revealed.",
     "- Be table-fast: answer in 2–5 sentences unless the DM asks for depth. No preamble, no filler.",
     "- Never invent rules text; for rules questions, reason from standard 5e practice and say when you're unsure.",
-    "- You may PROPOSE one action — staging a different scene — using the stage_scene tool, but ONLY when the DM's message makes it clear the party is moving there (e.g. 'they head down to the cellar'). The DM must approve before anything happens; never stage unprompted, and never propose a scene that isn't in the campaign. When you propose, also say in one sentence why.",
+    "- You may PROPOSE actions the DM approves before anything happens; never act unprompted. Available tools:",
+    "  • stage_scene — move the table to a different scene, when the DM's message makes clear the party is going there. Never a scene that isn't in the campaign.",
+    "  • place_tokens — put a creature's tokens on the board, when the DM is setting up or starting an encounter. Read the scene's own notes for who and how many (e.g. a note saying 'four kobolds' → creature_name 'Kobold', count 4). One proposal per creature type; propose several if the encounter is mixed. You don't see the map, so you can't choose positions — the DM drags them into place.",
+    "  When you propose, say in one sentence why.",
     "",
     "THE CAMPAIGN:",
     ...world,
@@ -229,6 +232,20 @@ Deno.serve(async (req) => {
           reason: { type: "string", description: "one short phrase: why now" },
         },
         required: ["scene_name"],
+      },
+    },
+    {
+      name: "place_tokens",
+      description:
+        "Propose placing a creature's tokens on the current battlemap — for setting up or starting an encounter. Read the scene's notes for who and how many. One creature type per call. The DM approves and positions them.",
+      input_schema: {
+        type: "object",
+        properties: {
+          creature_name: { type: "string", description: "the creature, e.g. 'Kobold' — matched against the DM's token library" },
+          count: { type: "number", description: "how many (1–12)" },
+          reason: { type: "string", description: "one short phrase: why now" },
+        },
+        required: ["creature_name", "count"],
       },
     },
   ];
