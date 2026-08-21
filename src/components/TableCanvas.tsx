@@ -5876,6 +5876,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               const who = String(p.input.creature_name ?? "token");
               return `Place ${n}× ${who} on the board?`;
             }
+            if (p.tool === "share_doc") {
+              const d = storyDocs.find((x) => x.id === String(p.input.document_id));
+              const why = p.input.reason ? ` — ${String(p.input.reason)}` : "";
+              return `Share "${d?.title || (d ? "untitled" : "a document")}" with the players${why}?`;
+            }
             return `Run ${p.tool}?`;
           }}
           onProposal={async (p) => {
@@ -5935,6 +5940,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 ok: true,
                 message: `Placed ${placed}× ${asset ? asset.name : who}${asset ? "" : " (marker)"} — drag them into position.`,
               };
+            }
+            if (p.tool === "share_doc") {
+              const d = storyDocs.find((x) => x.id === String(p.input.document_id));
+              if (!d) return { ok: false, message: "Couldn't find that document." };
+              if (d.kind === "note") return { ok: false, message: "That's a private note — not for players." };
+              // Same one-action Share the Story drawer uses: file + show live.
+              void shareWithParty(d.id, activeSessionRef.current?.id ?? null);
+              presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind, meta: d.meta });
+              return { ok: true, message: `Shared "${d.title || "it"}" — it's on their screens and in the journal.` };
             }
             return { ok: false, message: `Unknown action: ${p.tool}` };
           }}

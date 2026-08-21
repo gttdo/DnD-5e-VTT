@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       d.kind === "handout"
         ? clip(JSON.stringify((d.meta as Record<string, unknown>) ?? {}), 400)
         : clip(d.content, 900);
-    return `- [${d.kind}] "${clip(d.title, 60) || "untitled"}" (${where})${seen}: ${content}`;
+    return `- [${d.kind} id:${d.id}] "${clip(d.title, 60) || "untitled"}" (${where})${seen}: ${content}`;
   };
 
   const world: string[] = [];
@@ -205,6 +205,7 @@ Deno.serve(async (req) => {
     "- You may PROPOSE actions the DM approves before anything happens; never act unprompted. Available tools:",
     "  • stage_scene — move the table to a different scene, when the DM's message makes clear the party is going there. Never a scene that isn't in the campaign.",
     "  • place_tokens — put a creature's tokens on the board, when the DM is setting up or starting an encounter. Read the scene's own notes for who and how many (e.g. a note saying 'four kobolds' → creature_name 'Kobold', count 4). One proposal per creature type; propose several if the encounter is mixed. You don't see the map, so you can't choose positions — the DM drags them into place.",
+    "  • share_doc — show a player-facing document (a read-aloud, handout, or recap) to the players: it appears on every screen AND is filed in their journal. Propose it when it's the moment to read the boxed text or hand over a prop. Pass the document's id (shown as 'id:...' in the campaign above). Never share a private note, and don't re-share something already marked SHARED unless the DM wants it shown again.",
     "  When you propose, say in one sentence why.",
     "",
     "THE CAMPAIGN:",
@@ -246,6 +247,19 @@ Deno.serve(async (req) => {
           reason: { type: "string", description: "one short phrase: why now" },
         },
         required: ["creature_name", "count"],
+      },
+    },
+    {
+      name: "share_doc",
+      description:
+        "Propose showing a player-facing document (read-aloud, handout, or recap) to the players — live on every screen and filed in their journal. The DM approves.",
+      input_schema: {
+        type: "object",
+        properties: {
+          document_id: { type: "string", description: "the document's id, from 'id:...' in the campaign above" },
+          reason: { type: "string", description: "one short phrase: why now" },
+        },
+        required: ["document_id"],
       },
     },
   ];
