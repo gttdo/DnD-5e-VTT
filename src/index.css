@@ -8070,3 +8070,46 @@ button.topbar-stat {
   max-width: 100%; font-size: 10.5px; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ---- Co-DM drawer (P3 slice 3a) ---- */
+.codm-intro { text-align: center; padding: 20px 8px; }
+.codm-intro-icon {
+  width: 48px; height: 48px; margin: 6px auto 14px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--candle); border: 1px solid color-mix(in srgb, var(--candle) 40%, transparent);
+  background: color-mix(in srgb, var(--candle) 8%, transparent);
+}
+.codm-intro-lead { font-size: 14.5px; color: var(--text-dim); max-width: 34ch; margin: 0 auto 16px; line-height: 1.55; }
+.codm-starters { display: flex; flex-direction: column; gap: 8px; }
+.codm-starter {
+  text-align: left; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 12px; cursor: pointer; color: var(--text-dim);
+  font-size: 13.5px; font-family: inherit;
+}
+.codm-starter:hover { color: var(--text); border-color: color-mix(in srgb, var(--candle) 40%, transparent); background: var(--surface-2); }
+
+.codm-thread { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.codm-msg { display: flex; flex-direction: column; max-width: 92%; }
+.codm-msg.is-dm { align-self: flex-end; align-items: flex-end; }
+.codm-who {
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--candle); margin: 0 3px 3px;
+}
+.codm-bubble {
+  border-radius: 11px 11px 11px 3px; padding: 10px 13px; font-size: 14.5px;
+  line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  background: color-mix(in srgb, var(--candle) 8%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--candle) 22%, var(--border)); color: var(--text);
+}
+.codm-msg.is-dm .codm-bubble {
+  border-radius: 11px 11px 3px 11px; background: var(--surface-2); border-color: var(--border);
+}
+.codm-thinking { display: inline-flex; gap: 4px; align-items: center; }
+.codm-thinking span {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--candle);
+  animation: codm-blink 1.2s infinite both;
+}
+.codm-thinking span:nth-child(2) { animation-delay: 0.2s; }
+.codm-thinking span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes codm-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .codm-thinking span { animation: none; } }

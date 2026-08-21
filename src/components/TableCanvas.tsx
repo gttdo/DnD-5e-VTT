@@ -56,6 +56,7 @@ import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
 import { StoryDrawer } from "./StoryDrawer";
 import { JournalDrawer } from "./JournalDrawer";
+import { CoDMDrawer } from "./CoDMDrawer";
 import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
@@ -1561,6 +1562,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // table: the DM reads notes quietly and presents read-alouds; players' doc
   // list is already RLS-filtered to player-facing material.
   const [storyOpen, setStoryOpen] = useState(false);
+  const [coDMOpen, setCoDMOpen] = useState(false); // Co-DM drawer (P3, DM-only)
   const { docs: storyDocs, createDoc: createStoryDoc, reload: reloadStoryDocs } = useCampaignDocs(game.id);
   // Shares (Story/Journal) — the DM's Share files a doc in players' Journals;
   // players read this to know what's theirs.
@@ -4165,6 +4167,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           >
             <Icon name="story" size={18} />
           </button>
+          {isDM && (
+            <button
+              className={`rail-tool ${coDMOpen ? "active" : ""}`}
+              onClick={() => setCoDMOpen((v) => !v)}
+              title="Co-DM — ask your second chair, who has read the whole campaign"
+              aria-label="Co-DM"
+            >
+              <Icon name="sparkles" size={18} />
+            </button>
+          )}
           <button
             className={`rail-tool ${hudModal === "map" ? "active" : ""}`}
             onClick={() => setHudModal((v) => (v === "map" ? null : "map"))}
@@ -5834,6 +5846,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {storyOpen && !isDM && (
         <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
       )}
+      {coDMOpen && isDM && <CoDMDrawer gameId={game.id} onClose={() => setCoDMOpen(false)} />}
 
       {/* Present overlay (#0041 slice 1e) — the DM's boxed text on every
           screen: the table reads along while the DM reads aloud. */}
