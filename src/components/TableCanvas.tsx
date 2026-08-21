@@ -41,6 +41,7 @@ import { RegionNavigator } from "./RegionNavigator";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
+import { useDraftSceneIds } from "../state/useCampaign";
 import { usePartyPresence } from "../state/usePartyPresence";
 import { PartyPanel } from "./PartyPanel";
 import { useAuth } from "../state/useAuth";
@@ -546,9 +547,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // Navigation lock (#Phase 3d): a player whose scene is IN COMBAT can't wander
   // off — combat pins the party in place. The DM is never locked.
   const navLocked = !isDM && Boolean(activeScene?.in_combat);
+  // Publish gate (#0041): scenes in DRAFT chapters don't exist for players —
+  // pins to them are hidden below, and travel is refused here as the backstop.
+  const draftSceneIds = useDraftSceneIds(game.id);
   const guardTravel = (sceneId: string) => {
     if (navLocked) {
       toast.error("You're in combat — you can't wander off");
+      return;
+    }
+    if (!isDM && draftSceneIds.has(sceneId)) {
+      toast.info("That place isn't open to travelers yet");
       return;
     }
     // A pin that leads to where you're standing shouldn't fail silently —
@@ -4564,6 +4572,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 (per-player navigation is Phase 3). Hidden pins are DM-only. */}
             {hotspots.map((h) => {
               if (h.hidden && !isDM) return null;
+              // Draft-chapter targets don't exist for players (#0041).
+              if (!isDM && h.target_scene_id && draftSceneIds.has(h.target_scene_id)) return null;
               const px = h.x * width;
               const py = h.y * height;
               const linked = Boolean(h.target_scene_id);
@@ -4742,6 +4752,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   pins float on the full-bleed map; clicking one travels YOU. */}
               {hotspots.map((h) => {
                 if (h.hidden && !isDM) return null;
+                // Draft-chapter targets don't exist for players (#0041).
+                if (!isDM && h.target_scene_id && draftSceneIds.has(h.target_scene_id)) return null;
                 const linked = Boolean(h.target_scene_id);
                 return (
                   <button

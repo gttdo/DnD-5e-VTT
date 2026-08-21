@@ -10,6 +10,7 @@ import { JoinLobby } from "./components/JoinLobby";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
 import { TableCanvas } from "./components/TableCanvas";
+import { CampaignEditor } from "./components/CampaignEditor";
 import { ProjectorBoard } from "./components/ProjectorBoard";
 import { ChangeBackgroundDialog } from "./components/ChangeBackgroundDialog";
 import { AuthScreen } from "./components/AuthScreen";
@@ -27,7 +28,7 @@ import { Icon } from "./components/ui/Icon";
 import { generateCharacterBackground } from "./lib/classArt";
 import { supabase } from "./lib/supabase";
 
-type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "quick" | "import" | "builder" | "sheet" | "table";
+type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "quick" | "import" | "builder" | "sheet" | "table" | "campaign";
 
 // Remember the last view across reloads so refreshing lands you back where you
 // were — not always on a character sheet. Stored in localStorage (the app is
@@ -67,6 +68,7 @@ const sectionForScreen = (screen: Screen): ShellSection => {
       return "tokens";
     case "games":
     case "table":
+    case "campaign":
     default:
       return "campaigns";
   }
@@ -96,15 +98,15 @@ function App() {
     if (!nav) return activeId ? "sheet" : "roster";
     if (nav.screen === "builder") return "roster";
     if (nav.screen === "sheet") return activeId ? "sheet" : "roster";
-    // A stored table with no gameId can't be restored — land on the games list
-    // instead of an empty screen.
-    if (nav.screen === "table" && !nav.gameId) return "games";
+    // A stored table/editor with no gameId can't be restored — land on the
+    // games list instead of an empty screen.
+    if ((nav.screen === "table" || nav.screen === "campaign") && !nav.gameId) return "games";
     return nav.screen;
   });
-  // The game id to re-fetch when a reload lands back on a table.
+  // The game id to re-fetch when a reload lands back on a table or the editor.
   const [restoreGameId, setRestoreGameId] = useState<string | null>(() => {
     const nav = readNav();
-    return nav?.screen === "table" ? nav.gameId ?? null : null;
+    return nav?.screen === "table" || nav?.screen === "campaign" ? nav.gameId ?? null : null;
   });
   // Unauthenticated flow: null = show the marketing landing; a mode = show the
   // auth screen with that tab preselected (from the landing's CTAs).
@@ -119,10 +121,10 @@ function App() {
 
   // Remember the current view so a reload returns here instead of a sheet.
   useEffect(() => {
-    // Mid-restore (screen is "table" but the game hasn't been re-fetched yet):
-    // don't overwrite the stored gameId with null — a reload in that window
-    // would otherwise persist {table, null} and strand the app on nothing.
-    if (screen === "table" && !activeGame) return;
+    // Mid-restore (screen is "table"/"campaign" but the game hasn't been
+    // re-fetched yet): don't overwrite the stored gameId with null — a reload
+    // in that window would otherwise persist {table, null} and strand the app.
+    if ((screen === "table" || screen === "campaign") && !activeGame) return;
     try {
       localStorage.setItem(NAV_KEY, JSON.stringify({ screen, gameId: activeGame?.id ?? null }));
     } catch {
@@ -312,13 +314,28 @@ function App() {
               setActiveGame(game);
               setScreen("table");
             }}
+            onManageGame={(game) => {
+              setActiveGame(game);
+              setScreen("campaign");
+            }}
           />
         )}
 
-        {!showLanding && screen === "table" && !activeGame && restoreGameId && (
+        {!showLanding && (screen === "table" || screen === "campaign") && !activeGame && restoreGameId && (
           <div style={{ minHeight: "60vh", display: "grid", placeItems: "center" }}>
-            <div className="dim">Returning to your table…</div>
+            <div className="dim">Returning to your {screen === "table" ? "table" : "campaign"}…</div>
           </div>
+        )}
+
+        {!showLanding && screen === "campaign" && activeGame && (
+          <CampaignEditor
+            game={activeGame}
+            onOpenTable={() => setScreen("table")}
+            onBack={() => {
+              setActiveGame(null);
+              setScreen("games");
+            }}
+          />
         )}
 
         {!showLanding && screen === "table" && activeGame && (

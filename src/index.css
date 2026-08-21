@@ -7336,3 +7336,302 @@ button.topbar-stat {
   cursor: pointer;
 }
 .confirm-danger:hover { filter: brightness(1.08); }
+
+/* ============================================================================
+   Campaign Editor (#0041, docs/campaign-editor.md) — the DM's prep surface.
+   Story tree on the left, one scene's prep face on the right.
+   ========================================================================== */
+.camped { display: flex; flex-direction: column; min-height: calc(100vh - 64px); }
+.camped-topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.camped-back { font-size: 12px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px; }
+.camped-name {
+  font-family: var(--font-display); font-size: 18px; letter-spacing: 0.06em;
+  color: var(--cream); cursor: pointer; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 40vw;
+}
+.camped-name:hover { color: var(--candle-bright); }
+.camped-lvlchip {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--candle-bright);
+  border: 1px solid color-mix(in srgb, var(--candle) 55%, transparent);
+  border-radius: 999px; padding: 3px 10px;
+  background: color-mix(in srgb, var(--candle) 10%, transparent); cursor: pointer;
+}
+.camped-panes { display: grid; grid-template-columns: 300px 1fr; flex: 1; min-height: 0; }
+@media (max-width: 900px) { .camped-panes { grid-template-columns: 1fr; } }
+
+/* ---- left rail: the story tree ---- */
+.camped-side {
+  border-right: 1px solid var(--border); background: var(--surface-0);
+  padding: 12px; display: flex; flex-direction: column; gap: 2px;
+  overflow-y: auto;
+}
+.camped-tabs {
+  display: flex; border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden; margin-bottom: 10px; flex: none;
+}
+.camped-tabs button {
+  flex: 1; background: none; border: 0; padding: 7px 0; cursor: pointer;
+  font-family: var(--font-display); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.camped-tabs button.is-on {
+  background: color-mix(in srgb, var(--candle) 14%, transparent);
+  color: var(--candle-bright);
+}
+.camped-toprow {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; border-radius: 7px; padding: 8px 10px;
+  color: var(--text-dim); font-size: 13.5px; cursor: pointer; text-align: left;
+}
+.camped-toprow:hover { background: var(--surface-2); }
+.camped-toprow.is-sel {
+  background: color-mix(in srgb, var(--candle) 13%, transparent);
+  color: var(--text); box-shadow: inset 2px 0 0 var(--candle);
+}
+.camped-toprow:disabled { opacity: 0.5; cursor: default; }
+.camped-treesep { border-top: 1px solid var(--border); opacity: 0.6; margin: 8px 4px; flex: none; }
+
+.camped-chapter { display: flex; flex-direction: column; flex: none; }
+.camped-chrow {
+  position: relative; display: flex; align-items: center; gap: 6px;
+  padding: 7px 6px 7px 4px; border-radius: 7px;
+}
+.camped-chrow:hover { background: var(--surface-1); }
+.camped-chrow.is-unfiled { opacity: 0.75; }
+.camped-caret { background: none; border: 0; color: var(--candle); opacity: 0.7; cursor: pointer; padding: 2px; display: flex; }
+.camped-chtitle {
+  flex: 1; font-family: var(--font-display); font-size: 11.5px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.camped-draft {
+  font-family: var(--font-display); font-size: 8px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--candle);
+  border: 1px solid color-mix(in srgb, var(--candle) 50%, transparent);
+  border-radius: 4px; padding: 1px 6px; flex: none;
+  background: color-mix(in srgb, var(--candle) 8%, transparent);
+}
+.camped-dots { background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 2px 4px; display: flex; border-radius: 5px; }
+.camped-dots:hover { color: var(--text); background: var(--surface-2); }
+
+.camped-scnrow {
+  position: relative; display: flex; align-items: center; border-radius: 7px;
+  margin-left: 14px;
+}
+.camped-scnrow:hover { background: var(--surface-1); }
+.camped-scnrow.is-sel {
+  background: color-mix(in srgb, var(--candle) 13%, transparent);
+  box-shadow: inset 2px 0 0 var(--candle);
+}
+.camped-scnmain {
+  flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: none; border: 0; padding: 7px 4px 7px 8px; cursor: pointer;
+  color: var(--text-dim); font-size: 13.5px; text-align: left;
+}
+.camped-scnrow.is-sel .camped-scnmain { color: var(--text); }
+.camped-scnglyph { color: var(--candle); font-size: 10px; flex: none; }
+.camped-scnglyph.is-empty { opacity: 0.35; }
+.camped-scnname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camped-nomap {
+  font-family: var(--font-display); font-size: 8px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; flex: none;
+}
+.camped-addscene, .camped-addchapter {
+  background: none; border: 0; cursor: pointer; text-align: left;
+  color: color-mix(in srgb, var(--candle) 75%, var(--text-muted));
+  font-size: 12.5px; font-style: italic; padding: 6px 10px 6px 36px; border-radius: 7px;
+}
+.camped-addscene:hover { background: var(--surface-1); }
+.camped-addchapter {
+  font-style: normal; font-family: var(--font-display); font-size: 10.5px;
+  letter-spacing: 0.14em; text-transform: uppercase; text-align: center;
+  border: 1px dashed color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 8px; padding: 9px; margin-top: 12px; color: var(--candle); flex: none;
+}
+.camped-addchapter:hover { background: color-mix(in srgb, var(--candle) 8%, transparent); }
+.camped-rename {
+  flex: 1; min-width: 0; background: var(--surface-1); color: var(--text);
+  border: 1px solid var(--candle); border-radius: 5px; padding: 2px 7px; font-size: 13px;
+}
+
+/* Row menus */
+.camped-menu {
+  position: absolute; top: 100%; right: 0; z-index: 40; min-width: 178px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); padding: 5px; display: flex; flex-direction: column;
+}
+.camped-menu button {
+  background: none; border: 0; border-radius: 6px; cursor: pointer; text-align: left;
+  padding: 8px 10px; color: var(--text-dim); font-size: 12.5px;
+}
+.camped-menu button:hover { background: var(--surface-3); color: var(--text); }
+.camped-menu button:disabled { opacity: 0.4; cursor: default; }
+.camped-menu button.is-gold { color: var(--candle-bright); }
+.camped-menu button.is-danger { color: var(--ember); }
+.camped-menusep { border-top: 1px solid var(--border); margin: 4px 6px; opacity: 0.7; }
+.camped-menuveil { position: fixed; inset: 0; z-index: 30; }
+
+/* ---- main pane: one scene's prep face ---- */
+.camped-main { padding: 22px 30px 40px; overflow-y: auto; min-width: 0; }
+.camped-scenehead { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.camped-scenetitle {
+  font-family: var(--font-display); font-size: 23px; letter-spacing: 0.03em; color: var(--cream);
+}
+.camped-chapchip {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+}
+.camped-saved { font-size: 12px; font-style: italic; color: var(--text-muted); }
+.camped-sechead { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 8px; }
+.camped-sechead h5 {
+  font-family: var(--font-display); font-size: 10.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--candle); margin: 0;
+}
+.camped-scribehint {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted);
+  border: 1px dashed var(--border); border-radius: 6px; padding: 4px 10px;
+}
+.camped-desc {
+  width: 100%; resize: vertical; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+  padding: 12px 14px; font-size: 14px; line-height: 1.55; font-family: inherit;
+}
+.camped-desc:focus { border-color: var(--candle); outline: none; }
+
+.camped-faces { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1100px) { .camped-faces { grid-template-columns: 1fr; } }
+.camped-face {
+  border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
+  background: var(--surface-0);
+}
+.camped-face > img { display: block; width: 100%; height: 150px; object-fit: cover; }
+.camped-face-empty {
+  height: 150px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 8px; color: var(--text-muted); font-size: 12.5px;
+}
+.camped-facebar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-top: 1px solid var(--border); background: var(--surface-1);
+}
+.camped-facebar b {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text); font-weight: 600;
+}
+.camped-facebar button {
+  background: none; border: 0; cursor: pointer; padding: 3px 8px; border-radius: 5px;
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--candle);
+}
+.camped-facebar button:hover { background: color-mix(in srgb, var(--candle) 10%, transparent); }
+
+/* Documents */
+.camped-doc {
+  border: 1px solid var(--border); border-radius: 9px; background: var(--surface-1);
+  padding: 12px 14px; margin-bottom: 12px;
+}
+.camped-dochead { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.camped-kind {
+  font-family: var(--font-display); font-size: 8.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 4px; padding: 2px 7px; flex: none;
+}
+.camped-kind.is-players { border-color: color-mix(in srgb, var(--candle) 55%, transparent); color: var(--candle); }
+.camped-doctitle {
+  flex: 1; min-width: 0; background: none; border: 0; border-bottom: 1px dashed transparent;
+  color: var(--text); font-size: 14px; font-family: var(--font-display); letter-spacing: 0.03em; padding: 2px 0;
+}
+.camped-doctitle:hover { border-bottom-color: var(--border); }
+.camped-doctitle:focus { outline: none; border-bottom-color: var(--candle); }
+.camped-visswitch { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: none; }
+.camped-visswitch button {
+  background: none; border: 0; cursor: pointer; padding: 4px 10px;
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.camped-visswitch button.is-on {
+  background: color-mix(in srgb, var(--candle) 14%, transparent); color: var(--candle-bright);
+}
+.camped-docdelete { background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 5px; display: flex; flex: none; }
+.camped-docdelete:hover { color: var(--ember); background: var(--surface-2); }
+.camped-body, .camped-ra {
+  width: 100%; resize: vertical; background: var(--surface-0);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 7px; color: var(--text-dim); padding: 10px 12px;
+  font-size: 13.5px; line-height: 1.55; font-family: inherit;
+}
+.camped-body:focus, .camped-ra:focus { outline: none; border-color: var(--candle); color: var(--text); }
+/* Read-alouds are authored IN VOICE — the gold boxed-text look from the books. */
+.camped-ra {
+  border-left: 3px solid color-mix(in srgb, var(--candle) 65%, transparent);
+  background: color-mix(in srgb, var(--candle) 6%, var(--surface-0));
+  font-style: italic; font-size: 14px; color: var(--text);
+  border-radius: 0 7px 7px 0;
+}
+.camped-adddocs { display: flex; gap: 8px; margin-top: 2px; }
+.camped-adddocs button {
+  background: none; cursor: pointer; padding: 6px 12px;
+  border: 1px dashed var(--border); border-radius: 7px;
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.camped-adddocs button:hover { color: var(--candle); border-color: color-mix(in srgb, var(--candle) 45%, transparent); }
+
+/* Settings */
+.camped-field { display: grid; gap: 5px; }
+.camped-field > span {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.camped-danger {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--ember) 45%, transparent);
+  border-radius: 8px; padding: 12px 14px; margin-top: 6px;
+}
+.camped-danger b { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ember); }
+
+/* ============================================================================
+   Campaign card (user reference, 2026-08-20): avatars → name → date → count
+   → role → actions. Centered, quiet, The Table's palette.
+   ========================================================================== */
+.campcard { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 6px 4px 2px; }
+.campcard-avatars { display: flex; justify-content: center; margin-bottom: 10px; }
+.campcard-avatar {
+  width: 40px; height: 40px; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 15px; color: var(--text-dim);
+  margin-left: -6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.campcard-avatar:first-child { margin-left: 0; }
+.campcard-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.campcard-avatar.is-more, .campcard-avatar.is-empty { font-size: 12px; color: var(--text-muted); }
+.campcard-name {
+  font-family: var(--font-display); font-size: 19px; letter-spacing: 0.03em;
+  color: var(--cream); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.campcard-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.campcard-count { font-family: var(--font-display); font-size: 30px; color: var(--text); margin-top: 12px; line-height: 1; }
+.campcard-count-label {
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--text-muted); margin-top: 3px;
+}
+.campcard-role {
+  font-family: var(--font-display); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--candle); margin-top: 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.campcard-levels {
+  border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 999px; padding: 2px 9px; font-size: 9px; color: var(--candle-bright);
+}
+.campcard-divider { width: 100%; border-top: 1px solid var(--border); opacity: 0.7; margin: 14px 0 12px; }
+.campcard-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.campcard-actions.is-quiet { margin-top: 8px; }

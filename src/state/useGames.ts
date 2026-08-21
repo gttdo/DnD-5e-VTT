@@ -9,6 +9,12 @@ export interface Game {
   join_code: string;
   created_at: string;
   active_scene_id: string | null;
+  /** Campaign Editor (#0041): card tagline, cover art, and the level band
+   *  that calibrates encounters + Scribe output. All optional pre-migration. */
+  description?: string;
+  cover_url?: string | null;
+  level_min?: number | null;
+  level_max?: number | null;
   /** Filled in by joining game_members for the current user */
   my_role?: "player" | "dm";
   my_character_id?: string | null;
@@ -41,9 +47,7 @@ export const useGames = () => {
     // Members carry role + character_id; the join gives us the rest.
     const { data, error } = await supabase
       .from("game_members")
-      .select(
-        "role, character_id, games!inner(id, name, dm_user_id, join_code, created_at, active_scene_id)"
-      )
+      .select("role, character_id, games!inner(*)")
       .eq("user_id", user.id);
     if (error) {
       setError(error.message);
@@ -90,14 +94,17 @@ export const useGames = () => {
   }, [user, refresh]);
 
   const createGame = useCallback(
-    async (name: string): Promise<{ game: Game | null; error: string | null }> => {
+    async (
+      name: string,
+      extras?: { level_min?: number; level_max?: number; description?: string }
+    ): Promise<{ game: Game | null; error: string | null }> => {
       if (!user) return { game: null, error: "Not signed in" };
       // Try a few codes in case of collision (the DB has a unique constraint).
       for (let attempt = 0; attempt < 5; attempt++) {
         const code = generateJoinCode();
         const { data, error } = await supabase
           .from("games")
-          .insert({ name, dm_user_id: user.id, join_code: code })
+          .insert({ name, dm_user_id: user.id, join_code: code, ...(extras ?? {}) })
           .select()
           .single();
         if (!error && data) {

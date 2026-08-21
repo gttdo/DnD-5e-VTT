@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRegionMaps, useMapHotspots } from "../state/useRegionNav";
+import { useDraftSceneIds } from "../state/useCampaign";
 import { MapPickerDialog } from "./MapPickerDialog";
 import { GameGlyph } from "./ui/GameGlyph";
 import { Icon } from "./ui/Icon";
@@ -26,6 +27,8 @@ interface Props {
 
 export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Props) => {
   const { regionMaps, loading, createRegionMap, deleteRegionMap } = useRegionMaps(gameId);
+  // Publish gate (#0041): pins into draft chapters are invisible to players.
+  const draftSceneIds = useDraftSceneIds(gameId);
   // Breadcrumb of map ids; the top is what's shown. Seeded to the root (oldest).
   const [stack, setStack] = useState<string[]>([]);
   const [editMode, setEditMode] = useState(false);
@@ -275,6 +278,8 @@ export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Pro
               <img src={current.image_url} alt={current.name} draggable={false} />
               {hotspots.map((h) => {
                 if (h.hidden && !isDM) return null;
+                // Draft-chapter targets don't exist for players (#0041).
+                if (!isDM && h.target_scene_id && draftSceneIds.has(h.target_scene_id)) return null;
                 const linked = Boolean(h.target_scene_id || h.target_map_id);
                 const px = dragPos?.id === h.id ? dragPos.x : h.x;
                 const py = dragPos?.id === h.id ? dragPos.y : h.y;

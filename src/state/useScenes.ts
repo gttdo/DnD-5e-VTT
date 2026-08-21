@@ -36,6 +36,12 @@ export interface Scene {
   fog_enabled: boolean;
   /** Revealed cell indices (y * grid_cols + x). */
   fog_revealed: number[];
+  /** Campaign Editor (#0041): story-space chapter this scene belongs to.
+   *  null = Unfiled (counts as published for the player gate). */
+  chapter_id?: string | null;
+  /** The canonical prose source for this place — seeds the Scribe's
+   *  read-aloud drafts and both image-generator prompts. */
+  description?: string;
 }
 
 /**
@@ -205,17 +211,31 @@ export const useScenes = (
   );
 
   const createScene = useCallback(
-    async (name: string): Promise<{ scene: Scene | null; error: string | null }> => {
+    async (
+      name: string,
+      extras?: Partial<Pick<Scene, "chapter_id" | "description">>
+    ): Promise<{ scene: Scene | null; error: string | null }> => {
       if (!user || !gameId) return { scene: null, error: "Not signed in" };
       const { data, error } = await supabase
         .from("scenes")
-        .insert({ game_id: gameId, name, created_by: user.id })
+        .insert({ game_id: gameId, name, created_by: user.id, ...(extras ?? {}) })
         .select()
         .single();
       if (error || !data) return { scene: null, error: error?.message ?? "Insert failed" };
       return { scene: data as Scene, error: null };
     },
     [user, gameId]
+  );
+
+  // Campaign Editor (#0041): prose + chapter membership. Optimistic like the
+  // other scene patches; the realtime echo confirms.
+  const updateSceneMeta = useCallback(
+    async (id: string, patch: Partial<Pick<Scene, "description" | "chapter_id" | "name" | "map_id">>) => {
+      setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+      const { error } = await supabase.from("scenes").update(patch).eq("id", id);
+      return { error: error?.message ?? null };
+    },
+    []
   );
 
   const renameScene = useCallback(async (id: string, name: string) => {
@@ -358,5 +378,6 @@ export const useScenes = (
     setSceneCinematicUrl,
     setSceneMode,
     updateSceneLayout,
+    updateSceneMeta,
   };
 };
