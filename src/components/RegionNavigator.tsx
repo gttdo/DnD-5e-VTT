@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useRegionMaps, useMapHotspots } from "../state/useRegionNav";
-import { useDraftSceneIds } from "../state/useCampaign";
 import { MapPickerDialog } from "./MapPickerDialog";
 import { GameGlyph } from "./ui/GameGlyph";
 import { Icon } from "./ui/Icon";
@@ -20,15 +19,18 @@ interface Props {
   isDM: boolean;
   /** Scenes to link pins to (id + name is all we need). */
   scenes: Array<{ id: string; name: string }>;
+  /** Scenes in draft chapters — their pins are hidden from players (#0041).
+   *  Passed down from TableCanvas: useDraftSceneIds subscribes to a realtime
+   *  topic, and a topic tolerates exactly ONE consumer — mounting the hook
+   *  here too crashed the tree the moment the map opened. */
+  draftSceneIds: Set<string>;
   /** Travel THIS member to a scene (per-player navigation). */
   onTravel: (sceneId: string) => void;
   onClose: () => void;
 }
 
-export const RegionNavigator = ({ gameId, isDM, scenes, onTravel, onClose }: Props) => {
+export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel, onClose }: Props) => {
   const { regionMaps, loading, createRegionMap, deleteRegionMap } = useRegionMaps(gameId);
-  // Publish gate (#0041): pins into draft chapters are invisible to players.
-  const draftSceneIds = useDraftSceneIds(gameId);
   // Breadcrumb of map ids; the top is what's shown. Seeded to the root (oldest).
   const [stack, setStack] = useState<string[]>([]);
   const [editMode, setEditMode] = useState(false);

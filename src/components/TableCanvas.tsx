@@ -5335,6 +5335,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               gameId={game.id}
               isDM={isDM}
               scenes={scenes.map((s) => ({ id: s.id, name: s.name }))}
+              draftSceneIds={draftSceneIds}
               onTravel={(sceneId) => guardTravel(sceneId)}
               onClose={() => setHudModal(null)}
             />
