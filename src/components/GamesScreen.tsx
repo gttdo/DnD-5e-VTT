@@ -8,6 +8,9 @@ import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
 import { LibraryBanner } from "./ui/LibraryBanner";
 import { useConfirm } from "../state/Confirm";
+import { isPublisher } from "../lib/packs";
+import { PackMarketplace } from "./PackMarketplace";
+import { PublishPackDialog } from "./PublishPackDialog";
 
 interface Props {
   characters: Character[];
@@ -95,8 +98,15 @@ const TIERS = [
 ] as const;
 
 export const GamesScreen = ({ characters, initialJoinCode, onOpenGame, onManageGame }: Props) => {
-  const { games, loading, error, createGame, joinByCode, leaveGame, deleteGame } = useGames();
+  const { games, loading, error, createGame, joinByCode, leaveGame, deleteGame, refresh } = useGames();
   const { user } = useAuth();
+  // Publisher tools (packs P1) — the export control only exists for accounts
+  // in pack_publishers; the packs RLS is the real lock behind it.
+  const [publisher, setPublisher] = useState(false);
+  const [publishGame, setPublishGame] = useState<Game | null>(null);
+  useEffect(() => {
+    if (user) void isPublisher(user.id).then(setPublisher);
+  }, [user]);
   const [newName, setNewName] = useState("");
   const [tierIdx, setTierIdx] = useState(1); // default Levels 1–3
   const [joinCode, setJoinCode] = useState(initialJoinCode ?? "");
@@ -220,6 +230,19 @@ export const GamesScreen = ({ characters, initialJoinCode, onOpenGame, onManageG
         </div>
       )}
 
+      <PackMarketplace
+        onInstalled={async (gameId) => {
+          await refresh();
+          const g = games.find((x) => x.id === gameId);
+          if (g) onManageGame(g);
+          else {
+            // Freshly installed — not in the (stale) list yet; fetch it.
+            const { data } = await supabase.from("games").select("*").eq("id", gameId).single();
+            if (data) onManageGame({ ...(data as Game), my_role: "dm" });
+          }
+        }}
+      />
+
       <div className="panel-title">Your campaigns</div>
       {loading && <div className="dim">Loading…</div>}
       {!loading && games.length === 0 && (
@@ -241,13 +264,17 @@ export const GamesScreen = ({ characters, initialJoinCode, onOpenGame, onManageG
             game={g}
             isOwner={g.dm_user_id === user?.id}
             members={memberMeta.get(g.id) ?? []}
+            canPublish={publisher && g.dm_user_id === user?.id}
             onOpen={() => onOpenGame(g)}
             onManage={() => onManageGame(g)}
+            onPublish={() => setPublishGame(g)}
             onLeave={() => leaveGame(g.id)}
             onDelete={() => deleteGame(g.id)}
           />
         ))}
       </div>
+
+      {publishGame && <PublishPackDialog game={publishGame} onClose={() => setPublishGame(null)} />}
     </div>
   );
 };
@@ -262,16 +289,20 @@ const CampaignCard = ({
   game,
   isOwner,
   members,
+  canPublish,
   onOpen,
   onManage,
+  onPublish,
   onLeave,
   onDelete,
 }: {
   game: Game;
   isOwner: boolean;
   members: MemberChip[];
+  canPublish: boolean;
   onOpen: () => void;
   onManage: () => void;
+  onPublish: () => void;
   onLeave: () => Promise<{ error: string | null }>;
   onDelete: () => Promise<{ error: string | null }>;
 }) => {
@@ -333,6 +364,11 @@ const CampaignCard = ({
             </Button>
           </div>
           <div className="campcard-actions is-quiet">
+            {canPublish && (
+              <Button variant="ghost" size="sm" icon="package" onClick={onPublish}>
+                Export as pack
+              </Button>
+            )}
             {isOwner ? (
               <Button
                 variant="danger-ghost"

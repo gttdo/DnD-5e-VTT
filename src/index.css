@@ -7933,3 +7933,21 @@ button.topbar-stat {
 .camped-hubmaps { display: flex; gap: 8px; font-size: 13px; color: var(--text-muted); opacity: 0.85; }
 .camped-hubmaps .is-ok { color: var(--candle); }
 .camped-hubprep { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+
+/* ---- Marketplace pack cards (packs P1) ---- */
+.pack-cover {
+  height: 120px; background-size: cover; background-position: center;
+  border-bottom: 1px solid var(--border);
+}
+.pack-name {
+  font-family: var(--font-display); font-size: 17px; font-weight: 500;
+  color: var(--cream); letter-spacing: 0.02em;
+}
+.pack-tagline { font-size: 13.5px; color: var(--text-dim); font-style: italic; margin-top: 3px; line-height: 1.45; }
+.pack-meta { display: flex; gap: 8px; margin: 10px 0 12px; min-height: 20px; }
+.pack-levels {
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--candle-bright);
+  border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 999px; padding: 3px 10px;
+}
