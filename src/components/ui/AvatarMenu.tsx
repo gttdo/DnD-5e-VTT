@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { Button } from "./Button";
 import { useTheme } from "../../state/Theme";
+import { useProfile } from "../../state/useProfile";
+import { useToast } from "../../state/Toast";
 
 /**
  * Avatar dropdown menu for the app header — replaces the inline email +
@@ -27,8 +29,27 @@ export const AvatarMenu = ({ email, onSignOut }: Props) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const { theme, toggleTheme } = useTheme();
-  const name = nameFromEmail(email);
+  const { displayName, rename } = useProfile();
+  const toast = useToast();
+  // The handle shown everywhere — the user's chosen name, or the email-derived
+  // fallback until they set one.
+  const name = displayName?.trim() || nameFromEmail(email);
   const initial = name.charAt(0).toUpperCase();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const startEdit = () => {
+    setDraft(displayName ?? name);
+    setEditing(true);
+  };
+  const commit = async () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === name) return;
+    const { error } = await rename(next);
+    if (error) toast.error(error);
+    else toast.success("Name updated.");
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -63,13 +84,34 @@ export const AvatarMenu = ({ email, onSignOut }: Props) => {
         <div className="avatar-dropdown" role="menu">
           <div className="avatar-dropdown-head">
             <span className="avatar-circle lg">{initial}</span>
-            <div style={{ minWidth: 0 }}>
-              <div className="avatar-dropdown-name">{name}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              {editing ? (
+                <input
+                  className="avatar-name-input"
+                  value={draft}
+                  autoFocus
+                  maxLength={40}
+                  placeholder="Your name"
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={() => void commit()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void commit();
+                    if (e.key === "Escape") setEditing(false);
+                  }}
+                />
+              ) : (
+                <div className="avatar-dropdown-name">{name}</div>
+              )}
               {email && <div className="avatar-dropdown-email">{email}</div>}
             </div>
           </div>
 
           <div className="avatar-dropdown-divider" />
+
+          <button className="avatar-menu-item" role="menuitem" onClick={startEdit}>
+            <Icon name="edit" size={15} />
+            <span>Edit name</span>
+          </button>
 
           <button className="avatar-menu-item" role="menuitem" onClick={toggleTheme}>
             <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />

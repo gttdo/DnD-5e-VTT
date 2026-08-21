@@ -7951,3 +7951,11 @@ button.topbar-stat {
   border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
   border-radius: 999px; padding: 3px 10px;
 }
+
+/* ---- Display-name editor in the account menu (#profiles) ---- */
+.avatar-name-input {
+  width: 100%; background: var(--surface-0); border: 1px solid var(--candle);
+  border-radius: 6px; color: var(--text); font-size: 14px; padding: 3px 8px;
+  font-family: var(--font-display); letter-spacing: 0.02em;
+}
+.avatar-name-input:focus { outline: none; }

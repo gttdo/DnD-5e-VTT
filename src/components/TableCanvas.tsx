@@ -4122,7 +4122,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             title="Story — this scene's notes and read-alouds (#0041)"
             aria-label="Story"
           >
-            <Icon name="sparkles" size={18} />
+            <Icon name="story" size={18} />
           </button>
           <button
             className={`rail-tool ${hudModal === "map" ? "active" : ""}`}
