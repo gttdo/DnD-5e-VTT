@@ -5846,7 +5846,25 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {storyOpen && !isDM && (
         <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
       )}
-      {coDMOpen && isDM && <CoDMDrawer gameId={game.id} onClose={() => setCoDMOpen(false)} />}
+      {coDMOpen && isDM && (
+        <CoDMDrawer
+          gameId={game.id}
+          sceneId={activeScene?.id ?? null}
+          sceneName={activeScene?.name ?? null}
+          onSaveToScene={async (kind, content) => {
+            if (!activeScene?.id) return;
+            const { error } = await createStoryDoc({
+              kind,
+              scene_id: activeScene.id,
+              title: kind === "read_aloud" ? "From the Co-DM" : "Co-DM note",
+              content,
+            });
+            if (error) toast.error(error);
+            else toast.success(`Saved to ${activeScene.name} — find it in Story.`);
+          }}
+          onClose={() => setCoDMOpen(false)}
+        />
+      )}
 
       {/* Present overlay (#0041 slice 1e) — the DM's boxed text on every
           screen: the table reads along while the DM reads aloud. */}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
 import { askCoDM, type CoDMTurn } from "../lib/coDM";
+import type { DocKind } from "../state/useCampaign";
 
 /**
  * The Co-DM drawer (P3 slice 3a) — a DM-only second chair that has read the
@@ -19,10 +20,25 @@ const STARTERS = [
   "What haven't the players discovered yet?",
 ];
 
-export const CoDMDrawer = ({ gameId, onClose }: { gameId: string; onClose: () => void }) => {
+export const CoDMDrawer = ({
+  gameId,
+  sceneId,
+  sceneName,
+  onSaveToScene,
+  onClose,
+}: {
+  gameId: string;
+  /** Where "Save to scene" (3b) files a harvested draft; null if none staged. */
+  sceneId: string | null;
+  sceneName: string | null;
+  /** Create a doc on the current scene from a drafted message. */
+  onSaveToScene: (kind: DocKind, content: string) => void;
+  onClose: () => void;
+}) => {
   const [turns, setTurns] = useState<CoDMTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set());
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -87,6 +103,32 @@ export const CoDMDrawer = ({ gameId, onClose }: { gameId: string; onClose: () =>
             <div key={i} className={`codm-msg ${t.role === "user" ? "is-dm" : "is-ai"}`}>
               {t.role === "assistant" && <span className="codm-who">Co-DM</span>}
               <div className="codm-bubble">{t.content}</div>
+              {/* 3b — harvest a drafted answer onto the current scene. */}
+              {t.role === "assistant" && !t.content.startsWith("⚠︎") && sceneId && (
+                savedIdx.has(i) ? (
+                  <span className="codm-saved">✓ Saved to {sceneName}</span>
+                ) : (
+                  <span className="codm-save">
+                    <span className="codm-save-label">Save to {sceneName}:</span>
+                    <button
+                      onClick={() => {
+                        onSaveToScene("read_aloud", t.content);
+                        setSavedIdx((p) => new Set(p).add(i));
+                      }}
+                    >
+                      Read-aloud
+                    </button>
+                    <button
+                      onClick={() => {
+                        onSaveToScene("note", t.content);
+                        setSavedIdx((p) => new Set(p).add(i));
+                      }}
+                    >
+                      Note
+                    </button>
+                  </span>
+                )
+              )}
             </div>
           ))}
           {thinking && (
