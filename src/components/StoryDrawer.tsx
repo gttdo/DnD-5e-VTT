@@ -1,6 +1,7 @@
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
 import type { CampaignDoc } from "../state/useCampaign";
+import { HandoutView } from "./HandoutView";
 
 /**
  * The Story drawer (#0041, slice 1e) — the DM's prep, delivered at the table.
@@ -17,26 +18,32 @@ const KIND_LABEL: Record<CampaignDoc["kind"], string> = {
   read_aloud: "Read-aloud",
   quest: "Quest",
   recap: "Recap",
+  handout: "Handout",
 };
 
-const DocRow = ({ doc, isDM, onPresent }: { doc: CampaignDoc; isDM: boolean; onPresent: (d: CampaignDoc) => void }) => (
-  <div className={`story-doc ${doc.kind === "read_aloud" ? "is-readaloud" : ""}`}>
-    <div className="story-dochead">
-      <span className={`camped-kind ${doc.visibility === "players" ? "is-players" : ""}`}>{KIND_LABEL[doc.kind]}</span>
-      <span className="story-doctitle">{doc.title || "Untitled"}</span>
-      <span style={{ flex: 1 }} />
-      {isDM && doc.visibility === "players" && doc.content.trim() && (
-        <button className="story-present" onClick={() => onPresent(doc)} title="Show this text on every player's screen">
-          ▶ Present
-        </button>
+const DocRow = ({ doc, isDM, onPresent }: { doc: CampaignDoc; isDM: boolean; onPresent: (d: CampaignDoc) => void }) => {
+  const presentable = doc.kind === "handout" || Boolean(doc.content.trim());
+  return (
+    <div className={`story-doc ${doc.kind === "read_aloud" ? "is-readaloud" : ""}`}>
+      <div className="story-dochead">
+        <span className={`camped-kind ${doc.visibility === "players" ? "is-players" : ""}`}>{KIND_LABEL[doc.kind]}</span>
+        <span className="story-doctitle">{doc.title || "Untitled"}</span>
+        <span style={{ flex: 1 }} />
+        {isDM && doc.visibility === "players" && presentable && (
+          <button className="story-present" onClick={() => onPresent(doc)} title="Show this on every player's screen">
+            ▶ Present
+          </button>
+        )}
+        {isDM && doc.visibility === "dm" && <span className="story-lock">🔒</span>}
+      </div>
+      {doc.kind === "handout" ? (
+        <HandoutView meta={doc.meta} compact />
+      ) : (
+        doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>
       )}
-      {isDM && doc.visibility === "dm" && <span className="story-lock">🔒</span>}
     </div>
-    {doc.content.trim() && (
-      <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>
-    )}
-  </div>
-);
+  );
+};
 
 export const StoryDrawer = ({
   sceneName,

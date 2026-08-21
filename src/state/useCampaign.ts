@@ -22,7 +22,7 @@ export interface Chapter {
   updated_at: string;
 }
 
-export type DocKind = "note" | "read_aloud" | "quest" | "recap";
+export type DocKind = "note" | "read_aloud" | "quest" | "recap" | "handout";
 
 export interface CampaignDoc {
   id: string;
@@ -35,6 +35,8 @@ export interface CampaignDoc {
   chapter_id: string | null;
   session_id: string | null;
   position: number;
+  /** Structured payload (#0042) — handouts store {template, fields} here. */
+  meta?: Record<string, unknown>;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -215,12 +217,13 @@ export const useCampaignDocs = (gameId: string | null) => {
 
   const createDoc = useCallback(
     async (
-      init: Partial<Pick<CampaignDoc, "kind" | "title" | "content" | "visibility" | "scene_id" | "chapter_id" | "session_id">>
+      init: Partial<Pick<CampaignDoc, "kind" | "title" | "content" | "visibility" | "scene_id" | "chapter_id" | "session_id" | "meta">>
     ): Promise<{ doc: CampaignDoc | null; error: string | null }> => {
       if (!user || !gameId) return { doc: null, error: "Not signed in" };
       const position = docs.length ? Math.max(...docs.map((d) => d.position)) + 1 : 0;
-      // Read-alouds are meant for the table, so they default player-facing.
-      const visibility = init.visibility ?? (init.kind === "read_aloud" ? "players" : "dm");
+      // Read-alouds and handouts are meant for the table — default player-facing.
+      const visibility =
+        init.visibility ?? (init.kind === "read_aloud" || init.kind === "handout" ? "players" : "dm");
       const { data, error } = await supabase
         .from("campaign_documents")
         .insert({ game_id: gameId, position, created_by: user.id, ...init, visibility })
@@ -236,7 +239,7 @@ export const useCampaignDocs = (gameId: string | null) => {
   );
 
   const updateDoc = useCallback(
-    async (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility" | "kind" | "scene_id" | "chapter_id" | "position">>) => {
+    async (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility" | "kind" | "scene_id" | "chapter_id" | "position" | "meta">>) => {
       setDocs((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch, updated_at: new Date().toISOString() } : d)));
       const { error } = await supabase.from("campaign_documents").update(patch).eq("id", id);
       return { error: error?.message ?? null };

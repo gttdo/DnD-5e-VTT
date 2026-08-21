@@ -55,6 +55,7 @@ import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
 import { StoryDrawer } from "./StoryDrawer";
+import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
 import { initiative as initiativeMod, saveBonus, abilityMod, abilityModFor, skillBonus, skillCheckChips, attackBonus, damageBonus } from "../lib/calc";
@@ -1533,15 +1534,22 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       const t = (e.body as { type?: string }).type;
       if (t === "doc_dismissed") return null;
       if (t === "doc_presented") {
-        const b = e.body as { doc_id?: string; title?: string; content?: string; doc_kind?: string };
-        return { eventId: e.id, docId: b.doc_id ?? "", title: b.title ?? "", content: b.content ?? "", kind: b.doc_kind ?? "read_aloud" };
+        const b = e.body as { doc_id?: string; title?: string; content?: string; doc_kind?: string; meta?: Record<string, unknown> };
+        return {
+          eventId: e.id,
+          docId: b.doc_id ?? "",
+          title: b.title ?? "",
+          content: b.content ?? "",
+          kind: b.doc_kind ?? "read_aloud",
+          meta: b.meta,
+        };
       }
     }
     return null;
   }, [gameFeed.entries]);
   // A player can wave the overlay away locally; the DM's ✕ dismisses for all.
   const [presentHiddenFor, setPresentHiddenFor] = useState<string | null>(null);
-  const presentDoc = (doc: { id: string; title: string; content: string; kind: string }) => {
+  const presentDoc = (doc: { id: string; title: string; content: string; kind: string; meta?: Record<string, unknown> }) => {
     if (!authUser) return;
     appendGameLog({
       game_id: game.id,
@@ -1549,7 +1557,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       kind: "system",
       author_id: authUser.id,
       author_name: myName,
-      body: { type: "doc_presented", doc_id: doc.id, title: doc.title, content: doc.content, doc_kind: doc.kind },
+      body: {
+        type: "doc_presented",
+        doc_id: doc.id,
+        title: doc.title,
+        content: doc.content,
+        doc_kind: doc.kind,
+        // Handouts snapshot their structured fields; the overlay re-renders
+        // the artifact client-side on every screen (#0042).
+        ...(doc.meta ? { meta: doc.meta } : {}),
+      },
     });
     setPresentHiddenFor(null);
     toast.success("Presented to the table");
@@ -5777,7 +5794,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null
           }
           isDM={isDM}
-          onPresent={(d) => presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind })}
+          onPresent={(d) => presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind, meta: d.meta })}
           onClose={() => setStoryOpen(false)}
         />
       )}
@@ -5786,10 +5803,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           screen: the table reads along while the DM reads aloud. */}
       {presented && presentHiddenFor !== presented.eventId && (
         <div className="present-veil">
-          <div className="present-card">
-            <div className="present-kicker">{presented.kind === "recap" ? "Previously on…" : "The DM reads…"}</div>
-            {presented.title && <div className="present-title">{presented.title}</div>}
-            <div className="present-text">{presented.content}</div>
+          <div className={`present-card ${presented.kind === "handout" ? "is-handout" : ""}`}>
+            <div className="present-kicker">
+              {presented.kind === "handout" ? "The DM hands you…" : presented.kind === "recap" ? "Previously on…" : "The DM reads…"}
+            </div>
+            {presented.kind === "handout" ? (
+              <HandoutView meta={presented.meta} />
+            ) : (
+              <>
+                {presented.title && <div className="present-title">{presented.title}</div>}
+                <div className="present-text">{presented.content}</div>
+              </>
+            )}
             <button
               className="present-close"
               onClick={() => (isDM ? dismissPresented() : setPresentHiddenFor(presented.eventId))}

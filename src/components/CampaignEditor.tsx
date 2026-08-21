@@ -8,6 +8,8 @@ import { useChapters, useCampaignDocs, type Chapter, type CampaignDoc, type DocK
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useRegionMaps } from "../state/useRegionNav";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
+import { HandoutDocBody } from "./HandoutEditor";
+import { EMPTY_FIELDS } from "../lib/handouts";
 import type { Game } from "../state/useGames";
 import type { MapAsset } from "../state/useMaps";
 import { MapPickerDialog } from "./MapPickerDialog";
@@ -38,6 +40,7 @@ const KIND_LABEL: Record<DocKind, string> = {
   read_aloud: "Read-aloud",
   quest: "Quest",
   recap: "Recap",
+  handout: "Handout",
 };
 
 export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
@@ -789,8 +792,18 @@ const ScenePage = ({
         <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
       ))}
       <div className="camped-adddocs">
-        {(["note", "read_aloud", "quest"] as DocKind[]).map((k) => (
-          <button key={k} onClick={() => void createDoc({ kind: k, scene_id: scene.id, title: "" })}>
+        {(["note", "read_aloud", "quest", "handout"] as DocKind[]).map((k) => (
+          <button
+            key={k}
+            onClick={() =>
+              void createDoc({
+                kind: k,
+                scene_id: scene.id,
+                title: "",
+                ...(k === "handout" ? { meta: { template: "letter", fields: EMPTY_FIELDS } } : {}),
+              })
+            }
+          >
             ＋ {KIND_LABEL[k]}
           </button>
         ))}
@@ -941,8 +954,17 @@ const OverviewPage = ({
         <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
       ))}
       <div className="camped-adddocs">
-        {(["note", "quest"] as DocKind[]).map((k) => (
-          <button key={k} onClick={() => void createDoc({ kind: k, title: "" })}>
+        {(["note", "quest", "handout"] as DocKind[]).map((k) => (
+          <button
+            key={k}
+            onClick={() =>
+              void createDoc({
+                kind: k,
+                title: "",
+                ...(k === "handout" ? { meta: { template: "notice", fields: EMPTY_FIELDS } } : {}),
+              })
+            }
+          >
             ＋ {KIND_LABEL[k]}
           </button>
         ))}
@@ -998,7 +1020,7 @@ const DocCard = ({
           title="Delete document"
           onClick={async () => {
             if (
-              doc.content.trim() === "" ||
+              (doc.kind !== "handout" && doc.content.trim() === "") ||
               (await confirm({ title: "Delete document", message: `Delete "${doc.title || KIND_LABEL[doc.kind]}"?`, confirmLabel: "Delete", danger: true }))
             ) {
               void deleteDoc(doc.id);
@@ -1008,20 +1030,24 @@ const DocCard = ({
           <Icon name="delete" size={14} />
         </button>
       </div>
-      <textarea
-        className={isRA ? "camped-ra" : "camped-body"}
-        placeholder={
-          isRA
-            ? "The words you'll read aloud — mist on the water, a bell that rings with no hand on the rope…"
-            : doc.kind === "quest"
-              ? "Hook → steps → reward."
-              : "DM notes — what's really going on here."
-        }
-        value={content.value}
-        onChange={(e) => content.set(e.target.value)}
-        onBlur={content.flush}
-        rows={isRA ? 3 : 4}
-      />
+      {doc.kind === "handout" ? (
+        <HandoutDocBody doc={doc} updateDoc={updateDoc as (id: string, patch: { meta: Record<string, unknown> }) => Promise<{ error: string | null }>} />
+      ) : (
+        <textarea
+          className={isRA ? "camped-ra" : "camped-body"}
+          placeholder={
+            isRA
+              ? "The words you'll read aloud — mist on the water, a bell that rings with no hand on the rope…"
+              : doc.kind === "quest"
+                ? "Hook → steps → reward."
+                : "DM notes — what's really going on here."
+          }
+          value={content.value}
+          onChange={(e) => content.set(e.target.value)}
+          onBlur={content.flush}
+          rows={isRA ? 3 : 4}
+        />
+      )}
     </div>
   );
 };

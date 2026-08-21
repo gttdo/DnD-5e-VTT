@@ -7814,3 +7814,88 @@ button.topbar-stat {
   background: var(--surface-1); border: 1px solid var(--border);
   border-radius: 6px; padding: 4px 8px;
 }
+
+/* ============================================================================
+   Handouts (#0042) — in-world artifacts, typeset client-side. Deliberately
+   LIGHT paper against the dark app: a prop the DM hands across the table.
+   Single committed look; these do not follow the app theme.
+   ========================================================================== */
+.handout {
+  --paper: #ece0c4;
+  --paper-edge: #d8c9a5;
+  --ink-h: #3a2c1a;
+  --ink-h-dim: #6b5940;
+  background:
+    radial-gradient(ellipse 120% 100% at 50% 0%, rgba(255, 250, 235, 0.5), transparent 60%),
+    var(--paper);
+  color: var(--ink-h);
+  border: 1px solid var(--paper-edge);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 10px 30px rgba(0, 0, 0, 0.45);
+  padding: 26px 30px;
+  max-width: 460px;
+  font-family: var(--font-body, Georgia), Georgia, serif;
+  line-height: 1.55;
+}
+.handout.is-compact { padding: 16px 20px; max-width: 100%; }
+.handout-title {
+  font-family: var(--font-display);
+  font-size: 21px; letter-spacing: 0.1em; text-transform: uppercase;
+  text-align: center; color: var(--ink-h); text-wrap: balance;
+}
+.handout--notice .handout-title { font-size: 26px; letter-spacing: 0.18em; }
+.handout-subtitle {
+  text-align: center; font-size: 12px; font-style: italic;
+  color: var(--ink-h-dim); margin-top: 3px; letter-spacing: 0.04em;
+}
+.handout-rule {
+  border-top: 1px solid var(--ink-h-dim); opacity: 0.5; margin: 12px auto;
+  width: 70%;
+}
+.handout-body { font-size: 14.5px; margin: 0 0 10px; white-space: pre-wrap; }
+.handout--notice .handout-body { text-align: center; }
+.handout-lines { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 4px; }
+.handout-line { display: flex; align-items: baseline; gap: 6px; font-size: 14px; }
+.handout-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.handout-dots {
+  flex: 1; border-bottom: 1px dotted var(--ink-h-dim); opacity: 0.6;
+  transform: translateY(-3px); min-width: 16px;
+}
+.handout-price { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.handout-footer {
+  margin-top: 14px; text-align: center; font-size: 12.5px; font-style: italic;
+  color: var(--ink-h-dim);
+}
+.handout--notice .handout-footer {
+  font-style: normal; font-family: var(--font-display); font-size: 13px;
+  letter-spacing: 0.08em; color: var(--ink-h);
+}
+/* Letter: handwritten register — italic serif, ragged, signed right. */
+.handout--letter { max-width: 420px; }
+.handout-salutation { font-size: 15px; font-style: italic; margin-bottom: 12px; }
+.handout-script { font-size: 15.5px; font-style: italic; white-space: pre-wrap; }
+.handout-signature { margin-top: 16px; text-align: right; font-size: 15px; font-style: italic; }
+
+/* Editor: fields left, living preview right */
+.handout-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1100px) { .handout-editor { grid-template-columns: 1fr; } }
+.handout-form { display: flex; flex-direction: column; gap: 9px; }
+.handout-template-sel {
+  align-self: flex-start;
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--candle-bright);
+  background: var(--surface-1); border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  border-radius: 6px; padding: 4px 8px;
+}
+.handout-field { display: grid; gap: 3px; }
+.handout-field > span {
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.handout-preview { display: flex; align-items: flex-start; justify-content: center; padding: 4px; }
+
+/* Present overlay: the handout IS the card — drop the gold frame around it */
+.present-card.is-handout { background: none; border: 0; box-shadow: none; padding: 0; text-align: center; }
+.present-card.is-handout .present-kicker { margin-bottom: 12px; }
+.present-card.is-handout .handout { margin: 0 auto; text-align: left; }
+.present-card.is-handout .present-close { border-color: color-mix(in srgb, var(--cream) 35%, transparent); color: var(--cream); }
