@@ -41,7 +41,7 @@ import { RegionNavigator } from "./RegionNavigator";
 import { useFog } from "../state/useFog";
 import { useDrawings, type DrawKind } from "../state/useDrawings";
 import { useHotspots } from "../state/useHotspots";
-import { useDraftSceneIds } from "../state/useCampaign";
+import { useDraftSceneIds, useCampaignDocs } from "../state/useCampaign";
 import { useSessions, sessionDuration } from "../state/useSessions";
 import { appendGameLog } from "../lib/gameLog";
 import { usePartyPresence } from "../state/usePartyPresence";
@@ -54,6 +54,7 @@ import { RulesReference } from "./RulesReference";
 import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
+import { StoryDrawer } from "./StoryDrawer";
 import { RotateHint } from "./RotateHint";
 import { initiative as initiativeMod, saveBonus, abilityMod, abilityModFor, skillBonus, skillCheckChips, attackBonus, damageBonus } from "../lib/calc";
 import { LootDialog } from "./LootDialog";
@@ -1514,6 +1515,54 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   const openLog = () => {
     setLogSeen(gameFeed.entries.length);
     setLogOpen(true);
+  };
+
+  // Story drawer + Present (#0041 slice 1e). The campaign's documents at the
+  // table: the DM reads notes quietly and presents read-alouds; players' doc
+  // list is already RLS-filtered to player-facing material.
+  const [storyOpen, setStoryOpen] = useState(false);
+  const { docs: storyDocs } = useCampaignDocs(game.id);
+  // Present state is DERIVED FROM THE LOG — a doc_presented system event with
+  // a content snapshot, undone by doc_dismissed. No schema, survives refresh,
+  // reaches late joiners, and the presentation itself is part of the record.
+  const presented = useMemo(() => {
+    for (let i = gameFeed.entries.length - 1; i >= 0; i--) {
+      const e = gameFeed.entries[i];
+      if (e.kind !== "system") continue;
+      const t = (e.body as { type?: string }).type;
+      if (t === "doc_dismissed") return null;
+      if (t === "doc_presented") {
+        const b = e.body as { doc_id?: string; title?: string; content?: string; doc_kind?: string };
+        return { eventId: e.id, docId: b.doc_id ?? "", title: b.title ?? "", content: b.content ?? "", kind: b.doc_kind ?? "read_aloud" };
+      }
+    }
+    return null;
+  }, [gameFeed.entries]);
+  // A player can wave the overlay away locally; the DM's ✕ dismisses for all.
+  const [presentHiddenFor, setPresentHiddenFor] = useState<string | null>(null);
+  const presentDoc = (doc: { id: string; title: string; content: string; kind: string }) => {
+    if (!authUser) return;
+    appendGameLog({
+      game_id: game.id,
+      session_id: activeSessionRef.current?.id ?? null,
+      kind: "system",
+      author_id: authUser.id,
+      author_name: myName,
+      body: { type: "doc_presented", doc_id: doc.id, title: doc.title, content: doc.content, doc_kind: doc.kind },
+    });
+    setPresentHiddenFor(null);
+    toast.success("Presented to the table");
+  };
+  const dismissPresented = () => {
+    if (!authUser || !presented) return;
+    appendGameLog({
+      game_id: game.id,
+      session_id: activeSessionRef.current?.id ?? null,
+      kind: "system",
+      author_id: authUser.id,
+      author_name: myName,
+      body: { type: "doc_dismissed", doc_id: presented.docId },
+    });
   };
   const saves = useSaveRequests(game.id);
   const { tables, classes } = useRules();
@@ -4017,11 +4066,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           <button
             className={`rail-tool has-badge ${logOpen ? "active" : ""}`}
             onClick={() => (logOpen ? setLogOpen(false) : openLog())}
-            title="Game Log — every roll, in order"
+            title="Game Log — rolls, chat, and the record of play"
             aria-label={unseenRolls ? `Game Log (${unseenRolls} new)` : "Game Log"}
           >
             <Icon name="library" size={18} />
             {unseenRolls > 0 && <span className="rail-badge">{unseenRolls > 9 ? "9+" : unseenRolls}</span>}
+          </button>
+          <button
+            className={`rail-tool ${storyOpen ? "active" : ""}`}
+            onClick={() => setStoryOpen((v) => !v)}
+            title="Story — this scene's notes and read-alouds (#0041)"
+            aria-label="Story"
+          >
+            <Icon name="sparkles" size={18} />
           </button>
           <button
             className={`rail-tool ${hudModal === "map" ? "active" : ""}`}
@@ -5680,6 +5737,42 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           onSend={gameFeed.sendChat}
           onClose={() => setLogOpen(false)}
         />
+      )}
+
+      {storyOpen && (
+        <StoryDrawer
+          sceneName={activeScene?.name ?? "No scene"}
+          sceneDocs={storyDocs.filter((d) => d.scene_id === activeScene?.id)}
+          campaignDocs={storyDocs.filter((d) => !d.scene_id && !d.chapter_id && !d.session_id && d.kind !== "recap")}
+          latestRecap={
+            storyDocs
+              .filter((d) => d.kind === "recap" && d.session_id)
+              .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null
+          }
+          isDM={isDM}
+          onPresent={(d) => presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind })}
+          onClose={() => setStoryOpen(false)}
+        />
+      )}
+
+      {/* Present overlay (#0041 slice 1e) — the DM's boxed text on every
+          screen: the table reads along while the DM reads aloud. */}
+      {presented && presentHiddenFor !== presented.eventId && (
+        <div className="present-veil">
+          <div className="present-card">
+            <div className="present-kicker">{presented.kind === "recap" ? "Previously on…" : "The DM reads…"}</div>
+            {presented.title && <div className="present-title">{presented.title}</div>}
+            <div className="present-text">{presented.content}</div>
+            <button
+              className="present-close"
+              onClick={() => (isDM ? dismissPresented() : setPresentHiddenFor(presented.eventId))}
+              title={isDM ? "Dismiss for everyone" : "Hide (just for you)"}
+            >
+              <Icon name="close" size={14} />
+              {isDM ? "Dismiss" : "Hide"}
+            </button>
+          </div>
+        </div>
       )}
 
       {tokenPickerOpen && activeScene && (

@@ -37,6 +37,10 @@ const systemLine = (body: Record<string, unknown>): string => {
       return `Session ${body.number} ended`;
     case "scene_staged":
       return `Scene: ${body.scene}`;
+    case "doc_presented":
+      return `Presented: ${body.title || "a reading"}`;
+    case "doc_dismissed":
+      return "Reading dismissed";
     default:
       return String(body.type ?? "event");
   }

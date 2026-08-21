@@ -7729,3 +7729,71 @@ button.topbar-stat {
   color: var(--candle-bright); cursor: pointer;
 }
 .feed-send:disabled { opacity: 0.4; cursor: default; }
+
+/* ---- Story drawer + Present overlay (#0041 slice 1e) ---- */
+.story-list { display: flex; flex-direction: column; gap: 10px; }
+.story-section {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--candle); margin: 8px 0 2px;
+}
+.story-doc {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-1); padding: 10px 12px;
+}
+.story-dochead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.story-doctitle {
+  font-family: var(--font-display); font-size: 12.5px; letter-spacing: 0.04em;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.story-lock { font-size: 11px; opacity: 0.7; }
+.story-present {
+  flex: none; background: color-mix(in srgb, var(--candle) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--candle) 50%, transparent);
+  border-radius: 6px; cursor: pointer; padding: 3px 10px;
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--candle-bright);
+}
+.story-present:hover { background: color-mix(in srgb, var(--candle) 22%, transparent); }
+.story-body { font-size: 13px; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; }
+.story-ra {
+  border-left: 3px solid color-mix(in srgb, var(--candle) 65%, transparent);
+  background: color-mix(in srgb, var(--candle) 6%, var(--surface-0));
+  border-radius: 0 6px 6px 0; padding: 8px 12px;
+  font-style: italic; font-size: 13.5px; color: var(--text); line-height: 1.55; white-space: pre-wrap;
+}
+
+.present-veil {
+  position: absolute; inset: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(12, 9, 6, 0.55); backdrop-filter: blur(3px);
+  animation: present-in 320ms ease-out;
+}
+@keyframes present-in { from { opacity: 0; } }
+.present-card {
+  max-width: min(680px, 88vw); max-height: 76vh; overflow-y: auto;
+  background: color-mix(in srgb, var(--candle) 5%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--candle) 55%, transparent);
+  border-radius: 12px; padding: 28px 34px 22px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65), 0 0 40px color-mix(in srgb, var(--candle) 12%, transparent);
+}
+.present-kicker {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.26em;
+  text-transform: uppercase; color: var(--candle); margin-bottom: 8px;
+}
+.present-title {
+  font-family: var(--font-display); font-size: 19px; letter-spacing: 0.05em;
+  color: var(--cream); margin-bottom: 12px;
+}
+.present-text {
+  font-size: 16.5px; font-style: italic; color: var(--text); line-height: 1.7;
+  white-space: pre-wrap; max-width: 60ch;
+}
+.present-close {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 18px;
+  background: none; border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; padding: 5px 14px; color: var(--text-dim);
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.present-close:hover { color: var(--text); border-color: var(--border-strong); }
+@media (prefers-reduced-motion: reduce) { .present-veil { animation: none; } }
