@@ -246,23 +246,32 @@ export interface BuildPromptInput {
   /** battlemap (default) uses the top-down style presets; regional swaps in the
    *  overworld wrapper and ignores the battle-scale style. */
   profile?: MapProfile;
+  /** Matched faces: a reference image is being fed — reinterpret the SAME place. */
+  matched?: boolean;
 }
+
+const MATCH_CLAUSE =
+  "The reference image shows this same location (e.g. its atmospheric backdrop). " +
+  "Reinterpret the SAME place — keep its architecture, layout, key features, " +
+  "materials, and colour palette — but rendered strictly as the top-down map below. ";
 
 export const buildImagePrompt = ({
   description,
   style,
   family = "realistic",
   profile = "battlemap",
+  matched = false,
 }: BuildPromptInput): string => {
   const desc = description.trim();
+  const match = matched ? MATCH_CLAUSE : "";
   if (profile === "regional") {
-    const parts = [regionalWrapperFor(family)];
+    const parts = [match + regionalWrapperFor(family)];
     if (desc) parts.push(`The region: ${desc}.`);
     return parts.join(" ");
   }
   const preset = findPreset(style);
   const parts = [
-    wrapperFor(family),
+    match + wrapperFor(family),
     `Scene: ${preset.label.toLowerCase()} — ${preset.hint}.`,
   ];
   if (desc) parts.push(`Specific details: ${desc}.`);

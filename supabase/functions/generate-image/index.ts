@@ -44,6 +44,11 @@ interface Body {
   quality?: Quality;
   /** "transparent" yields a PNG with no backdrop (spell emblems). Default opaque. */
   background?: "transparent" | "opaque";
+  /** Matched faces (#matched-faces): condition generation on an existing image
+   *  so a scene's backdrop + battlemap depict the SAME place. When set (and
+   *  opaque), we route through the image-EDIT endpoint with this image as the
+   *  reference instead of pure text-to-image. */
+  reference_url?: string;
 }
 
 Deno.serve(async (req) => {
@@ -89,6 +94,8 @@ Deno.serve(async (req) => {
   //    trips on a genuinely hung call — NOT normal generation.
   const wantsTransparent = body.background === "transparent";
   const model = wantsTransparent ? "gpt-image-1.5" : "gpt-image-2";
+  // Reference conditioning only applies to opaque art (never spell emblems).
+  const referenceUrl = !wantsTransparent ? body.reference_url : undefined;
 
   const DEADLINE_MS = 280_000; // only catches a genuinely hung call
   const ctrl = new AbortController();
@@ -96,19 +103,44 @@ Deno.serve(async (req) => {
 
   let openaiData: { data?: Array<{ b64_json?: string }> };
   try {
-    const resp = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        prompt,
-        size,
-        quality,
-        n: 1,
-        ...(wantsTransparent ? { background: "transparent", output_format: "png" } : {}),
-      }),
-      signal: ctrl.signal,
-    });
+    let resp: Response;
+    if (referenceUrl) {
+      // Image EDIT — feed the counterpart image so the two faces of a scene
+      // match. Multipart form-data; do NOT set Content-Type (fetch adds the
+      // boundary). Fetch the reference from our own public bucket.
+      const refResp = await fetch(referenceUrl, { signal: ctrl.signal });
+      if (!refResp.ok) {
+        return json({ error: `could not load reference image (${refResp.status})` }, 502);
+      }
+      const refBytes = new Uint8Array(await refResp.arrayBuffer());
+      const form = new FormData();
+      form.append("model", model);
+      form.append("prompt", prompt);
+      form.append("size", size);
+      form.append("quality", quality);
+      form.append("n", "1");
+      form.append("image", new Blob([refBytes], { type: "image/png" }), "reference.png");
+      resp = await fetch("https://api.openai.com/v1/images/edits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+        body: form,
+        signal: ctrl.signal,
+      });
+    } else {
+      resp = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          prompt,
+          size,
+          quality,
+          n: 1,
+          ...(wantsTransparent ? { background: "transparent", output_format: "png" } : {}),
+        }),
+        signal: ctrl.signal,
+      });
+    }
     if (!resp.ok) {
       const txt = await resp.text();
       console.error("openai error:", resp.status, txt);

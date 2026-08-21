@@ -43,11 +43,18 @@ const MOOD_HINT: Record<Exclude<SceneMood, "auto">, string> = {
   eerie: "cold fog, sickly light, and a sense of dread",
 };
 
-export const buildScenePrompt = (description: string, mood: SceneMood = "auto"): string => {
+export const buildScenePrompt = (
+  description: string,
+  mood: SceneMood = "auto",
+  matched = false
+): string => {
   const moodLine = mood === "auto" ? "" : `Lighting and mood: ${MOOD_HINT[mood]}. `;
+  const matchLine = matched
+    ? "The reference image is a top-down map of this location — reinterpret the SAME place, keeping its architecture, layout, key features, materials, and colour palette, but rendered as the eye-level backdrop below. "
+    : "";
   return [
     "Ultrawide cinematic fantasy establishing shot — a matte-painting backdrop for a tabletop RPG scene.",
-    `Subject: ${description.trim()}.`,
+    matchLine + (description.trim() ? `Subject: ${description.trim()}.` : ""),
     moodLine +
       "Painterly and atmospheric, with depth and volumetric light, rich detail, first-person eye-level framing.",
     "No characters unless described, no text, no UI, no map grid, no top-down view — this is a scene backdrop, not a map.",
@@ -56,14 +63,16 @@ export const buildScenePrompt = (description: string, mood: SceneMood = "auto"):
     .join(" ");
 };
 
-/** Generate a cinematic scene backdrop. Returns the public image URL. */
+/** Generate a cinematic scene backdrop. Returns the public image URL.
+ *  `referenceUrl` conditions on an existing image (matched faces). */
 export const generateScene = async (
   description: string,
-  mood: SceneMood = "auto"
+  mood: SceneMood = "auto",
+  referenceUrl?: string
 ): Promise<{ url: string | null; error: string | null }> => {
-  const prompt = buildScenePrompt(description, mood);
+  const prompt = buildScenePrompt(description, mood, Boolean(referenceUrl));
   const { data, error } = await supabase.functions.invoke("generate-image", {
-    body: { prompt, size: "1536x1024", quality: "medium" },
+    body: { prompt, size: "1536x1024", quality: "medium", reference_url: referenceUrl },
   });
   if (error) return { url: null, error: await readFnError(error) };
   const payload = data as { image_url?: string; error?: string };

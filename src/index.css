@@ -538,6 +538,32 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   background: var(--border);
   margin: 4px 0;
 }
+/* Matched-faces reference chip in the Create map dialog. */
+.map-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid var(--glass-hair);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+}
+.map-ref-chip img {
+  width: 34px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 5px;
+}
+.map-ref-name {
+  font-size: 12px;
+  color: var(--text);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* "Clear this face" tile leading the map picker grid (IA: set + clear live in
    the same dialog). */
 .map-clear-tile {

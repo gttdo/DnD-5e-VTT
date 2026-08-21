@@ -4,6 +4,7 @@ import { useMaps, type MapAsset } from "../state/useMaps";
 import { Dialog } from "./ui/Dialog";
 import { Icon } from "./ui/Icon";
 import { GenerationProgress } from "./ui/GenerationProgress";
+import { MapPickerDialog } from "./MapPickerDialog";
 import {
   STYLE_PRESETS,
   SIZE_PRESETS,
@@ -95,6 +96,10 @@ export const GenerateMapDialog = ({ initialKind = "battlemap", applyToScene, onC
   const [size, setSize] = useState<MapSize>("1536x1024");
   const [quality, setQuality] = useState<MapQuality>("high");
   const [busy, setBusy] = useState(false);
+  // Matched faces: condition on an existing library image so the two faces of a
+  // scene (backdrop + battlemap) depict the same place.
+  const [reference, setReference] = useState<MapAsset | null>(null);
+  const [refPickerOpen, setRefPickerOpen] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [savedMap, setSavedMap] = useState<MapAsset | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,16 +151,18 @@ export const GenerateMapDialog = ({ initialKind = "battlemap", applyToScene, onC
     setSavedMap(null);
     try {
       // Backdrops use the eye-level scene prompt at wall-clock-safe settings;
-      // battlemaps/region maps use the cartographer wrappers.
+      // battlemaps/region maps use the cartographer wrappers. A reference image
+      // (matched faces) conditions the generation on an existing map.
+      const matched = Boolean(reference);
       const prompt =
         kind === "cinematic"
-          ? buildScenePrompt(description, mood)
-          : buildImagePrompt({ description, style, family, profile: kind });
+          ? buildScenePrompt(description, mood, matched)
+          : buildImagePrompt({ description, style, family, profile: kind, matched });
       const { data, error } = await supabase.functions.invoke("generate-image", {
         body:
           kind === "cinematic"
-            ? { prompt, size: "1536x1024", quality: "medium" }
-            : { prompt, size, quality },
+            ? { prompt, size: "1536x1024", quality: "medium", reference_url: reference?.image_url }
+            : { prompt, size, quality, reference_url: reference?.image_url },
       });
       if (error) {
         setError(error.message);
@@ -434,10 +441,37 @@ export const GenerateMapDialog = ({ initialKind = "battlemap", applyToScene, onC
             )}
           </div>
 
+          {/* Matched faces: base this generation on an existing image so a
+              scene's backdrop + battlemap look like the same place. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span className="dim" style={uploadLabel}>Match an existing image (optional)</span>
+            {reference ? (
+              <div className="map-ref-chip">
+                <img src={reference.image_url} alt={reference.name} />
+                <span className="map-ref-name">{reference.name}</span>
+                <button type="button" className="ghost" onClick={() => setReference(null)} style={{ fontSize: 11 }}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setRefPickerOpen(true)}
+                style={{ fontSize: 12, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6 }}
+                title="Reinterpret an existing map/backdrop as this kind, keeping the same place"
+              >
+                <Icon name="image" size={14} /> Choose a reference…
+              </button>
+            )}
+          </div>
+
           <div className="dim" style={{ fontSize: 11 }}>
-            {kind === "cinematic"
-              ? "Generation takes ~15–40s. Wide 16:10, painted at medium quality to stay within the render budget."
-              : "Generation takes ~15–40s. Every finished map is saved to your library."}
+            {reference
+              ? "Reinterprets your reference as this kind — same place, matched look."
+              : kind === "cinematic"
+                ? "Generation takes ~15–40s. Wide 16:10, painted at medium quality to stay within the render budget."
+                : "Generation takes ~15–40s. Every finished map is saved to your library."}
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -567,6 +601,17 @@ export const GenerateMapDialog = ({ initialKind = "battlemap", applyToScene, onC
         <div className="panel" style={{ borderColor: "var(--ember)", fontSize: 12 }}>
           {error}
         </div>
+      )}
+
+      {refPickerOpen && (
+        <MapPickerDialog
+          currentMapId={reference?.id ?? null}
+          onPick={(m) => {
+            setReference(m);
+            setRefPickerOpen(false);
+          }}
+          onClose={() => setRefPickerOpen(false)}
+        />
       )}
     </Dialog>
   );
