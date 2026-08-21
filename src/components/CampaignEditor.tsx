@@ -18,6 +18,7 @@ interface SharesApi {
 }
 const SharesContext = createContext<SharesApi>({ isShared: () => false, share: () => {}, unshare: () => {} });
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
+import { useCastRoster, type CastMember } from "../state/useCastRoster";
 import { useRegionMaps } from "../state/useRegionNav";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
 import { HandoutDocBody } from "./HandoutEditor";
@@ -107,8 +108,10 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
   // Table-time (#0041 §5): sessions for the Timeline tab. canManage lets a
   // stale forgotten session auto-close from the editor too.
   const { sessions } = useSessions(game.id, { canManage: true });
+  // The Cast — the campaign's people. Instance state, never pack-exported.
+  const cast = useCastRoster(game.id);
 
-  const [tab, setTab] = useState<"story" | "timeline">("story");
+  const [tab, setTab] = useState<"story" | "timeline" | "cast">("story");
   const [selection, setSelection] = useState<Selection>({ type: "overview" });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [menuFor, setMenuFor] = useState<string | null>(null); // chapter/scene id
@@ -287,7 +290,17 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
             <button className={tab === "timeline" ? "is-on" : ""} onClick={() => setTab("timeline")}>
               Timeline
             </button>
+            <button className={tab === "cast" ? "is-on" : ""} onClick={() => setTab("cast")}>
+              Cast
+            </button>
           </div>
+
+          {tab === "cast" && (
+            <div className="dim" style={{ fontSize: 13, padding: "8px 10px" }}>
+              The campaign's people — every member and the character they
+              brought. Lives with this table only; never exported in packs.
+            </div>
+          )}
 
           {tab === "timeline" && sessions.length === 0 && (
             <EmptyState icon="rules" title="No sessions yet" compact>
@@ -476,10 +489,31 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
 
         {/* ------------------------------------------------ main pane */}
         <div className="camped-main">
-          {selection.type === "overview" && (
+          {tab === "cast" && (
+            <CastPage
+              members={cast.members}
+              loading={cast.loading}
+              dmUserId={campaign.dm_user_id}
+              onRemove={async (m) => {
+                if (
+                  await confirm({
+                    title: "Remove from campaign",
+                    message: `Remove ${m.name} from "${campaign.name}"? Their seat is freed; their character stays theirs and is untouched.`,
+                    confirmLabel: "Remove",
+                    danger: true,
+                  })
+                ) {
+                  const { error } = await cast.removeMember(m.user_id);
+                  if (error) toast.error(error);
+                  else toast.success(`${m.name} removed from the campaign.`);
+                }
+              }}
+            />
+          )}
+          {tab !== "cast" && selection.type === "overview" && (
             <OverviewPage campaign={campaign} docs={docs} createDoc={createDoc} updateDoc={updateDoc} deleteDoc={deleteDoc} />
           )}
-          {selectedScene && (
+          {tab !== "cast" && selectedScene && (
             <ScenePage
               key={selectedScene.id}
               scene={selectedScene}
@@ -493,12 +527,12 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
               deleteDoc={deleteDoc}
             />
           )}
-          {selection.type === "scene" && !selectedScene && (
+          {tab !== "cast" && selection.type === "scene" && !selectedScene && (
             <div className="dim" style={{ padding: 32 }}>
               That scene is gone — pick another from the story tree.
             </div>
           )}
-          {selection.type === "chapter" && (
+          {tab !== "cast" && selection.type === "chapter" && (
             <ChapterPage
               chapter={chapters.find((c) => c.id === selection.id) ?? null}
               index={chapters.findIndex((c) => c.id === selection.id)}
@@ -512,7 +546,7 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
               deleteDoc={deleteDoc}
             />
           )}
-          {selection.type === "session" && (
+          {tab !== "cast" && selection.type === "session" && (
             <SessionPage
               session={sessions.find((s) => s.id === selection.id) ?? null}
               docs={docs.filter((d) => d.kind === "recap" && d.session_id === selection.id)}
@@ -1082,6 +1116,69 @@ const SessionPage = ({
     </>
   );
 };
+
+// ============================================================================
+/** The Cast — the campaign's people, as a ledger (the table's Party panel is
+ *  "the room"; this is the roster). Instance state, never exported in packs. */
+const CastPage = ({
+  members,
+  loading,
+  dmUserId,
+  onRemove,
+}: {
+  members: CastMember[];
+  loading: boolean;
+  dmUserId: string;
+  onRemove: (m: CastMember) => void;
+}) => (
+  <>
+    <div className="camped-scenehead">
+      <span className="camped-scenetitle">Cast</span>
+      <span className="camped-chapchip">
+        {members.filter((m) => m.role === "player").length} player
+        {members.filter((m) => m.role === "player").length === 1 ? "" : "s"}
+      </span>
+    </div>
+    <p className="dim" style={{ fontSize: 14, maxWidth: "62ch", margin: "6px 0 18px" }}>
+      Everyone at this table and the character they brought. Removing someone
+      frees their seat — their character remains theirs, untouched.
+    </p>
+    {loading && <div className="dim">Loading…</div>}
+    {!loading && members.length === 0 && (
+      <div className="dim" style={{ fontSize: 13.5 }}>
+        No one has joined yet — share the invite from the table's Party panel.
+      </div>
+    )}
+    <div className="cast-grid">
+      {members.map((m) => (
+        <div key={m.user_id} className="cast-card">
+          <div className="cast-portrait">
+            {m.character?.portrait ? <img src={m.character.portrait} alt="" /> : <span>{m.name.charAt(0).toUpperCase()}</span>}
+          </div>
+          <div className="cast-info">
+            <div className="cast-player">
+              {m.name}
+              <span className={`cast-role ${m.role === "dm" ? "is-dm" : ""}`}>{m.role === "dm" ? "DM" : "Player"}</span>
+            </div>
+            {m.character ? (
+              <>
+                <div className="cast-charname">{m.character.name}</div>
+                <div className="cast-charline">{m.character.line || "—"}</div>
+              </>
+            ) : (
+              <div className="cast-charline">No character brought yet</div>
+            )}
+          </div>
+          {m.user_id !== dmUserId && (
+            <button className="cast-remove" title="Remove from campaign" onClick={() => onRemove(m)}>
+              <Icon name="delete" size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  </>
+);
 
 // ============================================================================
 const OverviewPage = ({
