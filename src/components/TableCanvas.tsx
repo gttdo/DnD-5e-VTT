@@ -19,7 +19,7 @@ import { useTableRolls } from "../state/useTableRolls";
 import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
 import type { SkillName } from "../types/character";
 import { aggregateConditions, autoFailsSave, conditionName, parseCondition } from "../lib/conditions";
-import { isReadying, parseBuff, isStealthHidden, encodeHidden, isHiddenEntry } from "../lib/buffs";
+import { isReadying, parseBuff, isStealthHidden, encodeHidden, isHiddenEntry, hiddenStealth } from "../lib/buffs";
 import { TokenStatusEditor } from "./TokenStatusEditor";
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
@@ -392,6 +392,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   useEffect(() => {
     tokensRef.current = tokens;
   }, [tokens]);
+  // Latest recheckHidden, for callers defined earlier than it (the move-commit
+  // handler and the out-of-combat interval — slice H P4).
+  const recheckHiddenRef = useRef<(t: Token) => void>(() => {});
   // Active canvas tool. "select" moves tokens, "pan" drags the view,
   // "ping" pulses a point for every player, "ruler" measures distance.
   // (Space-held still pans regardless of tool, as a quick modifier.)
@@ -1162,6 +1165,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       }
       // Only a move the table accepted can provoke — check after it commits.
       if (oaFrom) maybeProvokeOAs(oaFrom.mover, oaFrom.x, oaFrom.y, snappedX, snappedY);
+      // A hidden token that moves re-tests stealth from its new spot (slice H
+      // P4) — moving into the open can blow your cover. Recheck the LIVE token
+      // (post-move coords), not the stale pre-move object.
+      const moved = tokensRef.current.find((x) => x.id === drag.id);
+      if (moved && isStealthHidden(moved.buffs)) recheckHiddenRef.current(moved);
     });
   };
 
@@ -2031,26 +2039,33 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // 30–60 ft = −5, >60 ft can't notice). Beat every observer who could notice
   // → apply the Hidden buff (per-viewer invisibility, frozen Stealth for a
   // later Search); otherwise the attempt fails. All logged. Returns nothing.
-  const attemptHide = (t: Token) => {
-    if (isStealthHidden(t.buffs)) return;
-    const stealth = roll(`1d20${stealthBonusOfToken(t) >= 0 ? "+" : ""}${stealthBonusOfToken(t)}`);
-    const stealthTotal = stealth.total;
+  // The hostile observers who NOTICE a token trying to hide with `stealthTotal`
+  // — shared by the initial Hide and the out-of-combat recheck (slice H P4).
+  // Range bands: ≤30 ft passive as-is, 30–60 ft passive −5, >60 ft can't notice.
+  // Meet-or-beat hides (matches Steal's `>= dc`).
+  const spottersOf = (t: Token, stealthTotal: number) => {
     const hiderHostile = t.disposition === "hostile";
-    const spotters = tokens
+    const h = centerOfToken(t);
+    return tokens
       .filter((o) => {
         if (o.id === t.id || o.hidden || o.kind === "prop" || o.kind === "spell") return false;
         if (isStealthHidden(o.buffs) || tokenIsDowned(o)) return false;
-        // Opposite side only: a hostile hides from PCs/friendlies and vice-versa.
         return hiderHostile ? o.disposition !== "hostile" : o.disposition === "hostile";
       })
       .map((o) => {
         const c = centerOfToken(o);
-        const h = centerOfToken(t);
         const ft = Math.round(Math.hypot(c.x - h.x, c.y - h.y) / CELL) * FT_PER_CELL;
         const pp = passivePerceptionOfToken(o) - (ft > 30 ? 5 : 0);
         return { o, ft, pp };
       })
-      .filter(({ ft, pp }) => ft <= 60 && stealthTotal < pp); // >60 ft can't notice; meet-or-beat hides (matches Steal)
+      .filter(({ ft, pp }) => ft <= 60 && stealthTotal < pp);
+  };
+
+  const attemptHide = (t: Token) => {
+    if (isStealthHidden(t.buffs)) return;
+    const stealth = roll(`1d20${stealthBonusOfToken(t) >= 0 ? "+" : ""}${stealthBonusOfToken(t)}`);
+    const stealthTotal = stealth.total;
+    const spotters = spottersOf(t, stealthTotal);
     const hid = spotters.length === 0;
     broadcastRoll(
       t.label,
@@ -2064,6 +2079,40 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     );
     if (hid) void updateToken(t.id, { buffs: [...(t.buffs ?? []), encodeHidden(stealthTotal)] });
   };
+
+  // Out-of-combat recheck (slice H P4): re-run the contest for an already-
+  // hidden token against its FROZEN Stealth. If an observer now notices it
+  // (the hider moved into view, or a foe closed in), reveal it. Only the
+  // controlling client writes (single-writer). No re-roll — the Stealth total
+  // was fixed when the token hid.
+  const recheckHidden = (t: Token) => {
+    if (!controlsToken(t)) return;
+    const st = hiddenStealth(t.buffs);
+    if (st == null) return;
+    const spotters = spottersOf(t, st);
+    if (spotters.length === 0) return;
+    void updateToken(t.id, { buffs: (t.buffs ?? []).filter((b) => !isHiddenEntry(b)) });
+    broadcastRoll(
+      t.label,
+      [{ label: `${t.label} is spotted by ${spotters[0].o.label} (passive Perception ${spotters[0].pp}) — no longer hidden`, result: roll("1d1") }],
+      bloomSeedFor(t, "fumble", "seen")
+    );
+  };
+  recheckHiddenRef.current = recheckHidden;
+
+  // Out-of-combat interval (slice H P4): while NOT in combat, every ~6s re-test
+  // each hidden token this client controls, so a foe walking toward a motionless
+  // hider can still spot them (the on-move recheck covers the hider moving).
+  // In combat, reveal is turn/action-driven, so the timer stays off.
+  useEffect(() => {
+    if (init.inCombat) return;
+    const id = window.setInterval(() => {
+      for (const t of tokensRef.current) {
+        if (isStealthHidden(t.buffs) && controlsToken(t)) recheckHiddenRef.current(t);
+      }
+    }, 6000);
+    return () => window.clearInterval(id);
+  }, [init.inCombat, controlsToken]);
 
   // Reveal a hidden attacker (slice H, P3): attacking or casting a harmful
   // spell ends the Hide. Returns whether the actor WAS hidden — the to-hit
