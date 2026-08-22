@@ -71,10 +71,18 @@ that any effect can ship in.
 
 ## Build order (agreed direction)
 
-1. **A — Save-for-damage targets properly** (Sacred Flame, Poison Spray… → save request `onFail:"damage"`, half/none on save). Kills the worst toasts.
-2. **B — AoE saves aim** like Cone of Cold (Fireball sphere, Lightning Bolt line); DM adjudicates who's inside for now.
-3. **C — Monster save actions** use their `saveDc`/`saveAbility` (breath weapons stop toasting).
-4. **D — Riders**: `MonsterAction.condition*` fields + parser ("…or be paralyzed"), damage+condition saves.
+1. ~~**A — Save-for-damage targets properly**~~ ✅ DONE (acb1a58). Single-target
+   save spells target + fire a damage save; the defender rolls on their client.
+2. ~~**B — AoE saves aim**~~ ✅ DONE (c9ac707 + review fixes 29bd999). Fireball
+   sphere / Lightning Bolt line / Thunderwave cube aim their true footprint;
+   who's-inside is auto-detected; each caught creature rolls its own save.
+3. ~~**C — Monster save actions**~~ ✅ DONE (389a8d8). Breath weapons parse
+   DC/damage/shape from statblock text and run through the aim/save flow.
+4. ~~**D — Condition riders on hits**~~ ✅ DONE (22b54d0). Ghoul claw → paralyze
+   save, chain → grapple; parsed from attack text, applied on a confirmed hit.
+   NOTE: damage+condition combos where a hit ALSO carries a secondary DAMAGE
+   save (Giant Spider bite, Bone Devil sting) are not yet modelled — the main
+   damage + the condition rider fire, but the extra poison-damage save doesn't.
 5. **E — Thrown weapons**: fix `attackAbility` misreading thrown STR weapons as DEX
    (javelin); weapons with the thrown property get split Melee (5 ft) / Throw
    (20/60) tiles; a throw CONSUMES the item — removed from inventory (its tile
