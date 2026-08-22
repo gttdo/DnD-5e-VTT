@@ -4,13 +4,24 @@ import { useAuth } from "../state/useAuth";
 import { useToast } from "../state/Toast";
 import { Card, CardBody } from "./ui/Card";
 import { Button } from "./ui/Button";
+import { EmptyState } from "./ui/EmptyState";
 
 /**
  * The marketplace shelf (packs P1) — published packs a DM can add to their
  * campaign list. Install always creates a NEW campaign; we hand its id back so
- * the Games screen can refresh and drop the DM into the editor.
+ * the caller can refresh and drop the DM into the editor.
+ *
+ * `standalone` = the dedicated Marketplace page: show loading/empty states and
+ * drop the inline section title (the page's banner carries it). Embedded (the
+ * default) stays quiet — renders nothing until there's a shelf to show.
  */
-export const PackMarketplace = ({ onInstalled }: { onInstalled: (gameId: string) => void }) => {
+export const PackMarketplace = ({
+  onInstalled,
+  standalone = false,
+}: {
+  onInstalled: (gameId: string) => void;
+  standalone?: boolean;
+}) => {
   const { user } = useAuth();
   const toast = useToast();
   const [packs, setPacks] = useState<PackCard[]>([]);
@@ -52,14 +63,23 @@ export const PackMarketplace = ({ onInstalled }: { onInstalled: (gameId: string)
     onInstalled(gameId);
   };
 
-  if (loading) return null; // stay quiet until we know there's a shelf to show
-  if (packs.length === 0) return null; // no marketplace section when empty
+  if (loading) return standalone ? <div className="dim">Loading the shelf…</div> : null;
+  if (packs.length === 0)
+    return standalone ? (
+      <EmptyState
+        icon="package"
+        title="Nothing on the shelf yet"
+        body="Published adventure packs will appear here — add one and it becomes a new campaign of your own."
+      />
+    ) : null;
 
   return (
     <>
-      <div className="panel-title" style={{ marginTop: 8 }}>
-        From the marketplace
-      </div>
+      {!standalone && (
+        <div className="panel-title" style={{ marginTop: 8 }}>
+          From the marketplace
+        </div>
+      )}
       <div
         style={{
           display: "grid",

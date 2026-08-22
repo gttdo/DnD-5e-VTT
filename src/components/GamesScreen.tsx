@@ -9,7 +9,6 @@ import { EmptyState } from "./ui/EmptyState";
 import { LibraryBanner } from "./ui/LibraryBanner";
 import { useConfirm } from "../state/Confirm";
 import { isPublisher } from "../lib/packs";
-import { PackMarketplace } from "./PackMarketplace";
 import { PublishPackDialog } from "./PublishPackDialog";
 
 interface Props {
@@ -230,18 +229,7 @@ export const GamesScreen = ({ characters, initialJoinCode, onOpenGame, onManageG
         </div>
       )}
 
-      <PackMarketplace
-        onInstalled={async (gameId) => {
-          await refresh();
-          const g = games.find((x) => x.id === gameId);
-          if (g) onManageGame(g);
-          else {
-            // Freshly installed — not in the (stale) list yet; fetch it.
-            const { data } = await supabase.from("games").select("*").eq("id", gameId).single();
-            if (data) onManageGame({ ...(data as Game), my_role: "dm" });
-          }
-        }}
-      />
+      {/* The marketplace shelf moved to its own top-level page (#user ask). */}
 
       <div className="panel-title">Your campaigns</div>
       {loading && <div className="dim">Loading…</div>}

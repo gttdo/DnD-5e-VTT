@@ -13,7 +13,7 @@ import { Icon, type IconName } from "./ui/Icon";
  * games) light up the tab of their origin section.
  */
 
-export type ShellSection = "characters" | "maps" | "tokens" | "campaigns";
+export type ShellSection = "characters" | "maps" | "tokens" | "campaigns" | "marketplace";
 
 interface Props {
   /** Active nav section, or null when on the home/landing view (no tab lit). */
@@ -31,10 +31,11 @@ interface Props {
 // Icons are hidden on desktop (text-only nav) and carry the bottom tab bar on
 // phones, where a label alone is too small a target to read at a glance.
 const NAV: Array<{ key: ShellSection; label: string; icon: IconName }> = [
-  { key: "characters", label: "Characters", icon: "users" },
-  { key: "maps",       label: "Maps",       icon: "map" },
-  { key: "tokens",     label: "Resources",  icon: "drama" },
-  { key: "campaigns",  label: "Campaigns",  icon: "swords" },
+  { key: "characters",  label: "Characters",  icon: "users" },
+  { key: "maps",        label: "Maps",        icon: "map" },
+  { key: "tokens",      label: "Resources",   icon: "drama" },
+  { key: "campaigns",   label: "Campaigns",   icon: "swords" },
+  { key: "marketplace", label: "Marketplace", icon: "package" },
 ];
 
 export const AppShell = ({

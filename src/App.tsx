@@ -6,6 +6,7 @@ import { CharacterCreateMethod } from "./components/CharacterCreateMethod";
 import { CharacterImport } from "./components/CharacterImport";
 import { CharacterQuickBuild } from "./components/CharacterQuickBuild";
 import { GamesScreen } from "./components/GamesScreen";
+import { MarketplaceScreen } from "./components/MarketplaceScreen";
 import { JoinLobby } from "./components/JoinLobby";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
@@ -28,7 +29,7 @@ import { Icon } from "./components/ui/Icon";
 import { generateCharacterBackground } from "./lib/classArt";
 import { supabase } from "./lib/supabase";
 
-type Screen = "roster" | "games" | "maps" | "tokens" | "create-method" | "quick" | "import" | "builder" | "sheet" | "table" | "campaign";
+type Screen = "roster" | "games" | "maps" | "tokens" | "marketplace" | "create-method" | "quick" | "import" | "builder" | "sheet" | "table" | "campaign";
 
 // Remember the last view across reloads so refreshing lands you back where you
 // were — not always on a character sheet. Stored in localStorage (the app is
@@ -66,6 +67,8 @@ const sectionForScreen = (screen: Screen): ShellSection => {
       return "maps";
     case "tokens":
       return "tokens";
+    case "marketplace":
+      return "marketplace";
     case "games":
     case "table":
     case "campaign":
@@ -258,6 +261,7 @@ function App() {
     if (s === "characters") setScreen("roster");
     else if (s === "maps") setScreen("maps");
     else if (s === "tokens") setScreen("tokens");
+    else if (s === "marketplace") setScreen("marketplace");
     else if (s === "campaigns") {
       setActiveGame(null);
       setScreen("games");
@@ -305,6 +309,19 @@ function App() {
         {!showLanding && screen === "maps" && <MapLibraryScreen />}
 
         {!showLanding && screen === "tokens" && <TokenLibraryScreen />}
+
+        {!showLanding && screen === "marketplace" && (
+          <MarketplaceScreen
+            onInstalled={async (gameId) => {
+              // A freshly installed pack is a new campaign — drop into its editor.
+              const { data } = await supabase.from("games").select("*").eq("id", gameId).single();
+              if (data) {
+                setActiveGame({ ...(data as Game), my_role: "dm" });
+                setScreen("campaign");
+              }
+            }}
+          />
+        )}
 
         {!showLanding && screen === "games" && (
           <GamesScreen
