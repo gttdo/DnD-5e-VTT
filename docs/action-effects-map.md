@@ -212,9 +212,20 @@ client.
 - ~~P4~~ ✅ DONE (79129d7). Out-of-combat recheck: on the hider's move + a ~6s
   interval (off during combat), owner's client re-tests the FROZEN Stealth and
   reveals a now-spotted hider. Verified live.
-- P5 (later) — Search (active Perception vs the frozen Stealth) + Invisibility
-  spells reuse the visibility layer. Also later: refuse the DM's own targeting
-  of a hidden creature (today the DM's ghost is targetable by the DM).
+- ~~P5 Search~~ ✅ DONE (4f21035). Search on both HUDs (active Perception vs a
+  hidden foe's frozen Stealth within 60 ft → reveal); Hide + Search added to
+  the monster HUD (ambush / guards). Targeting guard: can't target a hidden
+  creature you don't control. Verified: a Priest's Search rolled 16 ≥ Stealth
+  15 → "finds Drashk". NOTE: DM-ghost render + targeting-refusal apply only to
+  tokens the DM doesn't control (a player's PC) — solo the DM controls all, so
+  those paths need a 2-seat session to see (correct by construction).
+
+**Hide (H1–H5) is complete.** Remaining, genuinely separate follow-ons:
+- Invisibility / Greater Invisibility spells — reuse the per-viewer visibility
+  layer (regular breaks on attack like Hide; Greater doesn't). A spell feature,
+  not part of Hide.
+- 2-seat verification of the owner-translucent + DM-ghost + enemy-can't-see
+  views, and the targeting-refusal, from a real player account.
 
 Original phase notes kept below.
 - P1 — Visibility foundation: per-token `viewLevel(t) → none|ghost|dim|full`
