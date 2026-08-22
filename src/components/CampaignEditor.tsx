@@ -44,6 +44,7 @@ const SharesContext = createContext<SharesApi>({
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useCastRoster, type CastMember } from "../state/useCastRoster";
 import { RegionNavigator } from "./RegionNavigator";
+import { CoDMCompanion } from "./CoDMCompanion";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
 import { HandoutDocBody } from "./HandoutEditor";
 import { QuestDocBody } from "./QuestEditor";
@@ -683,6 +684,25 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
 
       {/* Click-away for row menus */}
       {menuFor && <div className="camped-menuveil" onClick={() => setMenuFor(null)} />}
+
+      {/* The Co-DM companion (#7) — follows the DM through prep. Drafts it
+          writes here can be saved straight onto the scene you're editing. */}
+      <CoDMCompanion
+        gameId={campaign.id}
+        label="Co-DM"
+        intro="I've read your whole campaign — every scene, note, and secret. Ask me for ideas, names, or a read-aloud; only you see this."
+        starters={[
+          "Give me a name and a quirk for an innkeeper.",
+          selectedScene ? `Draft a read-aloud for ${selectedScene.name}.` : "What should the next scene be?",
+          "What haven't the players discovered yet?",
+        ]}
+        sceneName={selectedScene?.name ?? null}
+        onSaveToScene={
+          selectedScene
+            ? (kind, content) => void createDoc({ kind, scene_id: selectedScene.id, title: kind === "read_aloud" ? "From the Co-DM" : "Co-DM note", content })
+            : undefined
+        }
+      />
     </div>
     </SharesContext.Provider>
   );

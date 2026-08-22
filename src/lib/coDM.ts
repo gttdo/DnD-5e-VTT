@@ -20,10 +20,14 @@ export interface CoDMProposal {
 
 export const askCoDM = async (
   gameId: string,
-  messages: CoDMTurn[]
+  messages: CoDMTurn[],
+  /** "dm" gets the whole campaign + gated actions; "player" gets a
+   *  spoiler-safe rules/lore helper with no tools (edge fn honors it in a
+   *  later slice — harmlessly ignored until then). */
+  mode: "dm" | "player" = "dm"
 ): Promise<{ text: string | null; proposals: CoDMProposal[]; error: string | null }> => {
   const { data, error } = await supabase.functions.invoke("co-dm", {
-    body: { game_id: gameId, messages },
+    body: { game_id: gameId, messages, mode },
   });
   if (error) return { text: null, proposals: [], error: await readFnError(error) };
   const payload = data as { text?: string; proposals?: CoDMProposal[]; error?: string };
