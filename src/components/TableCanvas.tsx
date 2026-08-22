@@ -1169,7 +1169,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     [isDM, ownedCharacterIds]
   );
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     // The full selection (multi via marquee/shift, or a single primary).
     const ids = selectedIdsRef.current.size
       ? [...selectedIdsRef.current]
@@ -1186,6 +1186,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       toast.info("You can only remove your own tokens.");
       return;
     }
+    // Removing several at once is a footgun (a marquee can sweep up player
+    // characters too) — confirm first, and call out any PCs in the batch.
+    if (removable.length > 1) {
+      const pcs = removable.filter((t) => t.character_id).length;
+      const ok = await confirm({
+        title: `Remove ${removable.length} tokens?`,
+        message:
+          pcs > 0
+            ? `This removes ${removable.length} tokens from the board — including ${pcs} player character${pcs === 1 ? "" : "s"}. This can't be undone.`
+            : `This removes ${removable.length} tokens from the board. This can't be undone.`,
+        confirmLabel: `Remove ${removable.length}`,
+        danger: true,
+      });
+      if (!ok) return;
+    }
     selectOnly(null);
     void Promise.all(removable.map((t) => deleteToken(t.id))).then((results) => {
       const failed = results.filter((r) => r.error).length;
@@ -1195,7 +1210,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           removable.length === 1 ? `${removable[0].label ?? "Token"} removed` : `${removable.length} tokens removed`
         );
     });
-  }, [deleteToken, toast, canDeleteToken, selectOnly]);
+  }, [deleteToken, toast, canDeleteToken, selectOnly, confirm]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
