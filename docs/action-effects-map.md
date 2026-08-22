@@ -101,7 +101,8 @@ that any effect can ship in.
    (unless target incapacitated / speed 0); DEX SaveRequests pre-select
    advantage on the defender's dialog. These two hooks are the same rails
    Bless/Bane/Blur/Shield of Faith plug into later.
-7. **G — Ready**: the trigger is NARRATIVE, so the release stays human; the
+7. ~~**G — Ready**~~ ✅ DONE (c071256). Detail kept below for the record.
+   **G — Ready**: the trigger is NARRATIVE, so the release stays human; the
    rest is systematic. Take Ready → spend the Action, type the trigger (free
    text) + pick the response (an attack tile, or move) → token gains a
    `Readying` chip with the trigger as its hover label + the tile wears the
@@ -111,9 +112,16 @@ that any effect can ship in.
    the start of your next turn → auto-clears (F's start-of-turn hook).
    Readied SPELLS (v2): slot spent at ready time, the hold occupies
    concentration ("held Fireball"), break = wasted, release = cast free.
+**All seven planned slices (A–G) are shipped.** Remaining backlog:
 8. Later: forced movement, buff mechanics for the rest of the catalog (Bless
-   d4, Haste extra action), concentration→effect teardown, timed durations,
+   d4, Haste extra action) — F's two hooks (incoming-attack mode, save-dialog
+   initialMode) are the rails; concentration→effect teardown, timed durations,
    grapple/shove contests, DM "call for a check" (out-of-combat DC flow).
+   Ready v2: readied SPELLS (slot spent at ready, hold = concentration) +
+   auto-cancel a ready when the Reaction is spent elsewhere (an OA).
+   Thrown v2: improvised "throw anything" (1d4, 20/60); player-side pickup of
+   a dropped weapon verified in a real player session.
+   Damage+condition combo saves (Giant Spider bite's secondary poison save).
 
 ## Save-relay hardening (pre-existing, surfaced by the A/B review)
 
