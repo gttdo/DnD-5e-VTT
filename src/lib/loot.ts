@@ -162,6 +162,20 @@ export const lootIsEmpty = (loot: TokenLoot | null | undefined): boolean => {
   return !coin && (loot.items?.length ?? 0) === 0;
 };
 
+/** A one-line human summary of what a token holds, e.g.
+ *  "30 gp · 15 sp · Rusty Key · Potion of Healing ×2". Empty → "". */
+export const lootSummary = (loot: TokenLoot | null | undefined): string => {
+  if (lootIsEmpty(loot)) return "";
+  const parts: string[] = [];
+  const c = loot!.coins ?? {};
+  for (const d of ["pp", "gp", "ep", "sp", "cp"] as const) {
+    const n = c[d] ?? 0;
+    if (n > 0) parts.push(`${n} ${d}`);
+  }
+  for (const i of loot!.items ?? []) parts.push(i.qty > 1 ? `${i.name} ×${i.qty}` : i.name);
+  return parts.join(" · ");
+};
+
 /** Total gp-equivalent, for a quick "worth ~N gp" summary. */
 export const lootValueGp = (loot: TokenLoot): number => {
   const c = loot.coins ?? {};

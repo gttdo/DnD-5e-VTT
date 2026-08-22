@@ -72,6 +72,7 @@ import {
   incidentalCreatureLoot,
   incidentalContainerLoot,
   lootIsEmpty,
+  lootSummary,
   lootToInventoryItem,
   tierForLevel,
   type TokenLoot,
@@ -6413,9 +6414,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 </p>
               ) : (
                 <>
-                  <p className="examine-lead">
-                    Stash loot on {examineToken.label} — the party finds it when they loot the token.
-                  </p>
+                  {examineToken.loot && !lootIsEmpty(examineToken.loot) ? (
+                    <div className="examine-holds">
+                      <span className="examine-holds-l">Holds</span>
+                      <span className="examine-holds-v">{lootSummary(examineToken.loot)}</span>
+                    </div>
+                  ) : lootedClean(examineToken) ? (
+                    <p className="examine-lead">Looted — nothing left. Add more to restock it.</p>
+                  ) : (
+                    <p className="examine-lead">
+                      Stash loot on {examineToken.label} — the party finds it when they loot the token.
+                    </p>
+                  )}
                   <button className="examine-loot-btn" onClick={() => addLootToToken(examineToken)}>
                     <Icon name="package" size={15} />{" "}
                     {examineToken.loot && !lootIsEmpty(examineToken.loot) ? "Edit loot" : "Add loot"}

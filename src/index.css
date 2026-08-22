@@ -1817,6 +1817,17 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .examine-loot-btn:hover { background: rgba(212, 169, 90, 0.2); border-color: var(--candle); }
 .examine-loot-btn svg { color: var(--candle); }
+/* "Holds: …" — what the token currently carries, at a glance */
+.examine-holds {
+  display: flex; flex-direction: column; gap: 3px;
+  border-left: 2px solid color-mix(in srgb, var(--candle) 55%, transparent);
+  padding: 2px 0 2px 10px;
+}
+.examine-holds-l {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.examine-holds-v { font-family: var(--font-story); font-size: 14px; color: var(--cream); line-height: 1.4; }
 
 /* DM creature sheet — full read-only statblock, in the right-side drawer. */
 .csheet { display: flex; flex-direction: column; gap: 12px; }
