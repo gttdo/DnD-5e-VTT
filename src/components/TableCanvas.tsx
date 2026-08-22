@@ -1366,6 +1366,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         toast.info(`${t.label} isn't a target — pick a creature.`);
         return;
       }
+      // Can't target a hidden creature (slice H): only the DM even sees its
+      // ghost, and you don't attack what you can't see. Keep the cursor up.
+      if (isStealthHidden(t.buffs) && !controlsToken(t)) {
+        toast.info(`${t.label} is hidden — you can't target it.`);
+        return;
+      }
       // Can't attack yourself — but a healing or restoration spell CAN target
       // its own caster.
       if (t.id === pa.attackerId && pa.spec.heal == null && pa.spec.cleanse == null) {
@@ -2078,6 +2084,39 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       bloomSeedFor(t, hid ? "normal" : "fumble", hid ? "hidden" : "seen")
     );
     if (hid) void updateToken(t.id, { buffs: [...(t.buffs ?? []), encodeHidden(stealthTotal)] });
+  };
+
+  // Search (slice H P5) — the counter to Hide. The searcher rolls ACTIVE
+  // Perception (d20 + their Perception bonus) once; any hidden foe within 60 ft
+  // whose FROZEN Stealth it meets-or-beats is found (Hidden cleared). Reveals
+  // globally — matching the binary visibility model.
+  const attemptSearch = (searcher: Token) => {
+    const bonus = passivePerceptionOfToken(searcher) - 10; // active = passive − 10 (the flat 10)
+    const rollRes = roll(`1d20${bonus >= 0 ? "+" : ""}${bonus}`);
+    const total = rollRes.total;
+    const searcherHostile = searcher.disposition === "hostile";
+    const s = centerOfToken(searcher);
+    const found = tokens.filter((o) => {
+      if (o.id === searcher.id || o.hidden || o.kind === "prop" || o.kind === "spell") return false;
+      if (!isStealthHidden(o.buffs)) return false;
+      // Only look for the opposite side (you search for foes, not allies).
+      if (searcherHostile ? o.disposition === "hostile" : o.disposition !== "hostile") return false;
+      const c = centerOfToken(o);
+      const ft = Math.round(Math.hypot(c.x - s.x, c.y - s.y) / CELL) * FT_PER_CELL;
+      if (ft > 60) return false;
+      return total >= (hiddenStealth(o.buffs) ?? 0); // meet-or-beat finds them
+    });
+    found.forEach((o) => void updateToken(o.id, { buffs: (o.buffs ?? []).filter((b) => !isHiddenEntry(b)) }));
+    broadcastRoll(
+      searcher.label,
+      [{
+        label: found.length
+          ? `${searcher.label} searches — Perception ${total}, finds ${found.map((f) => f.label).join(", ")}`
+          : `${searcher.label} searches — Perception ${total}, finds nothing`,
+        result: rollRes,
+      }],
+      bloomSeedFor(searcher, found.length ? "crit" : "normal", found.length ? "found!" : "—")
+    );
   };
 
   // Out-of-combat recheck (slice H P4): re-run the contest for an already-
@@ -5892,6 +5931,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onNote={(msg) => toast.info(msg)}
               onMove={(label) => requestMove(selectedToken.label, selectedToken.id, label)}
               onCounterspellCheck={(name, level) => counterspellCheck(selectedToken, selectedToken.label, name, level)}
+              onHide={() => attemptHide(selectedToken)}
+              onSearch={() => attemptSearch(selectedToken)}
               economy={economyView}
               onSpend={(w) => markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}
@@ -5967,6 +6008,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onReady={(entry) => selectedToken && takeReady(selectedToken, entry)}
               onReleaseReady={(entry) => selectedToken && releaseReady(selectedToken, entry)}
               onHide={() => selectedToken && attemptHide(selectedToken)}
+              onSearch={() => selectedToken && attemptSearch(selectedToken)}
               economy={economyView}
               onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}

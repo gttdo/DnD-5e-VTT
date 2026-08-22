@@ -447,6 +447,9 @@ interface Props {
   /** Hide (slice H) — the canvas rolls Stealth vs hostile observers' passive
    *  Perception and applies the Hidden state on success. */
   onHide?: () => void;
+  /** Search (slice H) — the canvas rolls active Perception vs nearby hidden
+   *  foes' frozen Stealth and reveals the ones it beats. */
+  onSearch?: () => void;
   /** Per-turn action economy (shown only in combat); null hides the strip. */
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
@@ -483,6 +486,7 @@ export const TableHud = ({
   onReady,
   onReleaseReady,
   onHide,
+  onSearch,
   economy,
   onSpend,
   onEndTurn,
@@ -680,6 +684,9 @@ export const TableHud = ({
   // in the canvas. The HUD just requests it; the canvas rolls, logs, and — on
   // success — applies the Hidden buff (per-viewer invisibility).
   const doHide = () => onHide?.();
+  // Search (slice H P5): the counter to Hide — active Perception vs each
+  // hidden foe's frozen Stealth; the canvas reveals the ones it beats.
+  const doSearch = () => onSearch?.();
 
   // Rest (short/long, hit dice) lives on the character sheet now (#130) — the
   // PC HUD no longer carries a Rest popout.
@@ -942,6 +949,13 @@ export const TableHud = ({
       run: () => { if (!readyEntry) { enteredTargeting.current = true; setReadyOpen(true); } },
       econ: "action" as const,
       activeFx: Boolean(readyEntry),
+    },
+    {
+      id: "search", icon: "search", glyph: glyphSrc("action_search"), name: "Search",
+      sub: "Perception", kind: "common",
+      // Search (slice H) — the counter to Hide: active Perception vs nearby
+      // hidden foes' frozen Stealth; the canvas reveals the ones it beats.
+      run: doSearch, econ: "action" as const,
     },
   ];
   // BONUS-action tab: non-spell bonus actions. Sparse until #90/#93 add
@@ -1549,6 +1563,8 @@ export const MonsterHud = ({
   onNote,
   onMove,
   onCounterspellCheck,
+  onHide,
+  onSearch,
   economy,
   onSpend,
   onEndTurn,
@@ -1568,6 +1584,8 @@ export const MonsterHud = ({
   onNote: (msg: string) => void;
   onMove?: (label: string) => void;
   onCounterspellCheck?: (spellName: string, level: number) => Promise<boolean>;
+  onHide?: () => void;
+  onSearch?: () => void;
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
   onEndTurn?: () => void;
@@ -1766,7 +1784,7 @@ export const MonsterHud = ({
     }
   };
 
-  interface MSlot { id: string; icon: IconName; glyph?: string; name: string; sub: string; kind: "attack" | "common"; run: () => void; disabled?: boolean; econ?: "action" | "bonus" | "reaction"; recharge?: number; expended?: boolean; }
+  interface MSlot { id: string; icon: IconName; glyph?: string; name: string; sub: string; kind: "attack" | "common"; run: () => void; disabled?: boolean; econ?: "action" | "bonus" | "reaction"; recharge?: number; expended?: boolean; activeFx?: boolean; }
   // Multiattack isn't a button — it becomes the Main-action COUNT (two attacks
   // to spend). The casting trait lives in the spell tabs.
   const mainMax = multiattackCount(m.actions);
@@ -1806,6 +1824,14 @@ export const MonsterHud = ({
         econ: "action" as const,
       };
     });
+  // Hide / Search for monsters too (slice H) — an ambusher hides, guards search
+  // for a hidden PC. The Hidden state drives per-viewer visibility just like a
+  // PC's. `mHidden` = this creature is currently hidden.
+  const mHidden = isStealthHidden(buffs);
+  mainActions.push(
+    { id: "m-hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: mHidden ? "hidden" : "Stealth", kind: "common", run: () => { if (!mHidden) onHide?.(); }, econ: "action" as const, activeFx: mHidden },
+    { id: "m-search", icon: "search", glyph: glyphSrc("action_search"), name: "Search", sub: "Perception", kind: "common", run: () => onSearch?.(), econ: "action" as const },
+  );
   const bonusActions: MSlot[] = (m.bonusActions ?? []).map((b) => ({
     id: b.name,
     icon: "dice" as IconName,
@@ -1949,7 +1975,7 @@ export const MonsterHud = ({
         {tabItems.map((s, i) => (
           <button
             key={s.id}
-            className={`thud-act is-glyph is-${s.kind} ${s.recharge != null ? "is-recharge" : ""} ${s.expended ? "is-expended" : ""}`}
+            className={`thud-act is-glyph is-${s.kind} ${s.recharge != null ? "is-recharge" : ""} ${s.expended ? "is-expended" : ""}${s.activeFx ? " is-active-effect" : ""}`}
             onClick={() => runItem(s)}
             disabled={itemDisabled(s)}
             aria-label={s.name}
