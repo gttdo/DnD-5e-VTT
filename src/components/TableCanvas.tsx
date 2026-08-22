@@ -2227,18 +2227,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     resolveSteal(thief, menuToken);
   };
 
-  // DM tool-rail "Place loot": opens the loot editor for the selected token —
-  // any DM-controlled token (monster, NPC, prop/container), never a player's PC.
-  const placeLootFromRail = () => {
-    if (!selectedToken) {
-      toast.info("Select a monster, NPC, or prop token to place loot on it.");
-      return;
-    }
-    if (selectedToken.character_id) {
+  // The DM adds loot to a token from its Examine card (#user ask) — any
+  // DM-controlled token (monster, NPC, prop/container), never a player's PC.
+  const addLootToToken = (t: Token) => {
+    if (t.character_id) {
       toast.info("Loot goes on monsters, NPCs, or props — not player characters.");
       return;
     }
-    setLootEditTokenId(selectedToken.id);
+    setExamineTokenId(null);
+    setLootEditTokenId(t.id);
   };
   // Open the cinematic dice roller for a skill check on the body — Medicine,
   // Investigation, etc. The player rolls it themselves; the result logs to the
@@ -4311,14 +4308,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               >
                 <Icon name="drama" size={18} />
               </button>
-              <button
-                className="rail-tool"
-                onClick={placeLootFromRail}
-                title="Place loot on the selected token"
-                aria-label="Place loot on selected token"
-              >
-                <Icon name="package" size={18} />
-              </button>
+              {/* "Place loot" moved off the rail (#user ask) — the DM now
+                  right-clicks a token → Examine → Add loot, contextual to that
+                  token. Frees a rail slot too. */}
             </>
           )}
           {/* Quick markers moved into the token picker (IA demotion,
@@ -4690,9 +4682,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   key={t.id}
                   onPointerDown={(e) => startTokenDrag(e, t)}
                   onContextMenu={(e) => {
-                    // Right-click a non-owned creature/corpse/container → the
-                    // Steal / Loot / Examine menu (#131). Left-click still selects.
-                    if (!isDM && menuTarget(t)) {
+                    // Right-click opens the token menu. Players get it on a
+                    // non-owned creature/corpse/container (Steal/Loot/Examine,
+                    // #131); the DM gets it on any visible token (Examine → Add
+                    // loot, #user ask). Left-click still selects.
+                    if (isDM || menuTarget(t)) {
                       e.preventDefault();
                       e.stopPropagation();
                       setTokenMenu({ tokenId: t.id, x: e.clientX, y: e.clientY });
@@ -6337,32 +6331,43 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             aria-label={`${menuToken.label} actions`}
           >
             <div className="token-menu-t">{menuToken.label}</div>
-            {menuToken.statblock && !tokenIsDead(menuToken) &&
-              !(menuToken.character_id && ownedCharacterIds.has(menuToken.character_id)) && (
-                <button role="menuitem" onClick={stealFromMenu}>
-                  <Icon name="dice" size={15} /> Steal
-                  <span className="token-menu-note">sleight of hand</span>
-                </button>
-              )}
-            <button
-              role="menuitem"
-              onClick={lootFromMenu}
-              disabled={!isFreeLootable(menuToken)}
-              title={isFreeLootable(menuToken) ? undefined : "Nothing left to loot"}
-            >
-              <Icon name="package" size={15} /> Loot
-              {!isFreeLootable(menuToken) && <span className="token-menu-note">looted</span>}
-            </button>
-            {menuToken.statblock && (
+            {isDM ? (
+              // The DM's menu: Examine opens the card where loot is added.
               <button role="menuitem" onClick={examineFromMenu}>
                 <Icon name="eye" size={15} /> Examine
               </button>
+            ) : (
+              <>
+                {menuToken.statblock && !tokenIsDead(menuToken) &&
+                  !(menuToken.character_id && ownedCharacterIds.has(menuToken.character_id)) && (
+                    <button role="menuitem" onClick={stealFromMenu}>
+                      <Icon name="dice" size={15} /> Steal
+                      <span className="token-menu-note">sleight of hand</span>
+                    </button>
+                  )}
+                <button
+                  role="menuitem"
+                  onClick={lootFromMenu}
+                  disabled={!isFreeLootable(menuToken)}
+                  title={isFreeLootable(menuToken) ? undefined : "Nothing left to loot"}
+                >
+                  <Icon name="package" size={15} /> Loot
+                  {!isFreeLootable(menuToken) && <span className="token-menu-note">looted</span>}
+                </button>
+                {menuToken.statblock && (
+                  <button role="menuitem" onClick={examineFromMenu}>
+                    <Icon name="eye" size={15} /> Examine
+                  </button>
+                )}
+              </>
             )}
           </div>
         </>
       )}
 
-      {examineToken?.statblock && (
+      {/* Examine card. Players (statblock only): observe + roll checks. The DM
+          (any token): a prep card where loot is stashed on the token. */}
+      {examineToken && (isDM || examineToken.statblock) && (
         <Dialog
           onClose={() => {
             setExamineTokenId(null);
@@ -6373,27 +6378,56 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           // Only what a character could physically observe — size + kind. No CR,
           // AC, HP, senses, or spell list: those are the DM's to reveal (or not)
           // through what a skill check turns up.
-          subtitle={`${examineToken.statblock.size.charAt(0).toUpperCase()}${examineToken.statblock.size.slice(1)} ${examineToken.statblock.type}`}
+          subtitle={
+            examineToken.statblock
+              ? `${examineToken.statblock.size.charAt(0).toUpperCase()}${examineToken.statblock.size.slice(1)} ${examineToken.statblock.type}`
+              : examineToken.kind === "prop"
+                ? "Object"
+                : undefined
+          }
         >
           <div className="examine">
             {examineToken.image_url && <img className="examine-pf" src={examineToken.image_url} alt="" />}
-            <p className="examine-lead">
-              You look the body over. Roll a check — the DM will tell you what you notice.
-            </p>
-            <div className="examine-checks">
-              <span className="examine-checks-l">
-                {looterCharacter ? `${looterCharacter.name} · investigate` : "Make a check"}
-              </span>
-              <div className="examine-checks-row">
-                {(["Medicine", "Investigation", "Perception", loreSkillFor(examineToken.statblock.type)] as SkillName[])
-                  .filter((s, i, a) => a.indexOf(s) === i)
-                  .map((skill) => (
-                    <button key={skill} onClick={() => examineRoll(skill)} disabled={!looterCharacter}>
-                      <Icon name="dice" size={13} /> {skill}
-                    </button>
-                  ))}
-              </div>
-            </div>
+            {isDM ? (
+              // DM prep controls: stash loot on this token for the party to find.
+              examineToken.character_id ? (
+                <p className="examine-lead">
+                  This is a player's character — loot goes on monsters, NPCs, or props.
+                </p>
+              ) : (
+                <>
+                  <p className="examine-lead">
+                    Stash loot on {examineToken.label} — the party finds it when they loot the token.
+                  </p>
+                  <button className="examine-loot-btn" onClick={() => addLootToToken(examineToken)}>
+                    <Icon name="package" size={15} />{" "}
+                    {examineToken.loot && !lootIsEmpty(examineToken.loot) ? "Edit loot" : "Add loot"}
+                  </button>
+                </>
+              )
+            ) : (
+              examineToken.statblock && (
+                <>
+                  <p className="examine-lead">
+                    You look the body over. Roll a check — the DM will tell you what you notice.
+                  </p>
+                  <div className="examine-checks">
+                    <span className="examine-checks-l">
+                      {looterCharacter ? `${looterCharacter.name} · investigate` : "Make a check"}
+                    </span>
+                    <div className="examine-checks-row">
+                      {(["Medicine", "Investigation", "Perception", loreSkillFor(examineToken.statblock.type)] as SkillName[])
+                        .filter((s, i, a) => a.indexOf(s) === i)
+                        .map((skill) => (
+                          <button key={skill} onClick={() => examineRoll(skill)} disabled={!looterCharacter}>
+                            <Icon name="dice" size={13} /> {skill}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                </>
+              )
+            )}
           </div>
         </Dialog>
       )}

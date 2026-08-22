@@ -1806,6 +1806,17 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .examine-checks-row button:hover:not(:disabled) { background: rgba(212, 169, 90, 0.16); border-color: var(--candle); }
 .examine-checks-row button svg { color: var(--candle); }
 .examine-checks-row button:disabled { opacity: 0.4; cursor: default; }
+/* DM's Add/Edit loot button on the Examine card */
+.examine-loot-btn {
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+  padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  background: rgba(212, 169, 90, 0.12);
+  border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  color: var(--candle-bright); font-family: var(--font-display);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.examine-loot-btn:hover { background: rgba(212, 169, 90, 0.2); border-color: var(--candle); }
+.examine-loot-btn svg { color: var(--candle); }
 
 /* DM creature sheet — full read-only statblock, in the right-side drawer. */
 .csheet { display: flex; flex-direction: column; gap: 12px; }
