@@ -8259,39 +8259,20 @@ button.topbar-stat {
 /* The sprite (placeholder orb until real art) */
 .cdm-sprite { display: inline-grid; place-items: center; position: relative; }
 .cdm-sprite img { width: 100%; height: 100%; object-fit: contain; }
-.cdm-sprite--orb { animation: cdm-float 3.4s ease-in-out infinite; transform-origin: center; }
-.cdm-sprite--orb svg { overflow: visible; }
-.cdm-sprite--orb .cdm-halo { transform-origin: center; animation: cdm-breathe 3.4s ease-in-out infinite; }
-.cdm-sprite--orb .cdm-pupil,
-.cdm-sprite--orb .cdm-iris { transform-origin: 32px 34px; transition: transform 0.3s ease; }
-.cdm-sprite--orb .cdm-maw { transform-origin: 32px 48px; transition: transform 0.2s ease; }
-/* Eyestalks sway; each is offset so they don't move in lockstep. */
-.cdm-sprite--orb .cdm-stalk { transform-origin: 32px 37px; animation: cdm-sway 3.8s ease-in-out infinite; }
-.cdm-sprite--orb .cdm-stalk:nth-child(1) { animation-delay: -0.2s; }
-.cdm-sprite--orb .cdm-stalk:nth-child(2) { animation-delay: -1.1s; }
-.cdm-sprite--orb .cdm-stalk:nth-child(3) { animation-delay: -1.9s; }
-.cdm-sprite--orb .cdm-stalk:nth-child(4) { animation-delay: -2.7s; }
 
-/* Thinking — pupil narrows, gaze up; stalks curl in tighter/faster. */
-.cdm-sprite--orb.is-thinking { animation-duration: 1.6s; }
-.cdm-sprite--orb.is-thinking .cdm-pupil { transform: scaleY(0.5) translateY(-2px); }
-.cdm-sprite--orb.is-thinking .cdm-stalk { animation-duration: 1.4s; }
-/* Talking — the maw works; the central eye blinks. */
-.cdm-sprite--orb.is-talking .cdm-maw { animation: cdm-chomp 0.4s ease-in-out infinite; }
-.cdm-sprite--orb.is-talking .cdm-pupil { animation: cdm-blink 1.8s ease-in-out infinite; }
-/* Nudge — body glows, eye widens, stalks perk up. */
-.cdm-sprite--orb.is-nudge .cdm-halo { animation: cdm-pulse 0.9s ease-in-out infinite; }
-.cdm-sprite--orb.is-nudge .cdm-pupil { transform: scale(1.25); }
-.cdm-sprite--orb.is-nudge .cdm-stalk { animation-duration: 0.8s; }
-
+/* Sprite-sheet beholder — one pose per state, with gentle presence motion. */
+.cdm-sprite--sheet { display: inline-block; image-rendering: auto; animation: cdm-float 3.6s ease-in-out infinite; }
+.cdm-sprite--sheet.is-thinking { animation-duration: 4.8s; }         /* a slower, pensive drift */
+.cdm-sprite--sheet.is-talking { animation: cdm-talkbob 0.55s ease-in-out infinite; }
+.cdm-sprite--sheet.is-nudge {
+  animation: cdm-nudgehop 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px var(--candle));
+}
 @keyframes cdm-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@keyframes cdm-breathe { 0%,100% { opacity: 0.94; } 50% { opacity: 1; } }
-@keyframes cdm-blink { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(0.15); } }
-@keyframes cdm-chomp { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.45); } }
-@keyframes cdm-sway { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
-@keyframes cdm-pulse { 0%,100% { filter: drop-shadow(0 0 0 transparent); } 50% { filter: drop-shadow(0 0 6px var(--candle)); } }
+@keyframes cdm-talkbob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+@keyframes cdm-nudgehop { 0%,100% { transform: translateY(0); } 28% { transform: translateY(-5px); } 56% { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
-  .cdm-sprite--orb, .cdm-sprite--orb * { animation: none !important; }
+  .cdm-sprite--sheet { animation: none !important; }
 }
 
 .codm-intro { text-align: center; padding: 20px 8px; }
