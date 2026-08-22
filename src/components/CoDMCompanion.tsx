@@ -23,7 +23,7 @@ interface CoDMMsg extends CoDMTurn {
 export const CoDMCompanion = ({
   gameId,
   role = "dm",
-  label = "Co-DM",
+  label = "Oculus",
   intro,
   starters = [],
   art,
@@ -169,7 +169,7 @@ export const CoDMCompanion = ({
 
           <div className="feed-composer cdm-composer">
             <input
-              placeholder={role === "player" ? "Ask about the rules or the story…" : "Ask your Co-DM…"}
+              placeholder={role === "player" ? "Ask about the rules or the story…" : `Ask ${label}…`}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {

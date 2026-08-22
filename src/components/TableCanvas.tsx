@@ -5883,8 +5883,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {isDM && (
         <CoDMCompanion
           gameId={game.id}
-          label="Co-DM"
-          intro="I've read your whole campaign. Ask me anything, or tell me to stage a scene, place tokens, or share a handout — nothing reaches the players without your nod."
+          label="Oculus"
+          intro="I'm Oculus, your second set of eyes — I've read your whole campaign. Ask me anything, or tell me to stage a scene, place tokens, or share a handout; nothing reaches the players without your nod."
           starters={[
             "What's the party heading toward, and what have I prepped for it?",
             "Remind me of this scene's secret.",
@@ -5896,7 +5896,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             const { error } = await createStoryDoc({
               kind,
               scene_id: activeScene.id,
-              title: kind === "read_aloud" ? "From the Co-DM" : "Co-DM note",
+              title: kind === "read_aloud" ? "From Oculus" : "Oculus note",
               content,
             });
             if (error) toast.error(error);
@@ -6010,8 +6010,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         <CoDMCompanion
           gameId={game.id}
           role="player"
-          label="Guide"
-          intro="Hi! I can help with the D&D rules, or remind you what your party has learned so far. Ask away — I won't spoil anything."
+          label="Oculus"
+          intro="Hi, I'm Oculus! I can help with the D&D rules, or remind you what your party has learned so far. Ask away — I won't spoil anything."
           starters={[
             "How does advantage work?",
             "What have we learned so far?",

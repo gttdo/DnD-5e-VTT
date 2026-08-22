@@ -689,8 +689,8 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
           writes here can be saved straight onto the scene you're editing. */}
       <CoDMCompanion
         gameId={campaign.id}
-        label="Co-DM"
-        intro="I've read your whole campaign — every scene, note, and secret. Ask me for ideas, names, or a read-aloud; only you see this."
+        label="Oculus"
+        intro="I'm Oculus — I've read your whole campaign, every scene, note, and secret. Ask me for ideas, names, or a read-aloud; only you see this."
         starters={[
           "Give me a name and a quirk for an innkeeper.",
           selectedScene ? `Draft a read-aloud for ${selectedScene.name}.` : "What should the next scene be?",
@@ -699,7 +699,7 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
         sceneName={selectedScene?.name ?? null}
         onSaveToScene={
           selectedScene
-            ? (kind, content) => void createDoc({ kind, scene_id: selectedScene.id, title: kind === "read_aloud" ? "From the Co-DM" : "Co-DM note", content })
+            ? (kind, content) => void createDoc({ kind, scene_id: selectedScene.id, title: kind === "read_aloud" ? "From Oculus" : "Oculus note", content })
             : undefined
         }
       />
@@ -1407,7 +1407,7 @@ const OverviewPage = ({
       {memory.length > 0 && (
         <>
           <div className="camped-sechead">
-            <h5>What the Co-DM remembers</h5>
+            <h5>What Oculus remembers</h5>
           </div>
           <div className="camped-memory">
             {memory.map((m) => (
