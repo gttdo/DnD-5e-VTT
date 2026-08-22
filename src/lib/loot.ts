@@ -26,6 +26,11 @@ export interface LootItem {
   damageType?: string;
   weight?: number;
   notes?: string;
+  /** Weapon traits carried across a drop→pickup round-trip (slice E) so a
+   *  retrieved weapon keeps its finesse / thrown-ness / range. */
+  properties?: string[];
+  finesse?: boolean;
+  range?: string;
 }
 
 export interface TokenLoot {
@@ -199,4 +204,9 @@ export const lootToInventoryItem = (li: LootItem): InventoryItem => ({
   damage: li.damage,
   damageType: li.damageType,
   notes: li.notes,
+  // Preserve weapon traits so a picked-up thrown weapon stays finesse/throwable
+  // with its range intact (slice E round-trip).
+  ...(li.properties ? { properties: li.properties } : {}),
+  ...(li.finesse != null ? { finesse: li.finesse } : {}),
+  ...(li.range ? { range: li.range } : {}),
 });

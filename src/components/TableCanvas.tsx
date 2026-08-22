@@ -3601,6 +3601,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               weight: item.weight,
               value: item.cost,
               notes: item.properties?.join(", "),
+              // Keep weapon traits so the retrieved weapon stays finesse /
+              // throwable with its range (review fix).
+              properties: item.properties,
+              finesse: item.finesse,
+              range: item.range,
             }],
             dropped: true,
           },
@@ -6827,11 +6832,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 autoFail={autoFailsSave(target.conditions ?? [], active.ability)}
                 onBehalf={!controlled.includes(active)}
                 // Dodging grants ADVANTAGE on DEX saves (slice F) — pre-select
-                // it; the roller can still override.
+                // it; the roller can still override. Negated by incapacitated
+                // OR speed 0, exactly like the incoming-attack path (review fix).
                 initialMode={
                   active.ability === "DEX" &&
                   (target.buffs ?? []).includes("Dodging") &&
-                  !aggregateConditions(target.conditions ?? []).incapacitated
+                  !aggregateConditions(target.conditions ?? []).incapacitated &&
+                  !aggregateConditions(target.conditions ?? []).speed0
                     ? "adv"
                     : undefined
                 }

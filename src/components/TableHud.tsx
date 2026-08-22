@@ -9,7 +9,7 @@ import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } 
 import { applyDamage, applyHeal } from "../lib/hp";
 import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility, sorceryPoints, QUICKEN_COST } from "../lib/spellcasting";
 import { aggregateConditions, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
-import { buffGlyph, buffNote, buffIsGood, buffName, isReadying, encodeReadying, parseBuff, READYING } from "../lib/buffs";
+import { buffGlyph, buffNote, buffIsGood, buffName, isReadying, encodeReadying, parseBuff } from "../lib/buffs";
 import type { MonsterStatblock } from "../types/content";
 import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
@@ -930,8 +930,10 @@ export const TableHud = ({
       id: "ready", icon: "star", glyph: glyphSrc("action_ready"), name: "Ready",
       sub: readyEntry ? "readying" : "action", kind: "common",
       // Ready (slice G): open the declare picker (trigger + held response).
+      // Set enteredTargeting so runItem DEFERS the Action spend — we spend it
+      // only on CONFIRM, so cancelling the card costs nothing (review fix).
       // While readied the tile spins; releasing happens by tapping the chip.
-      run: () => { if (!readyEntry) setReadyOpen(true); },
+      run: () => { if (!readyEntry) { enteredTargeting.current = true; setReadyOpen(true); } },
       econ: "action" as const,
       activeFx: Boolean(readyEntry),
     },
@@ -1320,6 +1322,9 @@ export const TableHud = ({
             setReadyOpen(false);
             const atk = mainActions.find((s) => s.id === attackId);
             onReady?.(encodeReadying(atk?.name ?? "an action", trigger));
+            // The Action is spent here (deferred from the tile click) so a
+            // cancelled declaration is free.
+            onSpend?.("action");
           }}
         />
       )}
