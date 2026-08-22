@@ -27,14 +27,20 @@ const STATE_FRAME: Record<CompanionState, number> = {
   talking: 4,
 };
 
+/** How many poses the sheet holds — callers can cycle through them (e.g. on hover). */
+export const COMPANION_FRAMES = SHEET_COLS;
+
 export const CompanionSprite = ({
   state,
   art,
   size = 56,
+  frame: frameOverride,
 }: {
   state: CompanionState;
   art?: CompanionArt;
   size?: number;
+  /** Force a specific sheet frame, ignoring the state mapping (hover play). */
+  frame?: number;
 }) => {
   if (art) {
     const src = art[state] ?? art.idle;
@@ -46,7 +52,7 @@ export const CompanionSprite = ({
   }
 
   // Sprite-sheet render: stretch the strip to COLS×1 and slide to the frame.
-  const frame = STATE_FRAME[state] ?? 0;
+  const frame = frameOverride != null ? frameOverride : STATE_FRAME[state] ?? 0;
   const posX = SHEET_COLS > 1 ? (frame / (SHEET_COLS - 1)) * 100 : 0;
   return (
     <span

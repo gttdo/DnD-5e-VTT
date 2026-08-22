@@ -8234,7 +8234,8 @@ button.topbar-stat {
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
   transition: transform 0.15s ease, filter 0.15s ease;
 }
-.cdm-fab:hover { transform: translateY(-2px) scale(1.04); filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.6)); }
+/* Keep it backgroundless — override the global button:hover fill. */
+.cdm-fab:hover { background: none; border: 0; transform: translateY(-3px) scale(1.12); filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.6)); }
 .cdm-companion.is-open .cdm-fab { transform: scale(0.9); opacity: 0.92; }
 
 .cdm-panel {
