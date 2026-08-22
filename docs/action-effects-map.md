@@ -101,7 +101,23 @@ that any effect can ship in.
    the start of your next turn → auto-clears (F's start-of-turn hook).
    Readied SPELLS (v2): slot spent at ready time, the hold occupies
    concentration ("held Fireball"), break = wasted, release = cast free.
-8. Later: who's-inside area detection, forced movement, buff mechanics for the
-   rest of the catalog (Bless d4, Haste extra action), concentration→effect
-   teardown, timed durations, grapple/shove contests, DM "call for a check"
-   (out-of-combat DC flow).
+8. Later: forced movement, buff mechanics for the rest of the catalog (Bless
+   d4, Haste extra action), concentration→effect teardown, timed durations,
+   grapple/shove contests, DM "call for a check" (out-of-combat DC flow).
+
+## Save-relay hardening (pre-existing, surfaced by the A/B review)
+
+The cross-client save relay predates slices A/B; they widened its traffic.
+Confirmed issues to fix in a dedicated pass:
+- **Orphaned requests**: a pending save whose target token is deleted (or
+  whose defender never received the broadcast — reload, late join) can never
+  be resolved or dismissed; the DM "Pending saves" chip sticks until reload.
+  Needs: prune on token delete + a dismiss affordance + (ideally) persistence.
+- **Double resolution race**: the defender's own dialog and the DM's
+  on-behalf roll can both complete within the dice-animation window → damage
+  applies twice. Needs idempotency (check the request is still pending before
+  applying; claim-then-roll).
+- **On-behalf rolls with missing sheets**: when the DM rolls for an absent
+  player whose sheet isn't in the DM's roster, the save uses +0 and empty
+  defenses (a fire-resistant PC takes full Fireball). Needs vitals (save
+  bonuses + defenses) mirrored onto the token like HP already is.

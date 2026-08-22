@@ -143,7 +143,6 @@ const FT_PER_CELL = 5;
 // cone is as wide as it is long, i.e. a half-angle of atan(0.5) (the base spans
 // ±length/2 at full reach).
 const CONE_LEN = 12 * CELL;
-const CONE_HALF_ANGLE = Math.atan(0.5);
 
 // Board tint for a Spell area token, chosen from its damage type so a Fireball
 // reads orange and a Cone of Cold blue at a glance. Falls back to arcane violet.
@@ -1284,6 +1283,24 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     };
   }, [canDeleteToken, setSelection, selectOnly]);
 
+  // Point-placed bursts (Fireball's sphere) respect the spell's range: the
+  // blast center can't sit farther from the caster than the spell reaches
+  // (review finding — spheres used to drop anywhere). Direction-only shapes
+  // (cone/line/cube) aim FROM the caster, so their reach is their own length.
+  const burstAimBlocked = (spec: AttackSpec, attackerId: string | undefined, aimX: number, aimY: number): string | null => {
+    const s = spec.burstShape?.shape;
+    if (s !== "sphere" && s !== "cylinder" && s !== "emanation") return null;
+    const maxFt = attackRangeFt(spec.range);
+    if (maxFt == null) return null;
+    const caster = attackerId ? tokensRef.current.find((t) => t.id === attackerId) : undefined;
+    if (!caster) return null;
+    const span = findSize(caster.size).cells;
+    const ox = caster.x * CELL + (span * CELL) / 2;
+    const oy = caster.y * CELL + (span * CELL) / 2;
+    const ft = Math.round(Math.hypot(aimX - ox, aimY - oy) / CELL) * FT_PER_CELL;
+    return ft > maxFt ? `${spec.label} reaches ${maxFt} ft — that point is ${ft} ft away.` : null;
+  };
+
   const startTokenDrag = (e: React.PointerEvent, t: Token) => {
     if (e.button !== 0) return;
     // Teleport targeting: this tap picks the destination cell (even over a token).
@@ -1297,10 +1314,17 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     if (pa) {
       e.stopPropagation();
       if (swingLockRef.current) return; // already swinging — ignore extra taps
-      // Aimed area/cone: any tap is just a DIRECTION, so resolve toward the
-      // tapped token's spot (no self/range gate — a cone is aimed, not a hit).
+      // Aimed area/cone: any tap is just a DIRECTION (or, for a point-placed
+      // sphere, the blast's center), so resolve toward the tapped token's spot.
+      // No self gate — a cone is aimed, not a hit. Point-placed shapes DO get
+      // a range gate (Fireball can't drop beyond its 150 ft).
       if (pa.spec.burst) {
         const c = centerOfToken(t);
+        const blocked = burstAimBlocked(pa.spec, pa.attackerId, c.x, c.y);
+        if (blocked) {
+          toast.info(blocked); // keep aiming — pick a closer point
+          return;
+        }
         // Economy is spent on COMMIT, not when targeting began — so an aimed
         // spell cancelled with Esc costs nothing. (#116-adjacent)
         if (pa.spec.econ) markEconomy(pa.attackerId, pa.spec.econ);
@@ -2456,7 +2480,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         const s = pa.spec.burstShape?.shape;
         if (s === "sphere" || s === "cylinder" || s === "emanation") {
           const g = aimAreaRef.current;
-          if (g) g.setAttribute("transform", `translate(${p.x} ${p.y})`);
+          if (g) {
+            g.setAttribute("transform", `translate(${p.x} ${p.y})`);
+            // Range feedback: the footprint turns red past the spell's reach
+            // (and the commit paths refuse the drop there).
+            const ft = Math.round(Math.hypot(p.x - origin.x, p.y - origin.y) / CELL) * 5;
+            const bad = maxFt != null && ft > maxFt;
+            const circle = g.querySelector("circle");
+            if (circle) circle.setAttribute("stroke", bad ? "#e0533d" : areaTintFor(pa.spec.damageType ?? undefined));
+          }
           return;
         }
         const angle = (Math.atan2(p.y - origin.y, p.x - origin.x) * 180) / Math.PI;
@@ -3088,37 +3120,41 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         // Self-origin cube (Thunderwave): extends `size` out, `size` wide.
         return along > 1 && along <= lenU && perp <= lenU / 2;
       }
-      // Cone: RAW width == length → half-angle atan(1/2).
-      const dist = Math.hypot(relX, relY);
-      if (dist < 1 || dist > lenU) return false;
-      const diff = Math.abs(((Math.atan2(relY, relX) - dir + Math.PI) % (2 * Math.PI)) - Math.PI);
-      return diff <= CONE_HALF_ANGLE;
+      // Cone: RAW footprint — length U, width U at the far edge — is exactly
+      // the TRIANGLE the aim preview draws, so test that (perp grows with
+      // distance). Dot-product math also has no ±180° seam, unlike the old
+      // angular test (review finding: aiming west silently missed targets).
+      return along > 1 && along <= lenU && perp <= along / 2;
     });
     // RAW: one damage roll for the whole area. Each caught creature then makes its
     // OWN save on its controller's screen (a monster → the DM, a PC → that player)
     // and takes half on a success — routed through the SAME cross-client save relay
     // as single-target saves, instead of the caster auto-rolling everyone. (#113)
     const dmgRoll = roll(spec.damage);
-    const dcTxt = spec.dc != null ? ` DC ${spec.dc}` : "";
+    // A save spell whose DC failed to parse still OFFERS the save at DC 10 —
+    // same fallback as the single-target branch (review finding: a missing DC
+    // must never silently become "no save, full damage").
+    const saveDc = spec.dc ?? 10;
+    const dcTxt = spec.save ? ` DC ${saveDc}` : "";
     broadcastRoll(by, [
       {
         label:
           caught.length === 0
             ? `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"} · no creatures caught`
-            : `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"}${spec.save ? ` (${spec.save}${dcTxt} for half)` : ""}`,
+            : `${by} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"}${spec.save ? ` (${spec.save}${dcTxt}${spec.onSave === "none" ? "" : " for half"})` : ""}`,
         result: dmgRoll,
       },
     ]);
     caught.forEach((t) => {
-      if (spec.save && spec.dc != null) {
-        // Cross-client save-for-half: the target's controller rolls and applies it.
+      if (spec.save) {
+        // Cross-client save: the target's controller rolls and applies it.
         saves.request({
           id: `area-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${t.id.slice(0, 4)}`,
           by,
           targetTokenId: t.id,
           targetLabel: t.label,
           ability: spec.save,
-          dc: spec.dc,
+          dc: saveDc,
           sourceLabel: spec.label,
           onFail: "damage",
           onSave: spec.onSave ?? "half",
@@ -4560,6 +4596,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 if (pendingAttackRef.current) {
                   const pa = pendingAttackRef.current;
                   const p = pa.spec.burst ? clientToSvg(e.clientX, e.clientY) : null;
+                  if (pa.spec.burst && p) {
+                    const blocked = burstAimBlocked(pa.spec, pa.attackerId, p.x, p.y);
+                    if (blocked) {
+                      toast.info(blocked); // keep aiming — pick a closer point
+                      return;
+                    }
+                  }
                   setPendingAttack(null);
                   if (pa.spec.burst && p) resolveBurst(pa.by, pa.spec, pa.attackerId, p.x, p.y);
                   return;
