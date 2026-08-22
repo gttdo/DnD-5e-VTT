@@ -58,6 +58,10 @@ export interface AttackSpec {
    *  target rolls `save` vs `dc` or gains `condition` (ghoul claw → paralyzed);
    *  with no `save` it applies automatically (a grapple, escape DC = `dc`). */
   rider?: { condition: string; save?: Ability; dc: number };
+  /** A THROWN weapon attack (slice E): the throw consumes this inventory item —
+   *  hit or miss, the resolver removes one from the thrower's sheet and drops
+   *  it at the target's cell as a ground-pickup token. */
+  thrownItem?: { characterId: string; itemId: string };
   /** The weapon/attack's reach or range, verbatim from the source ("5", "5 ft",
    *  "20/60", "range 60/240 ft"). Drives the out-of-range check at target time;
    *  absent → unrestricted (e.g. most spells for now). */

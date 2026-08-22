@@ -563,7 +563,10 @@ export const TableHud = ({
   const doAttack = (atk: Character["attacks"][number]) => {
     const dmgBonus = damageBonus(c, atk);
     const dmgExpr = dmgBonus === 0 ? atk.damage : `${atk.damage}${dmgBonus >= 0 ? "+" : ""}${dmgBonus}`;
-    enterTargeting({ label: atk.name, attackBonus: attackBonus(c, atk), damage: dmgExpr, damageType: atk.damageType, range: atk.range });
+    // A Throw tile consumes its weapon (slice E): the resolver removes it from
+    // the sheet and drops it at the target's cell, hit or miss.
+    const thrownItem = atk.thrown && atk.itemId ? { characterId: c.id, itemId: atk.itemId } : undefined;
+    enterTargeting({ label: atk.name, attackBonus: attackBonus(c, atk), damage: dmgExpr, damageType: atk.damageType, range: atk.range, thrownItem });
   };
 
   const doHide = () => {

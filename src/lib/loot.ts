@@ -34,6 +34,10 @@ export interface TokenLoot {
   items: LootItem[];
   /** True once everything has been taken; keeps an empty body from re-rolling. */
   looted?: boolean;
+  /** A dropped-item pickup (a thrown weapon on the ground, slice E) — the token
+   *  exists ONLY to hold this loot, so it's removed once emptied instead of
+   *  lingering as a "looted" husk. */
+  dropped?: boolean;
 }
 
 export type PartyTier = 1 | 2 | 3 | 4;

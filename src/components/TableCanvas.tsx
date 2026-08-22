@@ -2356,7 +2356,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       });
       return { ...c, inventory: [...c.inventory, ...loot.items.map(lootToInventoryItem)], currency: cur };
     });
-    await updateToken(t.id, { loot: { coins: {}, items: [], looted: true } });
+    // A dropped-item pickup (thrown weapon on the ground) vanishes once taken —
+    // it was only ever a holder for the loot. Real containers/bodies stay.
+    if (loot.dropped) await deleteToken(t.id);
+    else await updateToken(t.id, { loot: { coins: {}, items: [], looted: true } });
     toast.success(`${looterCharacter.name} takes everything from ${t.label}.`);
     setLootTokenId(null);
   };
@@ -2372,7 +2375,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     }));
     const items = t.loot.items.filter((i) => i.id !== itemId);
     const next: TokenLoot = { ...t.loot, items, looted: lootIsEmpty({ ...t.loot, items }) };
-    await updateToken(t.id, { loot: next });
+    // Emptied drop pickups (thrown weapons) remove themselves (slice E).
+    if (t.loot.dropped && next.looted) {
+      await deleteToken(t.id);
+      setLootTokenId(null);
+    } else {
+      await updateToken(t.id, { loot: next });
+    }
   };
 
   // ---- XP on defeat: a monster dropping to 0 HP pays out to the party --------
@@ -3501,6 +3510,52 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           damageType: spec.damageType,
         });
         reactionTimers.current[rid] = window.setTimeout(() => reactions.clear(rid), 7000);
+      }
+    }
+    // Thrown weapon (slice E): hit or miss, the weapon LEAVES the thrower's
+    // hand — remove one from their sheet (their own client resolved this
+    // attack, so the owner-side write is safe) and drop it at the target's
+    // cell as a ground pickup. Walking adjacent + Loot returns it; the drop
+    // token removes itself once emptied (loot.dropped).
+    if (spec.thrownItem) {
+      const { characterId, itemId } = spec.thrownItem;
+      const ch = characters.find((x) => x.id === characterId);
+      const item = ch?.inventory.find((i) => i.id === itemId);
+      if (ch && item) {
+        void onUpdateCharacter(characterId, (cc) => ({
+          ...cc,
+          inventory: cc.inventory
+            .map((i) => (i.id === itemId ? { ...i, qty: i.qty - 1 } : i))
+            .filter((i) => i.qty > 0),
+        }));
+        void addToken({
+          label: item.name,
+          kind: "prop",
+          size: "tiny",
+          x: target.x,
+          y: target.y,
+          image_url: item.art ?? null,
+          color: "#8a7b5c",
+          loot: {
+            coins: {},
+            items: [{
+              id: `drop-${Date.now().toString(36)}`,
+              name: item.name,
+              qty: 1,
+              kind: item.type,
+              damage: item.damage,
+              damageType: item.damageType,
+              weight: item.weight,
+              value: item.cost,
+              notes: item.properties?.join(", "),
+            }],
+            dropped: true,
+          },
+        });
+        entries.push({
+          label: `${item.name} lands at ${target.label}'s feet`,
+          result: roll("1d1"),
+        });
       }
     }
     // Condition rider (slice D): a hit that carries one (ghoul claw → paralyze,

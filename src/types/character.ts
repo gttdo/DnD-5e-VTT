@@ -95,6 +95,11 @@ export interface Attack {
   bonusToDamage?: number;
   range?: string;
   notes?: string;
+  /** The inventory item this attack derives from (inventory-derived attacks). */
+  itemId?: string;
+  /** A Throw variant (slice E): the attack CONSUMES the item — it leaves your
+   *  hand and lands at the target's cell as a ground pickup. */
+  thrown?: boolean;
 }
 
 export interface ClassEntry {

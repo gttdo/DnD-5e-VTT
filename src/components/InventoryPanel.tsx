@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Character, InventoryItem } from "../types/character";
 import type { CharacterAPI } from "../state/useCharacter";
 import { totalWeight, carryingCapacity } from "../lib/calc";
-import { isEquippable, isWeapon } from "../lib/attacks";
+import { isEquippable, isWeapon, srdWeaponData } from "../lib/attacks";
 import { ItemDrawer } from "./ItemDrawer";
 import { ItemLibraryPicker } from "./ItemLibraryPicker";
 import { inventoryFromAsset } from "../lib/itemAsset";
@@ -19,11 +19,15 @@ export const InventoryPanel = ({ character: c, api }: { character: Character; ap
 
   const addBlank = () => {
     if (!newName.trim()) return;
+    // A recognized SRD weapon name fills its real stats (slice E) — the item
+    // arrives equippable and attack-derived instead of as a bare gear line.
+    const srd = srdWeaponData(newName.trim());
     const item: InventoryItem = {
       id: `inv-${Date.now()}`,
       name: newName.trim(),
       qty: 1,
       weight: 0,
+      ...(srd ?? {}),
     };
     api.addItem(item);
     setNewName("");
