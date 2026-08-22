@@ -683,7 +683,24 @@ export const TableHud = ({
         burst: true,
         range,
       });
+    } else if (mech?.kind === "save" && mech.damage && !mech.area) {
+      // Single-target save-for-damage (Sacred Flame, Poison Spray, Toll the
+      // Dead): TARGET it — the defender rolls the save on their own client
+      // (slice A). Cantrips deal nothing on a save; leveled spells take half.
+      enterTargeting({
+        label: `${name}${upTxt}`,
+        attackBonus: 0,
+        damage: scale(mech.damage),
+        damageType: mech.damageType,
+        save: mech.save,
+        dc: spellDc ?? undefined,
+        onSave: level === 0 ? "none" : "half",
+        vfx: mech.vfx,
+        range,
+      });
     } else if (mech?.kind === "save" && mech.damage) {
+      // Instant AoE (Fireball, Lightning Bolt…) — announced for the DM to
+      // adjudicate until slice B gives these an aim flow like Cone of Cold.
       const dmg = scale(mech.damage);
       const dcTxt = spellDc != null ? ` DC ${spellDc}` : "";
       const roll = damageRoll(`${name}${upTxt} — ${mech.damageType} (${mech.save} save${dcTxt})`, dmg);
@@ -1546,7 +1563,22 @@ export const MonsterHud = ({
         burst: true,
         range,
       });
+    } else if (mech?.kind === "save" && mech.damage && !mech.area) {
+      // Single-target save-for-damage (slice A) — same relay as the player HUD:
+      // the defender rolls on their client. Cantrips: nothing on save.
+      enterTargeting({
+        label: spellName,
+        attackBonus: 0,
+        damage: mech.scales ? scaleCantrip(mech.damage, lvl) : mech.damage,
+        damageType: mech.damageType,
+        save: mech.save,
+        dc: dc ?? undefined,
+        onSave: level === 0 ? "none" : "half",
+        vfx: mech.vfx,
+        range,
+      });
     } else if (mech?.kind === "save" && mech.damage) {
+      // Instant AoE — announced until slice B aims these.
       const dmg = mech.scales ? scaleCantrip(mech.damage, lvl) : mech.damage;
       const dcTxt = dc != null ? ` DC ${dc}` : "";
       const roll = damageRoll(`${spellName} — ${mech.damageType} (${mech.save} save${dcTxt})`, dmg);

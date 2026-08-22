@@ -100,11 +100,13 @@ const MECH: Record<string, SpellMech> = {
   "poison spray": { kind: "save", damage: "1d12", damageType: "poison", save: "CON", scales: true },
 
   // ---- Save leveled spells ----
-  "burning hands": { kind: "save", damage: "3d6", damageType: "fire", save: "DEX" },
-  "thunderwave": { kind: "save", damage: "2d8", damageType: "thunder", save: "CON" },
-  "fireball": { kind: "save", damage: "8d6", damageType: "fire", save: "DEX" },
-  "lightning bolt": { kind: "save", damage: "8d6", damageType: "lightning", save: "DEX" },
-  "shatter": { kind: "save", damage: "3d8", damageType: "thunder", save: "CON" },
+  // Instant AoEs carry their true shape (slice B aims them like Cone of Cold);
+  // `area` WITHOUT `lingering` = a one-shot blast, not a persistent zone.
+  "burning hands": { kind: "save", damage: "3d6", damageType: "fire", save: "DEX", area: { shape: "cone", size: 15 } },
+  "thunderwave": { kind: "save", damage: "2d8", damageType: "thunder", save: "CON", area: { shape: "cube", size: 15 } },
+  "fireball": { kind: "save", damage: "8d6", damageType: "fire", save: "DEX", area: { shape: "sphere", size: 20 } },
+  "lightning bolt": { kind: "save", damage: "8d6", damageType: "lightning", save: "DEX", area: { shape: "line", size: 100 } },
+  "shatter": { kind: "save", damage: "3d8", damageType: "thunder", save: "CON", area: { shape: "sphere", size: 10 } },
   "cone of cold": { kind: "save", damage: "8d8", damageType: "cold", save: "CON", vfx: "cone-of-cold", burst: true },
 
   // ---- Condition (save or be afflicted) ----

@@ -3291,6 +3291,36 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       resolveBurst(by, spec, attackerId, tgt.x, tgt.y);
       return;
     }
+    // Save-for-damage spell aimed at ONE creature (Sacred Flame, Poison Spray,
+    // Toll the Dead — slice A of the action map): no to-hit. The caster rolls
+    // damage once; the DEFENDER rolls the save on their own client (the same
+    // cross-client relay as areas, #113) and takes full / half / none there,
+    // with their own resistances honored.
+    if (spec.save && spec.damage != null && spec.condition == null) {
+      const dc = spec.dc ?? 10;
+      if (spec.vfx) fireSpellProjectile(spec.vfx, attackerId, target);
+      const dmgRoll = roll(spec.damage);
+      broadcastRoll(by, [
+        {
+          label: `${by} → ${target.label} · ${spec.label} — ${dmgRoll.total} ${spec.damageType ?? "damage"} (${spec.save} save DC ${dc}${spec.onSave === "half" ? " for half" : ""})`,
+          result: dmgRoll,
+        },
+      ]);
+      saves.request({
+        id: `sr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        by,
+        targetTokenId: target.id,
+        targetLabel: target.label,
+        ability: spec.save,
+        dc,
+        sourceLabel: spec.label,
+        onFail: "damage",
+        onSave: spec.onSave ?? "half",
+        damage: String(dmgRoll.total),
+        damageType: spec.damageType,
+      });
+      return;
+    }
     // Auto-hit projectile spell (Magic Missile): no to-hit, no Shield window.
     // Fire the VFX from caster → target and land the damage on the projectile's
     // arrival, so the number pops exactly when the bolt strikes.

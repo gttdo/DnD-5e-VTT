@@ -48,6 +48,9 @@ export interface AttackSpec {
   condition?: string;
   save?: Ability;
   dc?: number;
+  /** Save-for-DAMAGE spells (save + damage, no condition): what a successful
+   *  save does — "none" (cantrips like Sacred Flame) or "half" (leveled). */
+  onSave?: "none" | "half";
   /** Creature-type restriction (e.g. Hold Person → "humanoid"); the save never
    *  fires against a target whose statblock type doesn't match. */
   restrictType?: string;
