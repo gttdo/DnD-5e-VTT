@@ -91,7 +91,17 @@ that any effect can ship in.
    (unless target incapacitated / speed 0); DEX SaveRequests pre-select
    advantage on the defender's dialog. These two hooks are the same rails
    Bless/Bane/Blur/Shield of Faith plug into later.
-7. Later: who's-inside area detection, forced movement, buff mechanics for the
+7. **G — Ready**: the trigger is NARRATIVE, so the release stays human; the
+   rest is systematic. Take Ready → spend the Action, type the trigger (free
+   text) + pick the response (an attack tile, or move) → token gains a
+   `Readying` chip with the trigger as its hover label + the tile wears the
+   spinning ring (F). The Reaction is earmarked: spending it elsewhere (OA,
+   Shield) auto-cancels the ready. Tap the chip = the human trigger call →
+   consumes the Reaction and launches the readied flow off-turn. Unreleased at
+   the start of your next turn → auto-clears (F's start-of-turn hook).
+   Readied SPELLS (v2): slot spent at ready time, the hold occupies
+   concentration ("held Fireball"), break = wasted, release = cast free.
+8. Later: who's-inside area detection, forced movement, buff mechanics for the
    rest of the catalog (Bless d4, Haste extra action), concentration→effect
    teardown, timed durations, grapple/shove contests, DM "call for a check"
    (out-of-combat DC flow).
