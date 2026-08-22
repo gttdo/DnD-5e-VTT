@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./ui/Icon";
-import { CompanionSprite, COMPANION_FRAMES, type CompanionArt, type CompanionState } from "./CompanionSprite";
+import { CompanionSprite, type CompanionArt, type CompanionState } from "./CompanionSprite";
 import { askCoDM, type CoDMTurn, type CoDMProposal } from "../lib/coDM";
 import type { DocKind } from "../state/useCampaign";
 
@@ -49,37 +49,15 @@ export const CoDMCompanion = ({
   const [thinking, setThinking] = useState(false);
   const [talking, setTalking] = useState(false);
   const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set());
-  // Hover play: cycle the sprite through all its poses while the mouse is over
-  // the closed FAB, so he "comes alive" when you reach for him.
-  const [hoverFrame, setHoverFrame] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hoverTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [msgs.length, thinking, open]);
 
-  useEffect(() => () => {
-    if (talkTimer.current) clearTimeout(talkTimer.current);
-    if (hoverTimer.current) clearInterval(hoverTimer.current);
-  }, []);
-
-  const startHoverPlay = () => {
-    if (open || hoverTimer.current) return; // only the resting FAB plays
-    let f = 0;
-    setHoverFrame(0);
-    hoverTimer.current = setInterval(() => {
-      f = (f + 1) % COMPANION_FRAMES;
-      setHoverFrame(f);
-    }, 160);
-  };
-  const stopHoverPlay = () => {
-    if (hoverTimer.current) clearInterval(hoverTimer.current);
-    hoverTimer.current = null;
-    setHoverFrame(null);
-  };
+  useEffect(() => () => { if (talkTimer.current) clearTimeout(talkTimer.current); }, []);
 
   const spriteState: CompanionState = thinking ? "thinking" : talking ? "talking" : "idle";
 
@@ -208,17 +186,10 @@ export const CoDMCompanion = ({
       <button
         className="cdm-fab"
         onClick={() => setOpen((v) => !v)}
-        onMouseEnter={startHoverPlay}
-        onMouseLeave={stopHoverPlay}
         title={open ? `Close ${label}` : `Ask the ${label}`}
         aria-label={label}
       >
-        <CompanionSprite
-          state={open ? spriteState : "idle"}
-          art={art}
-          size={90}
-          frame={!open && hoverFrame != null ? hoverFrame : undefined}
-        />
+        <CompanionSprite state={open ? spriteState : "idle"} art={art} size={90} />
       </button>
     </div>
   );
