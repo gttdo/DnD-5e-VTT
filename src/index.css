@@ -8253,6 +8253,22 @@ button.topbar-stat {
 .cdm-panel-t { flex: 1; font-family: var(--font-display); font-size: 15px; color: var(--cream); }
 .cdm-panel-x { background: none; border: 0; cursor: pointer; color: var(--text-muted); display: grid; place-items: center; }
 .cdm-panel-x:hover { color: var(--cream); }
+.cdm-nudge-toggle {
+  background: none; border: 0; cursor: pointer; padding: 2px 4px; font-size: 14px;
+  opacity: 0.5; filter: grayscale(1); line-height: 1;
+}
+.cdm-nudge-toggle.is-on { opacity: 1; filter: none; }
+.cdm-nudge-toggle:hover { opacity: 0.85; }
+/* Unseen-nudge badge on the resting FAB */
+.cdm-fab { position: relative; }
+.cdm-fab-badge {
+  position: absolute; top: 8px; right: 8px; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--ember, #c0392b);
+  border: 2px solid var(--bg-0, #17120c);
+  animation: cdm-badgepulse 1.1s ease-in-out infinite;
+}
+@keyframes cdm-badgepulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+@media (prefers-reduced-motion: reduce) { .cdm-fab-badge { animation: none; } }
 .cdm-panel .codm-thread { padding: 12px; flex: 1; }
 .cdm-panel .codm-intro { flex: 1; }
 .cdm-composer { padding: 10px 12px; border-top: 1px solid var(--border); flex: none; }

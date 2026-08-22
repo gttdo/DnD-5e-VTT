@@ -537,6 +537,40 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     }
     if (!init.inCombat) wasInCombat.current = false;
   }, [init.inCombat]);
+
+  // Oculus nudges (#7 slice 5): raise a signal on the table moments worth a
+  // gentle suggestion — a scene staged, or combat starting. The companion
+  // decides whether to act (only if the DM turned nudges on). We skip the
+  // first observed value so we never nudge about the scene already up on load.
+  const [nudgeSignal, setNudgeSignal] = useState<{ key: string; prompt: string } | null>(null);
+  const nudgeSceneRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isDM) return;
+    const sid = activeScene?.id ?? null;
+    if (!sid) return;
+    if (nudgeSceneRef.current === null) { nudgeSceneRef.current = sid; return; } // skip mount
+    if (sid !== nudgeSceneRef.current) {
+      nudgeSceneRef.current = sid;
+      const name = activeScene?.name ?? "this scene";
+      setNudgeSignal({
+        key: `stage:${sid}`,
+        prompt: `[The party just arrived at the scene "${name}". In ONE short sentence, is there something worth doing right now — a read-aloud or handout to share, an encounter to set up? Propose the action if apt. If nothing is worth doing, reply with exactly: NONE]`,
+      });
+    }
+  }, [activeScene?.id, activeScene?.name, isDM]);
+  const nudgeCombatRef = useRef(false);
+  useEffect(() => {
+    if (!isDM) return;
+    if (init.inCombat && !nudgeCombatRef.current) {
+      nudgeCombatRef.current = true;
+      const name = activeScene?.name ?? "this scene";
+      setNudgeSignal({
+        key: `combat:${activeScene?.id ?? "?"}`,
+        prompt: `[Combat just began in "${name}". If the scene's notes call for enemies on the board, propose placing them. ONE short sentence. If nothing, reply with exactly: NONE]`,
+      });
+    }
+    if (!init.inCombat) nudgeCombatRef.current = false;
+  }, [init.inCombat, isDM, activeScene?.id, activeScene?.name]);
   const { pings, sendPing } = usePings(activeScene?.id ?? null);
   const spellFx = useSpellFx(activeScene?.id ?? null);
   const partyOwners = usePartyOwners(game.id, game.dm_user_id);
@@ -5880,6 +5914,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             "Remind me of this scene's secret.",
             "Suggest what to stage next.",
           ]}
+          nudgeSignal={nudgeSignal}
+          nudgesToggleable
           sceneName={activeScene?.name ?? null}
           onSaveToScene={async (kind, content) => {
             if (!activeScene?.id) return;

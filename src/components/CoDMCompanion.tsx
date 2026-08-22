@@ -31,6 +31,8 @@ export const CoDMCompanion = ({
   onSaveToScene,
   onProposal,
   proposalLabel,
+  nudgeSignal = null,
+  nudgesToggleable = false,
 }: {
   gameId: string;
   role?: "dm" | "player";
@@ -42,6 +44,12 @@ export const CoDMCompanion = ({
   onSaveToScene?: (kind: DocKind, content: string) => void;
   onProposal?: (p: CoDMProposal) => Promise<{ ok: boolean; message: string }>;
   proposalLabel?: (p: CoDMProposal) => string;
+  /** A table moment worth a gentle suggestion (#7 slice 5). When its `key`
+   *  changes and nudges are on, Oculus quietly checks if there's something to
+   *  say; if so, he glows and the suggestion waits in the panel. */
+  nudgeSignal?: { key: string; prompt: string } | null;
+  /** Show the nudge on/off toggle (table only). */
+  nudgesToggleable?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<CoDMMsg[]>([]);
@@ -49,8 +57,12 @@ export const CoDMCompanion = ({
   const [thinking, setThinking] = useState(false);
   const [talking, setTalking] = useState(false);
   const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set());
+  // Nudges: opt-in, per-device. `hasNudge` = an unseen suggestion is waiting.
+  const [nudgesOn, setNudgesOn] = useState(() => localStorage.getItem("vtt:oculus-nudges") === "1");
+  const [hasNudge, setHasNudge] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const talkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastNudgeKey = useRef<string | null>(null);
 
   useEffect(() => {
     const el = listRef.current;
@@ -59,7 +71,31 @@ export const CoDMCompanion = ({
 
   useEffect(() => () => { if (talkTimer.current) clearTimeout(talkTimer.current); }, []);
 
-  const spriteState: CompanionState = thinking ? "thinking" : talking ? "talking" : "idle";
+  useEffect(() => { localStorage.setItem("vtt:oculus-nudges", nudgesOn ? "1" : "0"); }, [nudgesOn]);
+
+  // Opening the panel acknowledges any waiting nudge.
+  useEffect(() => { if (open) setHasNudge(false); }, [open]);
+
+  // A new signal → quietly ask Oculus if there's something worth surfacing.
+  useEffect(() => {
+    if (!nudgesOn || !nudgeSignal) return;
+    if (lastNudgeKey.current === nudgeSignal.key) return;
+    lastNudgeKey.current = nudgeSignal.key;
+    let cancelled = false;
+    void (async () => {
+      const { text, proposals, error } = await askCoDM(gameId, [{ role: "user", content: nudgeSignal.prompt }], role);
+      if (cancelled || error) return;
+      const say = (text ?? "").trim();
+      // "NONE" (or an empty answer with no action) means nothing worth a nudge.
+      if ((!say || /^none\b/i.test(say)) && (proposals?.length ?? 0) === 0) return;
+      setMsgs((prev) => [...prev, { role: "assistant", content: say, proposals: proposals ?? [] }]);
+      setHasNudge(true);
+    })();
+    return () => { cancelled = true; };
+  }, [nudgeSignal, nudgesOn, gameId, role]);
+
+  const spriteState: CompanionState =
+    thinking ? "thinking" : talking ? "talking" : hasNudge && !open ? "nudge" : "idle";
 
   const send = async (text: string) => {
     const q = text.trim();
@@ -102,6 +138,16 @@ export const CoDMCompanion = ({
           <div className="cdm-panel-bar">
             <CompanionSprite state={spriteState} art={art} size={26} />
             <span className="cdm-panel-t">{label}</span>
+            {nudgesToggleable && (
+              <button
+                className={`cdm-nudge-toggle ${nudgesOn ? "is-on" : ""}`}
+                onClick={() => setNudgesOn((v) => !v)}
+                title={nudgesOn ? "Nudges on — Oculus glows when he spots something worth doing" : "Nudges off — let Oculus suggest things as they come up"}
+                aria-pressed={nudgesOn}
+              >
+                {nudgesOn ? "🔔" : "🔕"}
+              </button>
+            )}
             <button className="cdm-panel-x" onClick={() => setOpen(false)} aria-label="Close">
               <Icon name="close" size={15} />
             </button>
@@ -186,10 +232,11 @@ export const CoDMCompanion = ({
       <button
         className="cdm-fab"
         onClick={() => setOpen((v) => !v)}
-        title={open ? `Close ${label}` : `Ask the ${label}`}
-        aria-label={label}
+        title={open ? `Close ${label}` : hasNudge ? `${label} has a suggestion` : `Ask ${label}`}
+        aria-label={hasNudge ? `${label} has a suggestion` : label}
       >
-        <CompanionSprite state={open ? spriteState : "idle"} art={art} size={90} />
+        <CompanionSprite state={open ? spriteState : hasNudge ? "nudge" : "idle"} art={art} size={90} />
+        {hasNudge && !open && <span className="cdm-fab-badge" aria-hidden="true" />}
       </button>
     </div>
   );
