@@ -8222,3 +8222,19 @@ button.topbar-stat {
   font-family: var(--font-display); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--text-muted); padding: 8px 10px 4px;
 }
+
+/* ---- Journal Phase 2: view toggle + session grouping ---- */
+.journal-controls { display: flex; align-items: center; gap: 8px; justify-content: space-between; margin-bottom: 10px; }
+.journal-controls .feed-filters { margin-bottom: 0; flex-wrap: wrap; }
+.journal-view-toggle {
+  flex: none; background: none; border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; padding: 4px 12px; color: var(--text-muted);
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.journal-view-toggle:hover { color: var(--candle); border-color: color-mix(in srgb, var(--candle) 45%, transparent); }
+.journal-session-head {
+  display: flex; align-items: baseline; gap: 8px; margin: 14px 0 8px;
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--candle);
+}
+.journal-session-head:first-child { margin-top: 2px; }
+.journal-session-date { font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-muted); text-transform: none; }

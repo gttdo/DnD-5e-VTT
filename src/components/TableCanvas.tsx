@@ -5886,7 +5886,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         />
       )}
       {storyOpen && !isDM && (
-        <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
+        <JournalDrawer docs={storyDocs} shares={docShares} sessions={sessions} onClose={() => setStoryOpen(false)} />
       )}
       {/* Loops the staged scene's ambience through the Ambiance channel —
           swapping to the combat cue while the scene is in_combat (#0047). */}
