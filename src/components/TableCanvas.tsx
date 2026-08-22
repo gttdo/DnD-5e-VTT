@@ -56,7 +56,7 @@ import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
 import { StoryDrawer } from "./StoryDrawer";
 import { JournalDrawer } from "./JournalDrawer";
-import { CoDMDrawer } from "./CoDMDrawer";
+import { CoDMCompanion } from "./CoDMCompanion";
 import { AudioSettingsPopover } from "./AudioSettings";
 import { SceneAmbience } from "./SceneAmbience";
 import { effectiveAmbienceKey } from "../lib/soundtrack";
@@ -1567,7 +1567,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // table: the DM reads notes quietly and presents read-alouds; players' doc
   // list is already RLS-filtered to player-facing material.
   const [storyOpen, setStoryOpen] = useState(false);
-  const [coDMOpen, setCoDMOpen] = useState(false); // Co-DM drawer (P3, DM-only)
   const [audioOpen, setAudioOpen] = useState(false); // per-device audio mixer
   // The DM's token library — so the Co-DM's place_tokens proposals can resolve
   // a creature name to real art (else a labeled marker).
@@ -4202,16 +4201,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           >
             <Icon name="story" size={18} />
           </button>
-          {isDM && (
-            <button
-              className={`rail-tool ${coDMOpen ? "active" : ""}`}
-              onClick={() => setCoDMOpen((v) => !v)}
-              title="Co-DM — ask your second chair, who has read the whole campaign"
-              aria-label="Co-DM"
-            >
-              <Icon name="sparkles" size={18} />
-            </button>
-          )}
+          {/* Co-DM moved to a floating companion (#7) — see CoDMCompanion,
+              mounted below; the rail entry is retired. */}
           <button
             className={`rail-tool ${audioOpen ? "active" : ""}`}
             onClick={() => setAudioOpen((v) => !v)}
@@ -5898,10 +5889,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         trackKey={effectiveAmbienceKey(activeScene?.ambience_url, activeScene?.combat_ambience_url, Boolean(activeScene?.in_combat))}
       />
       {audioOpen && <AudioSettingsPopover onClose={() => setAudioOpen(false)} />}
-      {coDMOpen && isDM && (
-        <CoDMDrawer
+      {isDM && (
+        <CoDMCompanion
           gameId={game.id}
-          sceneId={activeScene?.id ?? null}
+          label="Co-DM"
+          intro="I've read your whole campaign. Ask me anything, or tell me to stage a scene, place tokens, or share a handout — nothing reaches the players without your nod."
+          starters={[
+            "What's the party heading toward, and what have I prepped for it?",
+            "Remind me of this scene's secret.",
+            "Suggest what to stage next.",
+          ]}
           sceneName={activeScene?.name ?? null}
           onSaveToScene={async (kind, content) => {
             if (!activeScene?.id) return;
@@ -6014,7 +6011,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             }
             return { ok: false, message: `Unknown action: ${p.tool}` };
           }}
-          onClose={() => setCoDMOpen(false)}
         />
       )}
 
