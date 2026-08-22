@@ -7,6 +7,20 @@ import type { Ability } from "../types/character";
  * modeled here — the fuller prose lives in the rules reference.
  */
 
+// Conditions we have library art for (public/icons/conditions/cond_<slug>.svg).
+// A status reads at a glance from its glyph; anything else falls back to text.
+const COND_ICONS = new Set([
+  "banished", "blinded", "charmed", "deafened", "exhaustion", "frightened",
+  "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned",
+  "prone", "restrained", "sleep", "stunned", "unconscious",
+]);
+
+/** Path to a condition's glyph, or null if we have no art for it. */
+export const conditionGlyph = (name: string): string | null => {
+  const slug = name.toLowerCase().trim().split(/[\s\d]+/)[0];
+  return COND_ICONS.has(slug) ? `/icons/conditions/cond_${slug}.svg` : null;
+};
+
 export interface ConditionEffect {
   /** Can't take actions, bonus actions, or reactions. */
   incapacitated?: boolean;

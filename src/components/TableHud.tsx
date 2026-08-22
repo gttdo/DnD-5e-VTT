@@ -8,7 +8,7 @@ import { itemSpellGrant } from "../lib/itemSpellGrants";
 import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } from "../lib/calc";
 import { applyDamage, applyHeal } from "../lib/hp";
 import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility, sorceryPoints, QUICKEN_COST } from "../lib/spellcasting";
-import { aggregateConditions, conditionName } from "../lib/conditions";
+import { aggregateConditions, conditionName, conditionGlyph } from "../lib/conditions";
 import type { MonsterStatblock } from "../types/content";
 import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
@@ -45,19 +45,6 @@ export interface EconomyView {
   speed: number;
 }
 type EconKey = "action" | "bonus" | "reaction";
-
-// Condition badges carry the matching D&D-library glyph (public/icons/conditions)
-// so a status reads at a glance in the thick of combat. Only the conditions we
-// have art for get an icon; anything else falls back to text alone.
-const COND_ICONS = new Set([
-  "banished", "blinded", "charmed", "deafened", "exhaustion", "frightened",
-  "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned",
-  "prone", "restrained", "sleep", "stunned", "unconscious",
-]);
-const conditionGlyph = (name: string): string | null => {
-  const slug = name.toLowerCase().trim().split(/[\s\d]+/)[0];
-  return COND_ICONS.has(slug) ? `/icons/conditions/cond_${slug}.svg` : null;
-};
 
 const ConditionsBanner = ({ conditions }: { conditions: string[] }) => {
   if (conditions.length === 0) return null;

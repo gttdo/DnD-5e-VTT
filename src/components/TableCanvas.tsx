@@ -18,7 +18,7 @@ import { usePartyOwners } from "../state/usePartyOwners";
 import { useTableRolls } from "../state/useTableRolls";
 import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
 import type { SkillName } from "../types/character";
-import { aggregateConditions, autoFailsSave, conditionName, parseCondition } from "../lib/conditions";
+import { aggregateConditions, autoFailsSave, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
 import { useReactions } from "../state/useReactions";
@@ -4837,42 +4837,57 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     {t.label}
                   </text>
 
-                  {/* Condition badges — a row of red chips above the token,
-                      tap one to clear it. Everyone at the table sees them. */}
+                  {/* Condition icons — a BG3-style strip of glyph chips above the
+                      token (#user ask). Shows up to 4, then "+N". Everyone at the
+                      table sees them; tap a chip to roll its shake-off save. */}
                   {(t.conditions ?? []).length > 0 && (() => {
                     const conds = t.conditions ?? [];
-                    const chipW = 22;
+                    const MAX = 4;
+                    const shown = conds.slice(0, MAX);
+                    const extra = conds.length - shown.length;
+                    const chip = 18;
                     const gap = 3;
-                    const total = conds.length * chipW + (conds.length - 1) * gap;
-                    const by = cy - r - 20;
+                    const slots = shown.length + (extra > 0 ? 1 : 0);
+                    const total = slots * chip + (slots - 1) * gap;
+                    const by = cy - r - chip - 6;
+                    const tile = (bx: number, key: string, extraContent: React.ReactNode, onClick?: (e: React.MouseEvent) => void, tip?: string) => (
+                      <g key={key} onClick={onClick} style={{ cursor: onClick ? "pointer" : "default" }}>
+                        {tip && <title>{tip}</title>}
+                        <rect x={bx} y={by} width={chip} height={chip} rx={4} fill="rgba(24,16,12,0.92)" stroke="#e0864f" strokeWidth={1.2} />
+                        {extraContent}
+                      </g>
+                    );
                     return (
                       <g>
-                        {conds.map((cond, ci) => {
-                          const bx = cx - total / 2 + ci * (chipW + gap);
-                          return (
-                            <g
-                              key={cond}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onConditionBadge(t, cond);
-                              }}
-                              style={{ cursor: "pointer" }}
-                            >
-                              <title>
-                                {(() => {
-                                  const pc = parseCondition(cond);
-                                  return pc.save && pc.dc != null
-                                    ? `${pc.name} — click to roll a ${pc.save} save (DC ${pc.dc})`
-                                    : `${pc.name} — needs a spell or item to remove`;
-                                })()}
-                              </title>
-                              <rect x={bx} y={by} width={chipW} height={14} rx={4} fill="rgba(122, 26, 26, 0.94)" stroke="#e0864f" strokeWidth={1} />
-                              <text x={bx + chipW / 2} y={by + 10.5} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
-                                {conditionName(cond).slice(0, 3).toUpperCase()}
-                              </text>
-                            </g>
+                        {shown.map((cond, ci) => {
+                          const bx = cx - total / 2 + ci * (chip + gap);
+                          const pc = parseCondition(cond);
+                          const glyph = conditionGlyph(pc.name);
+                          const tip = pc.save && pc.dc != null
+                            ? `${pc.name} — tap to roll a ${pc.save} save (DC ${pc.dc})`
+                            : `${pc.name} — needs a spell or item to remove`;
+                          const content = glyph ? (
+                            <foreignObject x={bx + 2} y={by + 2} width={chip - 4} height={chip - 4} style={{ pointerEvents: "none" }}>
+                              <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#ffd9b8" }}>
+                                <GameGlyph src={glyph} size={chip - 4} />
+                              </div>
+                            </foreignObject>
+                          ) : (
+                            <text x={bx + chip / 2} y={by + chip / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
+                              {pc.name.slice(0, 3).toUpperCase()}
+                            </text>
                           );
+                          return tile(bx, cond, content, (e) => { e.stopPropagation(); onConditionBadge(t, cond); }, tip);
                         })}
+                        {extra > 0 && tile(
+                          cx - total / 2 + shown.length * (chip + gap),
+                          "+more",
+                          <text x={cx - total / 2 + shown.length * (chip + gap) + chip / 2} y={by + chip / 2 + 3.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
+                            +{extra}
+                          </text>,
+                          undefined,
+                          `${extra} more: ${conds.slice(MAX).map((c) => conditionName(c)).join(", ")}`
+                        )}
                       </g>
                     );
                   })()}
