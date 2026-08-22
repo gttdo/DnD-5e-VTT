@@ -64,9 +64,26 @@ export const encodeReadying = (attackName: string, trigger: string): string =>
   `${READYING}::${attackName}::${trigger.replace(/::/g, ":")}`;
 export const isReadying = (entry: string): boolean => parseBuff(entry).name === READYING;
 
+/** The Hidden state (slice H): stealthed, carrying the frozen Stealth total so
+ *  a later Search can contest it. `Hidden::18`. */
+export const HIDDEN = "Hidden";
+export const encodeHidden = (stealthTotal: number): string => `${HIDDEN}::${stealthTotal}`;
+export const isHiddenEntry = (entry: string): boolean => parseBuff(entry).name === HIDDEN;
+/** True if any of a token's buff entries is the Hidden state. */
+export const isStealthHidden = (buffs: string[] | null | undefined): boolean =>
+  (buffs ?? []).some(isHiddenEntry);
+/** The frozen Stealth total from a token's Hidden buff, or null. */
+export const hiddenStealth = (buffs: string[] | null | undefined): number | null => {
+  const e = (buffs ?? []).find(isHiddenEntry);
+  if (!e) return null;
+  const n = parseInt(parseBuff(e).parts[0] ?? "", 10);
+  return Number.isNaN(n) ? null : n;
+};
+
 export const buffGlyph = (entry: string): string => {
   const { name } = parseBuff(entry);
   if (name === READYING) return G("actions/action_ready");
+  if (name === HIDDEN) return G("actions/action_hide");
   return find(name)?.glyph ?? GENERIC;
 };
 export const buffNote = (entry: string): string | undefined => {
@@ -74,6 +91,9 @@ export const buffNote = (entry: string): string | undefined => {
   if (name === READYING) {
     const [attack, trigger] = parts;
     return `Held: ${attack || "an action"}${trigger ? ` — "${trigger}"` : ""}. Tap to release (uses the Reaction).`;
+  }
+  if (name === HIDDEN) {
+    return `Hidden (Stealth ${parts[0] ?? "?"}). Only you see your token; it reveals when you attack or cast.`;
   }
   return find(name)?.note;
 };

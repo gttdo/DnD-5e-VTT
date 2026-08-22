@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDismiss } from "../lib/useDismiss";
 import type { Character, Attack, InventoryItem, Feature } from "../types/character";
 import { resolveAttacks, damageLabel } from "../lib/attacks";
-import { skillRoll, damageRoll, saveRoll, type RollEntry, type RollTone, type AttackSpec } from "../lib/rolls";
+import { damageRoll, saveRoll, type RollEntry, type RollTone, type AttackSpec } from "../lib/rolls";
 import { spellMech, scaleCantrip, upcastDamage, dartDamage } from "../lib/spellMechanics";
 import { itemSpellGrant } from "../lib/itemSpellGrants";
 import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } from "../lib/calc";
 import { applyDamage, applyHeal } from "../lib/hp";
 import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility, sorceryPoints, QUICKEN_COST } from "../lib/spellcasting";
 import { aggregateConditions, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
-import { buffGlyph, buffNote, buffIsGood, buffName, isReadying, encodeReadying, parseBuff } from "../lib/buffs";
+import { buffGlyph, buffNote, buffIsGood, buffName, isReadying, encodeReadying, parseBuff, isStealthHidden } from "../lib/buffs";
 import type { MonsterStatblock } from "../types/content";
 import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
@@ -444,6 +444,9 @@ interface Props {
   /** Ready release (slice G) — the canvas strips the buff, spends the
    *  Reaction, and logs; the HUD then launches the held attack's targeting. */
   onReleaseReady?: (buffEntry: string) => void;
+  /** Hide (slice H) — the canvas rolls Stealth vs hostile observers' passive
+   *  Perception and applies the Hidden state on success. */
+  onHide?: () => void;
   /** Per-turn action economy (shown only in combat); null hides the strip. */
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
@@ -479,6 +482,7 @@ export const TableHud = ({
   onDodge,
   onReady,
   onReleaseReady,
+  onHide,
   economy,
   onSpend,
   onEndTurn,
@@ -494,6 +498,7 @@ export const TableHud = ({
   // drives the tile's spinning ring, and stops exactly when it's stripped at
   // the start of this creature's next turn.
   const dodging = (buffs ?? []).includes("Dodging");
+  const hidden = isStealthHidden(buffs); // slice H — the Hide stance is live
   // Ready (slice G): the held-action stance, and the picker that declares it.
   const readyEntry = (buffs ?? []).find(isReadying);
   const [readyOpen, setReadyOpen] = useState(false);
@@ -670,10 +675,11 @@ export const TableHud = ({
     }
   };
 
-  const doHide = () => {
-    const entry = skillRoll(c, "Stealth");
-    onRoll([entry], { label: String(entry.result.total) });
-  };
+  // Hide (slice H): the contest (Stealth vs each hostile observer's
+  // range-adjusted passive Perception) needs token positions, so it resolves
+  // in the canvas. The HUD just requests it; the canvas rolls, logs, and — on
+  // success — applies the Hidden buff (per-viewer invisibility).
+  const doHide = () => onHide?.();
 
   // Rest (short/long, hit dice) lives on the character sheet now (#130) — the
   // PC HUD no longer carries a Rest popout.
@@ -914,7 +920,7 @@ export const TableHud = ({
       run: () => doAttack(atk),
       econ: "action" as const,
     })),
-    { id: "hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: "Stealth", kind: "common", run: doHide, econ: "action" as const },
+    { id: "hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: hidden ? "hidden" : "Stealth", kind: "common", run: () => { if (!hidden) doHide(); }, econ: "action" as const, activeFx: hidden },
     { id: "dash", icon: "right", glyph: glyphSrc("action_dash"), name: "Dash", sub: "action", kind: "common", run: () => { onNote("Dash — movement doubled this turn."); onDash?.(); }, econ: "action" as const },
     {
       id: "dodge", icon: "shield", glyph: glyphSrc("action_dodge"), name: "Dodge",

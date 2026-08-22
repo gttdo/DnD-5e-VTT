@@ -19,7 +19,7 @@ import { useTableRolls } from "../state/useTableRolls";
 import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
 import type { SkillName } from "../types/character";
 import { aggregateConditions, autoFailsSave, conditionName, parseCondition } from "../lib/conditions";
-import { isReadying, parseBuff } from "../lib/buffs";
+import { isReadying, parseBuff, isStealthHidden, encodeHidden, isHiddenEntry } from "../lib/buffs";
 import { TokenStatusEditor } from "./TokenStatusEditor";
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
@@ -513,12 +513,31 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     });
   };
 
+  // Per-viewer visibility (slice H). Two independent "hidden" concepts with
+  // OPPOSITE audiences:
+  //   • t.hidden — the DM's manual hide: DM sees it (dim), players don't.
+  //   • a "Hidden::<stealth>" buff — the Hide action: the OWNER sees it (dim),
+  //     the DM sees a faint GHOST (to keep running the scene), everyone else
+  //     sees nothing.
+  // viewLevel drives BOTH the visible-token filter and the render opacity.
+  const controlsToken = useCallback(
+    (t: Token): boolean => (t.character_id ? ownedCharacterIds.has(t.character_id) : isDM),
+    [ownedCharacterIds, isDM]
+  );
+  const viewLevel = useCallback(
+    (t: Token): "none" | "ghost" | "dim" | "full" => {
+      if (t.hidden) return isDM ? "dim" : "none";
+      if (isStealthHidden(t.buffs)) return controlsToken(t) ? "dim" : isDM ? "ghost" : "none";
+      return "full";
+    },
+    [isDM, controlsToken]
+  );
+
   // THE visibility boundary: players only ever work with visible tokens —
   // the board, the initiative order, and the header count all read from this.
-  // The DM sees everything (hidden ones render ghosted).
   const visibleTokens = useMemo(
-    () => (isDM ? tokens : tokens.filter((t) => !t.hidden)),
-    [isDM, tokens]
+    () => tokens.filter((t) => viewLevel(t) !== "none"),
+    [tokens, viewLevel]
   );
 
   // Combat pool: hidden tokens are excluded for EVERY role, DM included.
@@ -2007,6 +2026,57 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     ]);
   };
 
+  // Hide (slice H): roll the hider's Stealth once, contest it against each
+  // hostile observer's range-adjusted passive Perception (near ≤30 ft = as-is,
+  // 30–60 ft = −5, >60 ft can't notice). Beat every observer who could notice
+  // → apply the Hidden buff (per-viewer invisibility, frozen Stealth for a
+  // later Search); otherwise the attempt fails. All logged. Returns nothing.
+  const attemptHide = (t: Token) => {
+    if (isStealthHidden(t.buffs)) return;
+    const stealth = roll(`1d20${stealthBonusOfToken(t) >= 0 ? "+" : ""}${stealthBonusOfToken(t)}`);
+    const stealthTotal = stealth.total;
+    const hiderHostile = t.disposition === "hostile";
+    const spotters = tokens
+      .filter((o) => {
+        if (o.id === t.id || o.hidden || o.kind === "prop" || o.kind === "spell") return false;
+        if (isStealthHidden(o.buffs) || tokenIsDowned(o)) return false;
+        // Opposite side only: a hostile hides from PCs/friendlies and vice-versa.
+        return hiderHostile ? o.disposition !== "hostile" : o.disposition === "hostile";
+      })
+      .map((o) => {
+        const c = centerOfToken(o);
+        const h = centerOfToken(t);
+        const ft = Math.round(Math.hypot(c.x - h.x, c.y - h.y) / CELL) * FT_PER_CELL;
+        const pp = passivePerceptionOfToken(o) - (ft > 30 ? 5 : 0);
+        return { o, ft, pp };
+      })
+      .filter(({ ft, pp }) => ft <= 60 && stealthTotal < pp); // >60 ft can't notice; meet-or-beat hides (matches Steal)
+    const hid = spotters.length === 0;
+    broadcastRoll(
+      t.label,
+      [{
+        label: hid
+          ? `${t.label} hides — Stealth ${stealthTotal}, unseen`
+          : `${t.label} tries to hide — Stealth ${stealthTotal}, spotted by ${spotters[0].o.label} (passive Perception ${spotters[0].pp})`,
+        result: stealth,
+      }],
+      bloomSeedFor(t, hid ? "normal" : "fumble", hid ? "hidden" : "seen")
+    );
+    if (hid) void updateToken(t.id, { buffs: [...(t.buffs ?? []), encodeHidden(stealthTotal)] });
+  };
+
+  // Reveal a hidden attacker (slice H, P3): attacking or casting a harmful
+  // spell ends the Hide. Returns whether the actor WAS hidden — the to-hit
+  // path uses that for unseen-attacker advantage.
+  const revealIfHidden = (attackerId?: string): boolean => {
+    if (!attackerId) return false;
+    const a = tokensRef.current.find((t) => t.id === attackerId);
+    if (!a || !isStealthHidden(a.buffs)) return false;
+    void updateToken(a.id, { buffs: (a.buffs ?? []).filter((b) => !isHiddenEntry(b)) });
+    broadcastRoll(a.label, [{ label: `${a.label} strikes from hiding — revealed`, result: roll("1d1") }]);
+    return true;
+  };
+
   // Release a readied action (slice G): the tap on the chip is the trigger
   // call. Strip the buff, spend the Reaction, log — the HUD then launches the
   // held attack's targeting off-turn.
@@ -2265,6 +2335,29 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     const m = /passive perception\s+(\d+)/i.exec(line);
     if (m) return parseInt(m[1], 10);
     return 10 + abilityMod(sb.abilities?.WIS ?? 10);
+  };
+
+  // Hide (slice H) — a token's Stealth bonus (PC skill, monster statblock
+  // skill, else DEX) and its passive Perception as an observer.
+  const stealthBonusOfToken = (t: Token): number => {
+    if (t.character_id) {
+      const ch = characters.find((c) => c.id === t.character_id);
+      if (ch) return skillBonus(ch, "Stealth");
+    }
+    const sb = t.statblock;
+    if (sb) {
+      const sk = (sb.skills ?? []).find((s) => /stealth/i.test(s.name));
+      return sk ? sk.bonus : abilityMod(sb.abilities?.DEX ?? 10);
+    }
+    return 0;
+  };
+  const passivePerceptionOfToken = (t: Token): number => {
+    if (t.character_id) {
+      const ch = characters.find((c) => c.id === t.character_id);
+      if (ch) return 10 + skillBonus(ch, "Perception");
+    }
+    if (t.statblock) return passivePerceptionOf(t.statblock);
+    return 10;
   };
 
   const openLoot = async (t: Token) => {
@@ -3092,6 +3185,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // from the caster toward (aimX, aimY) and damages every creature in the wedge.
   const resolveBurst = (by: string, spec: AttackSpec, attackerId: string | undefined, aimX: number, aimY: number) => {
     startCombatIfHarmful(spec); // a damaging area cast begins the fight
+    if (spec.damage || spec.save) revealIfHidden(attackerId); // casting an offensive AoE from hiding reveals (slice H)
     // Lingering area spell (Web, Wall of Fire…): drop a persistent #80 area token
     // at the aimed cell. It stays until removed; the DM adjudicates who's inside
     // each round. Directional shapes (line/wall) start facing east — rotate via
@@ -3370,6 +3464,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       broadcastRoll(by, [entry], bloomSeedFor(target, "normal", `+${healRoll.total}`));
       return;
     }
+    // Harmful action from hiding (slice H, P3): capture whether the attacker
+    // was hidden — for unseen-attacker advantage on the to-hit path — then
+    // reveal (heal/cleanse above never reveal). Applies to every harmful branch.
+    const attackerWasHidden = revealIfHidden(attackerId);
     // Save-or-be-conditioned spell (Hold Person, Fear, …). The caster only sets
     // the DC — the DEFENDER rolls the save, on their own screen. Emit a save
     // request that travels to whoever controls the target; resolution + the
@@ -3480,7 +3578,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     const tgtAgg = aggregateConditions(target.conditions ?? []);
     const attacker = attackerId ? tokens.find((t) => t.id === attackerId) : undefined;
     const atkAgg = aggregateConditions(attacker?.conditions ?? []);
-    const adv = tgtAgg.attackersAdvantage;
+    // Unseen attacker (slice H): striking from hiding grants advantage on this
+    // attack (the reveal already happened above).
+    const adv = tgtAgg.attackersAdvantage || attackerWasHidden;
     // Dodging (slice F): attacks against the dodger roll at disadvantage —
     // unless a condition negates the stance (incapacitated / speed 0, RAW).
     const tgtDodging =
@@ -4862,6 +4962,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               const dragging = ghost?.id === t.id;
               const clipId = `token-clip-${t.id}`;
               const dead = tokenIsDowned(t);
+              // Per-viewer visibility (slice H): "ghost" = the DM's faint
+              // last-known marker of a stealth-hidden token (display-only);
+              // "dim" = a token you can see but that's hidden-to-others
+              // (the hider's own translucent token, or a DM-hidden token).
+              const vl = viewLevel(t);
+              const isGhost = vl === "ghost";
 
               // Spell area marker (#80): a translucent, non-combatant footprint
               // sized to the spell's area of effect — not a creature disc. A
@@ -4983,8 +5089,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     // Hidden tokens only render for the DM — ghosted, so the
                     // DM always knows what the players can't see. A defeated
                     // creature reads as a body: dimmed and drained of colour.
-                    opacity: t.hidden ? 0.42 : dead ? 0.5 : dragging ? 0.9 : 1,
-                    filter: dead ? "grayscale(0.85)" : undefined,
+                    // A stealth-hidden token: dim for the hider, a faint ghost
+                    // for the DM (slice H).
+                    opacity: isGhost ? 0.22 : vl === "dim" ? 0.42 : dead ? 0.5 : dragging ? 0.9 : 1,
+                    filter: dead ? "grayscale(0.85)" : isGhost ? "grayscale(0.6)" : undefined,
+                    // The DM's ghost stays selectable — a last-known marker they
+                    // can inspect, move, or manually reveal — it just can't be
+                    // targeted by attacks (enforced at target-commit, slice H).
                   }}
                 >
                   {/* Always-present hit target for the whole disc. `fill="transparent"`
@@ -5804,6 +5915,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onDodge={() => selectedToken && takeDodge(selectedToken)}
               onReady={(entry) => selectedToken && takeReady(selectedToken, entry)}
               onReleaseReady={(entry) => selectedToken && releaseReady(selectedToken, entry)}
+              onHide={() => selectedToken && attemptHide(selectedToken)}
               economy={economyView}
               onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}
