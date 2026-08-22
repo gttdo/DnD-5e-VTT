@@ -195,10 +195,36 @@ client.
   mods (needs new EFFECTS fields: selfAttackAdvantage, attackersDisadvantage;
   `invisible` is in the name list today but has NO EFFECTS entry yet).
 
-### Open decisions (need the user)
-1. Does the DM truly lose sight of a hidden PC (strict fog), or keep a faint
-   "ghost / last-known" marker so they can still run the world?
-2. Range-band thresholds (30/60 ft default) + do ALLIES count as observers for
-   the contest, or only enemies (disposition)?
-3. Out-of-combat cadence: on-move only, interval only, or both — and interval
-   length.
+### Decisions (locked)
+1. DM keeps a FAINT GHOST of a hidden token (last-known marker) — the hider
+   sees their translucent token, other players see nothing, the DM sees a faint
+   non-interactive ghost so they can still run the scene.
+2. Observers = ENEMIES only (disposition hostile). Bands: ≤30 ft passive as-is,
+   30–60 ft passive −5, >60 ft can't notice.
+3. Out of combat: re-check on the hider's MOVE + a ~6s interval.
+
+### Build phases
+- ~~P1–P3~~ ✅ DONE (a6c5b5e). Per-viewer visibility (viewLevel none/ghost/dim/
+  full; stored as a `Hidden::<stealth>` buff), the in-combat Stealth contest,
+  and reveal-on-attack + unseen-attacker advantage. Verified DM-seat; owner
+  translucent view + true multi-client hiding still to confirm from a player
+  seat. The DM's ghost is selectable (a last-known marker) but not targetable.
+- P4 (next) — Out of combat: recheck on move + ~6s interval, owner's client
+  writes; a now-spotted hider is revealed and logged.
+- P5 (later) — Search + Invisibility spells reuse the visibility layer.
+
+Original phase notes kept below.
+- P1 — Visibility foundation: per-token `viewLevel(t) → none|ghost|dim|full`
+  (DM-hidden = DM dim / players none; stealth-hidden = owner dim / DM ghost /
+  others none; else full). State stored as a buff `Hidden::<stealthTotal>`
+  (no migration — rides token.buffs; owner sees a gold chip; freezes the
+  Stealth roll for later Search). Verify with a manual toggle.
+- P2 — Hide action (in combat): the tile rolls Stealth once vs each hostile
+  observer's range-adjusted passive Perception; beat all who can notice →
+  apply Hidden buff; else fail. All logged.
+- P3 — Reveal + combat: attacking/casting clears Hidden (the actor's own
+  client); attacking FROM hidden gets advantage (unseen attacker) on that
+  attack, then reveals.
+- P4 — Out of combat: recheck on move + ~6s interval (owner's client writes).
+- P5 (later): Search (active Perception vs frozen Stealth), Invisibility spells
+  reuse the same visibility layer.
