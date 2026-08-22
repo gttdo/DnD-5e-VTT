@@ -5926,6 +5926,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               const why = p.input.reason ? ` — ${String(p.input.reason)}` : "";
               return `Share "${d?.title || (d ? "untitled" : "a document")}" with the players${why}?`;
             }
+            if (p.tool === "remember") {
+              return `Remember: “${String(p.input.content ?? "")}”?`;
+            }
             return `Run ${p.tool}?`;
           }}
           onProposal={async (p) => {
@@ -5994,6 +5997,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               void shareWithParty(d.id, activeSessionRef.current?.id ?? null);
               presentDoc({ id: d.id, title: d.title, content: d.content, kind: d.kind, meta: d.meta });
               return { ok: true, message: `Shared "${d.title || "it"}" — it's on their screens and in the journal.` };
+            }
+            if (p.tool === "remember") {
+              const content = String(p.input.content ?? "").trim();
+              if (!content) return { ok: false, message: "Nothing to remember." };
+              if (!authUser) return { ok: false, message: "Not signed in." };
+              const { error } = await supabase
+                .from("campaign_memory")
+                .insert({ game_id: game.id, content, created_by: authUser.id });
+              if (error) return { ok: false, message: error.message };
+              return { ok: true, message: "Noted — I'll remember that." };
             }
             return { ok: false, message: `Unknown action: ${p.tool}` };
           }}

@@ -396,6 +396,58 @@ export const useDocShares = (gameId: string | null) => {
   return { shares, shareWithParty, shareWithPlayer, unshareOne, unshare };
 };
 
+/**
+ * Campaign memory (#0048) — durable facts the Co-DM was told to remember. The
+ * DM can review and prune them here; the Co-DM re-reads them each turn.
+ */
+export interface CampaignMemory {
+  id: string;
+  game_id: string;
+  content: string;
+  created_at: string;
+}
+
+export const useCampaignMemory = (gameId: string | null) => {
+  const [memory, setMemory] = useState<CampaignMemory[]>([]);
+
+  const reload = useCallback(async () => {
+    if (!gameId || !supabaseConfigured) {
+      setMemory([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("campaign_memory")
+      .select("*")
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: false });
+    setMemory((data ?? []) as CampaignMemory[]);
+  }, [gameId]);
+
+  useEffect(() => {
+    void reload();
+    if (!gameId || !supabaseConfigured) return;
+    const channel = supabase
+      .channel(`campaign-memory:${gameId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "campaign_memory", filter: `game_id=eq.${gameId}` },
+        () => void reload()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [gameId, reload]);
+
+  const forget = useCallback(async (id: string) => {
+    setMemory((prev) => prev.filter((m) => m.id !== id));
+    const { error } = await supabase.from("campaign_memory").delete().eq("id", id);
+    return { error: error?.message ?? null };
+  }, []);
+
+  return { memory, forget, reload };
+};
+
 export const useDraftSceneIds = (gameId: string | null) => {
   const [draftChapterIds, setDraftChapterIds] = useState<Set<string>>(new Set());
   const [sceneChapters, setSceneChapters] = useState<Map<string, string | null>>(new Map());

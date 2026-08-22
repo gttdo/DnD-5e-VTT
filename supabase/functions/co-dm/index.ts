@@ -97,6 +97,12 @@ Deno.serve(async (req) => {
     db.from("sessions").select("id, number, started_at, ended_at").eq("game_id", gid).order("number"),
   ]);
 
+  const { data: memory } = await db
+    .from("campaign_memory")
+    .select("content, created_at")
+    .eq("game_id", gid)
+    .order("created_at", { ascending: true });
+
   const sceneIds = (scenes ?? []).map((s) => s.id);
   const mapIds = (regionMaps ?? []).map((m) => m.id);
   const [{ data: sceneSpots }, { data: mapSpots }] = await Promise.all([
@@ -175,6 +181,10 @@ Deno.serve(async (req) => {
       world.push(`- "${h.label ?? "pin"}" on ${from} → ${to}`);
     }
   }
+  if (memory && memory.length) {
+    world.push(`\nESTABLISHED IN PLAY (facts you were told to remember):`);
+    for (const m of memory) world.push(`- ${clip(m.content, 300)}`);
+  }
   const recaps = (docs ?? []).filter((d) => d.kind === "recap" && d.session_id);
   if (recaps.length) {
     world.push(`\nSESSION RECAPS (the story so far):`);
@@ -206,6 +216,7 @@ Deno.serve(async (req) => {
     "  • stage_scene — move the table to a different scene, when the DM's message makes clear the party is going there. Never a scene that isn't in the campaign.",
     "  • place_tokens — put a creature's tokens on the board, when the DM is setting up or starting an encounter. Read the scene's own notes for who and how many (e.g. a note saying 'four kobolds' → creature_name 'Kobold', count 4). One proposal per creature type; propose several if the encounter is mixed. You don't see the map, so you can't choose positions — the DM drags them into place.",
     "  • share_doc — show a player-facing document (a read-aloud, handout, or recap) to the players: it appears on every screen AND is filed in their journal. Propose it when it's the moment to read the boxed text or hand over a prop. Pass the document's id (shown as 'id:...' in the campaign above). Never share a private note, and don't re-share something already marked SHARED unless the DM wants it shown again.",
+    "  • remember — save a durable fact that emerged in play and lives in no document yet: a promise made, a name the party gave someone, a consequence, an NPC's shifted attitude. Propose it when such a thing happens so you'll recall it later. Don't remember things already written in a note or the 'ESTABLISHED IN PLAY' list; keep each memory one crisp sentence.",
     "  When you propose, say in one sentence why.",
     "",
     "THE CAMPAIGN:",
@@ -260,6 +271,19 @@ Deno.serve(async (req) => {
           reason: { type: "string", description: "one short phrase: why now" },
         },
         required: ["document_id"],
+      },
+    },
+    {
+      name: "remember",
+      description:
+        "Propose saving a durable fact established in play (a promise, a name, a consequence, a changed attitude) that isn't written anywhere yet. The DM approves; you'll recall it in future turns.",
+      input_schema: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "one crisp sentence to remember" },
+          reason: { type: "string", description: "one short phrase: why it matters" },
+        },
+        required: ["content"],
       },
     },
   ];

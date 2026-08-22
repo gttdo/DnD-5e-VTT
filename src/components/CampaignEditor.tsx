@@ -4,7 +4,7 @@ import { useAuth } from "../state/useAuth";
 import { useToast } from "../state/Toast";
 import { useConfirm } from "../state/Confirm";
 import { useScenes, type Scene } from "../state/useScenes";
-import { useChapters, useCampaignDocs, useDocShares, type Chapter, type CampaignDoc, type DocKind } from "../state/useCampaign";
+import { useChapters, useCampaignDocs, useDocShares, useCampaignMemory, type Chapter, type CampaignDoc, type DocKind } from "../state/useCampaign";
 
 /**
  * Share state for the whole editor — which docs have been shared, and the
@@ -1286,6 +1286,7 @@ const OverviewPage = ({
   deleteDoc: (id: string) => Promise<{ error: string | null }>;
 }) => {
   const campaignDocs = docs.filter((d) => !d.scene_id && !d.chapter_id && !d.session_id && d.kind !== "recap");
+  const { memory, forget } = useCampaignMemory(campaign.id);
   return (
     <>
       <div className="camped-scenehead">
@@ -1319,6 +1320,25 @@ const OverviewPage = ({
           </button>
         ))}
       </div>
+
+      {memory.length > 0 && (
+        <>
+          <div className="camped-sechead">
+            <h5>What the Co-DM remembers</h5>
+          </div>
+          <div className="camped-memory">
+            {memory.map((m) => (
+              <div key={m.id} className="camped-memory-row">
+                <Icon name="sparkles" size={13} />
+                <span className="camped-memory-text">{m.content}</span>
+                <button className="camped-memory-forget" title="Forget this" onClick={() => void forget(m.id)}>
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 };

@@ -8238,3 +8238,15 @@ button.topbar-stat {
 }
 .journal-session-head:first-child { margin-top: 2px; }
 .journal-session-date { font-size: 10.5px; letter-spacing: 0.06em; color: var(--text-muted); text-transform: none; }
+
+/* ---- Campaign memory list (Co-DM remember) ---- */
+.camped-memory { display: flex; flex-direction: column; gap: 6px; }
+.camped-memory-row {
+  display: flex; align-items: center; gap: 9px;
+  background: color-mix(in srgb, var(--candle) 5%, var(--surface-1));
+  border: 1px solid var(--line-soft); border-radius: 7px; padding: 8px 12px;
+}
+.camped-memory-row > svg { color: var(--candle-dim, var(--gold-dim)); flex: none; }
+.camped-memory-text { flex: 1; font-size: 13.5px; color: var(--text); }
+.camped-memory-forget { flex: none; background: none; border: 0; cursor: pointer; color: var(--text-muted); padding: 3px; border-radius: 5px; display: flex; }
+.camped-memory-forget:hover { color: var(--ember); background: var(--surface-2); }
