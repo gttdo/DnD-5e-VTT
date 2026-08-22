@@ -803,6 +803,55 @@ const renderAmbienceOptions = () =>
     ];
   });
 
+// The Documents section, grouped into tabs by kind. Shared by scenes and
+// chapters — the container decides where a new doc is filed via onCreate.
+const DocumentsTabs = ({
+  docs,
+  updateDoc,
+  deleteDoc,
+  onCreate,
+}: {
+  docs: CampaignDoc[];
+  updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility" | "meta">>) => Promise<{ error: string | null }>;
+  deleteDoc: (id: string) => Promise<{ error: string | null }>;
+  onCreate: (kind: DocKind) => void;
+}) => {
+  const [docTab, setDocTab] = useState<DocKind>("note");
+  const tabDocs = docs.filter((d) => d.kind === docTab);
+  return (
+    <>
+      <div className="camped-doctabs" role="tablist">
+        {DOC_TABS.map((k) => {
+          const n = docs.filter((d) => d.kind === k).length;
+          return (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={docTab === k}
+              className={`camped-doctab ${docTab === k ? "is-active" : ""}`}
+              onClick={() => setDocTab(k)}
+            >
+              {KIND_LABEL[k]}
+              {n > 0 && <span className="camped-doctab-count">{n}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {tabDocs.length === 0 && (
+        <div className="dim" style={{ fontSize: 13.5, margin: "2px 0 10px" }}>
+          No {KIND_LABEL[docTab].toLowerCase()} documents here yet.
+        </div>
+      )}
+      {tabDocs.map((d) => (
+        <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
+      ))}
+      <div className="camped-adddocs">
+        <button onClick={() => onCreate(docTab)}>＋ {KIND_LABEL[docTab]}</button>
+      </div>
+    </>
+  );
+};
+
 const ScenePage = ({
   scene,
   chapters,
@@ -828,7 +877,6 @@ const ScenePage = ({
   const desc = useAutosave(scene.description ?? "", (v) => void updateSceneMeta(scene.id, { description: v }));
   const [picker, setPicker] = useState<"battlemap" | "backdrop" | null>(null);
   const [generator, setGenerator] = useState<"battlemap" | "backdrop" | null>(null);
-  const [docTab, setDocTab] = useState<DocKind>("note");
   // The Scribe (#0041 slice 1d): draft the ~25-word arrival read-aloud from
   // the description above — the description is the canonical source.
   const toast = useToast();
@@ -974,52 +1022,19 @@ const ScenePage = ({
       <div className="camped-sechead">
         <h5>Documents</h5>
       </div>
-      <div className="camped-doctabs" role="tablist">
-        {DOC_TABS.map((k) => {
-          const n = docs.filter((d) => d.kind === k).length;
-          return (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={docTab === k}
-              className={`camped-doctab ${docTab === k ? "is-active" : ""}`}
-              onClick={() => setDocTab(k)}
-            >
-              {KIND_LABEL[k]}
-              {n > 0 && <span className="camped-doctab-count">{n}</span>}
-            </button>
-          );
-        })}
-      </div>
-      {(() => {
-        const tabDocs = docs.filter((d) => d.kind === docTab);
-        return (
-          <>
-            {tabDocs.length === 0 && (
-              <div className="dim" style={{ fontSize: 13.5, margin: "2px 0 10px" }}>
-                No {KIND_LABEL[docTab].toLowerCase()} documents in this scene yet.
-              </div>
-            )}
-            {tabDocs.map((d) => (
-              <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
-            ))}
-            <div className="camped-adddocs">
-              <button
-                onClick={() =>
-                  void createDoc({
-                    kind: docTab,
-                    scene_id: scene.id,
-                    title: "",
-                    ...(docTab === "handout" ? { meta: { template: "letter", fields: EMPTY_FIELDS } } : {}),
-                  })
-                }
-              >
-                ＋ {KIND_LABEL[docTab]}
-              </button>
-            </div>
-          </>
-        );
-      })()}
+      <DocumentsTabs
+        docs={docs}
+        updateDoc={updateDoc}
+        deleteDoc={deleteDoc}
+        onCreate={(kind) =>
+          void createDoc({
+            kind,
+            scene_id: scene.id,
+            title: "",
+            ...(kind === "handout" ? { meta: { template: "letter", fields: EMPTY_FIELDS } } : {}),
+          })
+        }
+      />
 
       {picker && (
         <MapPickerDialog
@@ -1146,21 +1161,19 @@ const ChapterPage = ({
       <div className="camped-sechead">
         <h5>Chapter notes</h5>
       </div>
-      {chapterDocs.length === 0 && (
-        <div className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>
-          The chapter's own material — how to run it, what ties its scenes together.
-        </div>
-      )}
-      {chapterDocs.map((d) => (
-        <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
-      ))}
-      <div className="camped-adddocs">
-        {(["note", "quest"] as DocKind[]).map((k) => (
-          <button key={k} onClick={() => void createDoc({ kind: k, chapter_id: chapter.id, title: "" })}>
-            ＋ {KIND_LABEL[k]}
-          </button>
-        ))}
-      </div>
+      <DocumentsTabs
+        docs={chapterDocs}
+        updateDoc={updateDoc}
+        deleteDoc={deleteDoc}
+        onCreate={(kind) =>
+          void createDoc({
+            kind,
+            chapter_id: chapter.id,
+            title: "",
+            ...(kind === "handout" ? { meta: { template: "letter", fields: EMPTY_FIELDS } } : {}),
+          })
+        }
+      />
     </>
   );
 };
