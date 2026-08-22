@@ -6348,6 +6348,21 @@ button.topbar-stat {
 .thud-rs-res.is-used .thud-rs-res-n { background: rgba(255, 255, 255, 0.16); box-shadow: none; color: var(--text-muted); }
 .thud-rs-res:disabled { cursor: default; }
 
+/* Status strip in the HUD (#user ask) — condition (red) + buff (gold) icon
+   chips, sat left of the resource glyphs. Hover a chip for its label. */
+.thud-statuses {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
+  align-self: center; max-width: 190px;
+}
+.thud-status {
+  width: 30px; height: 30px; flex: none; display: grid; place-items: center;
+  border-radius: 8px; background: rgba(24, 16, 12, 0.55); border: 1px solid var(--border);
+  color: var(--text-dim); cursor: default;
+}
+.thud-status.is-cond { border-color: #e0864f; background: color-mix(in srgb, #c0392b 16%, transparent); color: #ffd9b8; }
+.thud-status.is-buff { border-color: var(--candle); background: color-mix(in srgb, var(--candle) 14%, transparent); color: var(--candle-bright); }
+.thud-status-txt { font-size: 9px; font-weight: 700; letter-spacing: 0.02em; }
+
 /* Active-condition banner in the HUD — greys the actions when incapacitating */
 .thud-conds {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;

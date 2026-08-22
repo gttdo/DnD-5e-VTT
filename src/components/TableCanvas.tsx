@@ -18,8 +18,7 @@ import { usePartyOwners } from "../state/usePartyOwners";
 import { useTableRolls } from "../state/useTableRolls";
 import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
 import type { SkillName } from "../types/character";
-import { aggregateConditions, autoFailsSave, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
-import { buffGlyph, buffNote, buffIsGood } from "../lib/buffs";
+import { aggregateConditions, autoFailsSave, conditionName, parseCondition } from "../lib/conditions";
 import { TokenStatusEditor } from "./TokenStatusEditor";
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
@@ -4851,77 +4850,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     {t.label}
                   </text>
 
-                  {/* Status strip — a BG3-style row of glyph chips above the token
-                      (#user ask): conditions (red) + buffs (gold), up to 5 then
-                      "+N". Display-only; managed from the HUD status picker.
-                      Everyone at the table sees them on visible tokens. */}
-                  {((t.conditions?.length ?? 0) + (t.buffs?.length ?? 0)) > 0 && (() => {
-                    const items = [
-                      ...(t.conditions ?? []).map((c) => {
-                        const pc = parseCondition(c);
-                        return {
-                          key: `c:${c}`,
-                          glyph: conditionGlyph(pc.name),
-                          label: pc.name,
-                          good: false,
-                          tip: pc.save && pc.dc != null ? `${pc.name} (${pc.save} save DC ${pc.dc})` : pc.name,
-                        };
-                      }),
-                      ...(t.buffs ?? []).map((b) => ({
-                        key: `b:${b}`,
-                        glyph: buffGlyph(b) as string | null,
-                        label: b,
-                        good: buffIsGood(b),
-                        tip: buffNote(b) ? `${b} — ${buffNote(b)}` : b,
-                      })),
-                    ];
-                    const MAX = 5;
-                    const shown = items.slice(0, MAX);
-                    const extra = items.length - shown.length;
-                    const chip = 18;
-                    const gap = 3;
-                    const slots = shown.length + (extra > 0 ? 1 : 0);
-                    const total = slots * chip + (slots - 1) * gap;
-                    const by = cy - r - chip - 6;
-                    return (
-                      <g>
-                        {shown.map((it, i) => {
-                          const bx = cx - total / 2 + i * (chip + gap);
-                          const border = it.good ? "#d9a441" : "#e0864f";
-                          const ink = it.good ? "#ffe6b0" : "#ffd9b8";
-                          return (
-                            <g key={it.key}>
-                              <title>{it.tip}</title>
-                              <rect x={bx} y={by} width={chip} height={chip} rx={4} fill="rgba(24,16,12,0.92)" stroke={border} strokeWidth={1.2} />
-                              {it.glyph ? (
-                                <foreignObject x={bx + 2} y={by + 2} width={chip - 4} height={chip - 4} style={{ pointerEvents: "none" }}>
-                                  <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: ink }}>
-                                    <GameGlyph src={it.glyph} size={chip - 4} />
-                                  </div>
-                                </foreignObject>
-                              ) : (
-                                <text x={bx + chip / 2} y={by + chip / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill={ink} style={{ pointerEvents: "none" }}>
-                                  {it.label.slice(0, 3).toUpperCase()}
-                                </text>
-                              )}
-                            </g>
-                          );
-                        })}
-                        {extra > 0 && (() => {
-                          const bx = cx - total / 2 + shown.length * (chip + gap);
-                          return (
-                            <g>
-                              <title>{`${extra} more: ${items.slice(MAX).map((it) => it.label).join(", ")}`}</title>
-                              <rect x={bx} y={by} width={chip} height={chip} rx={4} fill="rgba(24,16,12,0.92)" stroke="#8a6a3a" strokeWidth={1.2} />
-                              <text x={bx + chip / 2} y={by + chip / 2 + 3.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
-                                +{extra}
-                              </text>
-                            </g>
-                          );
-                        })()}
-                      </g>
-                    );
-                  })()}
+                  {/* Statuses moved off the token into the HUD (#user ask): select
+                      a token to read its conditions/buffs (hover for labels), or
+                      right-click → Examine. Keeps the board uncluttered. */}
 
                   {/* Caster's "they're rolling" loader while a save is pending. */}
                   {savePendingIds.has(t.id) && <CastingLoader cx={cx} cy={cy - r} />}
@@ -5548,6 +5479,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               // rail's Next button instead.
               endTurnEnabled={init.activeToken?.id === selectedToken.id}
               conditions={selectedToken.conditions ?? undefined}
+              buffs={selectedToken.buffs ?? undefined}
               onHp={(current) => void updateToken(selectedToken.id, { hp_current: current })}
               hidden={selectedToken.hidden}
               onToggleHidden={
@@ -5581,6 +5513,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               hpMax={selectedToken.hp_max ?? selectedToken.statblock?.hp ?? null}
               level={selectedToken.char_level ?? null}
               isPlayerChar={!!selectedToken.character_id}
+              conditions={selectedToken.conditions ?? undefined}
+              buffs={selectedToken.buffs ?? undefined}
               hidden={selectedToken.hidden}
               onToggleHidden={
                 isDM ? () => void setTokenHidden(selectedToken.id, !selectedToken.hidden) : undefined
@@ -5615,6 +5549,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               // it actually is (the DM uses the rail's Next for everything else).
               endTurnEnabled={!!selectedToken && init.activeToken?.id === selectedToken.id}
               conditions={selectedToken?.conditions ?? undefined}
+              buffs={selectedToken?.buffs ?? undefined}
               hp={hpApi}
               onCloseModal={() => setHudModal(null)}
               onUpdate={(mut) => onUpdateCharacter(boundCharacter.id, mut)}

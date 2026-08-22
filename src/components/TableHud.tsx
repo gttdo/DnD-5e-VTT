@@ -8,7 +8,8 @@ import { itemSpellGrant } from "../lib/itemSpellGrants";
 import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } from "../lib/calc";
 import { applyDamage, applyHeal } from "../lib/hp";
 import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility, sorceryPoints, QUICKEN_COST } from "../lib/spellcasting";
-import { aggregateConditions, conditionName, conditionGlyph } from "../lib/conditions";
+import { aggregateConditions, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
+import { buffGlyph, buffNote, buffIsGood } from "../lib/buffs";
 import type { MonsterStatblock } from "../types/content";
 import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
@@ -46,23 +47,25 @@ export interface EconomyView {
 }
 type EconKey = "action" | "bonus" | "reaction";
 
-const ConditionsBanner = ({ conditions }: { conditions: string[] }) => {
-  if (conditions.length === 0) return null;
-  const agg = aggregateConditions(conditions);
-  const badge = (name: string, note?: string) => {
-    const g = conditionGlyph(name);
-    return (
-      <span key={name} className="thud-cond" title={note ?? name}>
-        {g && <GameGlyph src={g} size={13} className="thud-cond-ico" />}
-        {name}
-      </span>
-    );
-  };
+// The token's statuses as a compact icon strip (#user ask — HUD, not on the
+// token). Conditions (red) + buffs (gold) as glyph chips with a hover label.
+// Rendered in every HUD so clicking any token shows what's on it.
+const StatusStrip = ({ conditions = [], buffs = [] }: { conditions?: string[]; buffs?: string[] }) => {
+  if (conditions.length === 0 && buffs.length === 0) return null;
+  const incap = aggregateConditions(conditions).incapacitated;
+  const chip = (key: string, glyph: string | null, label: string, good: boolean, tip: string) => (
+    <span key={key} className={`thud-status ${good ? "is-buff" : "is-cond"}`} title={tip}>
+      {glyph ? <GameGlyph src={glyph} size={16} className="thud-status-ico" /> : <span className="thud-status-txt">{label.slice(0, 3)}</span>}
+    </span>
+  );
   return (
-    <div className={`thud-conds ${agg.incapacitated ? "is-incap" : ""}`}>
-      {agg.incapacitated && <span className="thud-conds-flag">Can't act</span>}
-      {agg.notes.map((n) => badge(n.name, n.note))}
-      {agg.notes.length === 0 && conditions.map((c) => badge(conditionName(c)))}
+    <div className={`thud-statuses ${incap ? "is-incap" : ""}`} aria-label="Statuses">
+      {conditions.map((c) => {
+        const pc = parseCondition(c);
+        const tip = pc.save && pc.dc != null ? `${pc.name} · ${pc.save} save DC ${pc.dc}` : pc.name;
+        return chip(`c:${c}`, conditionGlyph(pc.name), pc.name, false, tip);
+      })}
+      {buffs.map((b) => chip(`b:${b}`, buffGlyph(b), b, buffIsGood(b), buffNote(b) ? `${b} — ${buffNote(b)}` : b))}
     </div>
   );
 };
@@ -374,6 +377,8 @@ interface Props {
   endTurnEnabled?: boolean;
   /** Active conditions on this token — disable actions when incapacitating. */
   conditions?: string[];
+  /** Active buffs on this token — shown in the status strip (gold). */
+  buffs?: string[];
   /** HP editing, routed to the character row. Null → HP is read-only. */
   hp?: { heal: (n: number) => void; damage: (n: number) => void; setTemp: (n: number) => void } | null;
   /** Close any open game-menu modal (e.g. the region map) — for one-at-a-time. */
@@ -400,6 +405,7 @@ export const TableHud = ({
   onEndTurn,
   endTurnEnabled,
   conditions,
+  buffs,
   hp,
   onCloseModal,
   onUpdate,
@@ -1162,8 +1168,7 @@ export const TableHud = ({
 
       <div className="thud-rule" />
 
-      {/* the point: actions ARE rolls */}
-      <ConditionsBanner conditions={conditions ?? []} />
+      <StatusStrip conditions={conditions ?? []} buffs={buffs ?? []} />
 
       {concentratingOn && (
         <div className="thud-conc" role="group" aria-label="Concentration">
@@ -1302,6 +1307,8 @@ export const TokenHud = ({
   hpMax,
   level,
   isPlayerChar,
+  conditions,
+  buffs,
 }: {
   label: string;
   image?: string | null;
@@ -1314,6 +1321,9 @@ export const TokenHud = ({
   level?: number | null;
   /** True when the token is a bound player character (drives the labels). */
   isPlayerChar?: boolean;
+  /** Statuses shown so anyone selecting the token can read them. */
+  conditions?: string[];
+  buffs?: string[];
   hidden?: boolean;
   onToggleHidden?: () => void;
   onDeleteToken?: () => void;
@@ -1350,6 +1360,7 @@ export const TokenHud = ({
               : "This token isn't one of your characters."}
         </div>
       )}
+      <StatusStrip conditions={conditions ?? []} buffs={buffs ?? []} />
     </div>
   );
 };
@@ -1378,6 +1389,7 @@ export const MonsterHud = ({
   onEndTurn,
   endTurnEnabled,
   conditions,
+  buffs,
   onHp,
 }: {
   statblock: MonsterStatblock;
@@ -1396,6 +1408,7 @@ export const MonsterHud = ({
   onEndTurn?: () => void;
   endTurnEnabled?: boolean;
   conditions?: string[];
+  buffs?: string[];
   onHp: (current: number) => void;
   hidden?: boolean;
   onToggleHidden?: () => void;
@@ -1718,7 +1731,7 @@ export const MonsterHud = ({
 
       <div className="thud-rule" />
 
-      <ConditionsBanner conditions={conditions ?? []} />
+      <StatusStrip conditions={conditions ?? []} buffs={buffs ?? []} />
 
       <div className="thud-acts">
         {tabItems.map((s, i) => (
