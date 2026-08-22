@@ -5418,6 +5418,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
             <RegionNavigator
               gameId={game.id}
               isDM={isDM}
+              // Pin authoring lives in the Campaign editor (#user ask) — at the
+              // table, the DM travels the map exactly like a player.
+              canEdit={false}
               scenes={scenes.map((s) => ({ id: s.id, name: s.name }))}
               draftSceneIds={draftSceneIds}
               onTravel={(sceneId) => guardTravel(sceneId)}

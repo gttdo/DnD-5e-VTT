@@ -17,6 +17,10 @@ import { Icon } from "./ui/Icon";
 interface Props {
   gameId: string;
   isDM: boolean;
+  /** Pin/map authoring (#user ask): editing lives in the Campaign editor —
+   *  the VTT passes false so everyone (DM included) uses the map like a
+   *  player. isDM keeps its VIEW privileges (hidden pins, draft targets). */
+  canEdit: boolean;
   /** Scenes to link pins to (id + name is all we need). */
   scenes: Array<{ id: string; name: string }>;
   /** Scenes in draft chapters — their pins are hidden from players (#0041).
@@ -29,7 +33,7 @@ interface Props {
   onClose: () => void;
 }
 
-export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel, onClose }: Props) => {
+export const RegionNavigator = ({ gameId, isDM, canEdit, scenes, draftSceneIds, onTravel, onClose }: Props) => {
   const { regionMaps, loading, createRegionMap, deleteRegionMap } = useRegionMaps(gameId);
   // Breadcrumb of map ids; the top is what's shown. Seeded to the root (oldest).
   const [stack, setStack] = useState<string[]>([]);
@@ -129,7 +133,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
   const pinDragRef = useRef({ id: null as string | null, moved: false });
   const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null);
   const pinDragStart = (h: (typeof hotspots)[number], e: React.PointerEvent) => {
-    if (!isDM) return;
+    if (!canEdit) return;
     if ((e.target as HTMLElement).closest?.(".cine-hotspot-edit")) return; // pencil press stays a click
     const start = { x: e.clientX, y: e.clientY };
     const thresh = e.pointerType === "touch" ? 10 : 5;
@@ -168,7 +172,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
   };
 
   const placePin = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDM || !editMode || editPinId || panRef.current.moved) return;
+    if (!canEdit || !editMode || editPinId || panRef.current.moved) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
@@ -181,7 +185,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
   const pinClick = (h: (typeof hotspots)[number]) => {
     if (panRef.current.moved) return; // that was a pan, not a click
     if (pinDragRef.current.moved) return; // that was a reposition drag
-    if (isDM && editMode) {
+    if (canEdit && editMode) {
       setEditPinId(h.id);
       return;
     }
@@ -190,7 +194,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
     } else if (h.target_scene_id) {
       onTravel(h.target_scene_id);
       onClose();
-    } else if (isDM) {
+    } else if (canEdit) {
       // Unlinked pin: open its editor — WITHOUT flipping into placement mode
       // (auto-entering edit mode made the next map click silently create a
       // duplicate pin; that trap is how a stray second pin got authored).
@@ -220,7 +224,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
           <GameGlyph src="/icons/board/compass.svg" size={15} />
         )}
         <span className="region-panel-t">{current?.name ?? "Region map"}</span>
-        {isDM && current && (
+        {canEdit && current && (
           <button
             className={`regnav-edit ${editMode ? "is-on" : ""}`}
             onClick={() => {
@@ -246,11 +250,13 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
             <GameGlyph src="/icons/board/compass.svg" size={38} />
             <h4>No region map yet</h4>
             <p>
-              {isDM
+              {canEdit
                 ? "Add a regional map from your library — then pin its locations and your players can travel by clicking them."
-                : "Your DM hasn't shared a map of these lands yet."}
+                : isDM
+                  ? "Set up the regional map in the Campaign editor (Manage campaign → Regional map)."
+                  : "Your DM hasn't shared a map of these lands yet."}
             </p>
-            {isDM && (
+            {canEdit && (
               <button className="tm-regionset" onClick={() => setMapPicker({ forPin: null })}>
                 Add a region map
               </button>
@@ -273,7 +279,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
           >
             <div
               ref={stageRef}
-              className={`regnav-stage ${isDM && editMode ? "is-editing" : ""}`}
+              className={`regnav-stage ${canEdit && editMode ? "is-editing" : ""}`}
               style={{ transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.z})`, transformOrigin: "0 0" }}
               onClick={placePin}
             >
@@ -297,8 +303,8 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
                       pinClick(h);
                     }}
                     onContextMenu={(e) => {
-                      // DM right-click = straight to the editor, no mode needed.
-                      if (!isDM) return;
+                      // Right-click = straight to the editor, no mode needed.
+                      if (!canEdit) return;
                       e.preventDefault();
                       e.stopPropagation();
                       setEditPinId(h.id);
@@ -306,7 +312,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
                   >
                     <span className="cine-hotspot-dot" />
                     {h.label && <span className="cine-hotspot-label">{h.label}</span>}
-                    {isDM && (
+                    {canEdit && (
                       <span
                         className="cine-hotspot-edit"
                         role="button"
@@ -327,7 +333,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
           </div>
         )}
 
-        {isDM && current && editMode && (
+        {canEdit && current && editMode && (
           <div className="regnav-mapbar">
             <span className="dim">Click the map to drop a pin · click a pin to edit it</span>
             <button
@@ -344,7 +350,7 @@ export const RegionNavigator = ({ gameId, isDM, scenes, draftSceneIds, onTravel,
       </div>
 
       {/* Pin editor */}
-      {isDM && editPin && (
+      {canEdit && editPin && (
         <div className="regnav-editor">
           <label className="hotspot-field">
             <span>Label</span>
