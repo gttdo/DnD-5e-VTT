@@ -139,3 +139,66 @@ Confirmed issues to fix in a dedicated pass:
   player whose sheet isn't in the DM's roster, the save uses +0 and empty
   defenses (a fire-resistant PC takes full Fireball). Needs vitals (save
   bonuses + defenses) mirrored onto the token like HP already is.
+
+## Slice H — Hide (per-viewer visibility) — DESIGN, not yet built
+
+Hide is different from A–G: those were shared state everyone sees identically.
+Hide introduces **per-viewer visibility** — the same board renders differently
+per client. This is the seed of a broader vision/fog system, and several other
+things reuse the machinery (see "falls out for free").
+
+### The visibility model (the novel part)
+Today: `visibleTokens = isDM ? all : tokens.filter(!hidden)`. Two hidden
+concepts must coexist, with OPPOSITE audiences:
+- `t.hidden` (existing DM tool): visible to the DM only (translucent), players
+  see nothing.
+- **stealth-hidden** (new, the Hide action): visible to the OWNER only
+  (translucent); everyone else — other players AND the DM — sees nothing.
+
+Unify behind one per-viewer predicate `canView(t, me)`:
+- DM-hidden → only the DM.
+- stealth-hidden → only the token's controller (owner of character_id; DM for
+  a monster it hid).
+- otherwise → everyone.
+A token you can see but that is hidden-to-you-normally renders translucent.
+Client-side only — each client already knows isDM + ownedCharacterIds.
+
+### Resolution (the contest)
+In combat, on Hide: roll the hider's Stealth ONCE, compare to each OBSERVER's
+range-adjusted passive Perception. Observers = the opposing side (disposition).
+Range bands (our numbers, like loot — SRD has no passive-at-range table):
+- near (≤ 30 ft): passive Perception as-is.
+- far (30–60 ft): passive − 5 (disadvantage to notice).
+- very far (> 60 ft): auto-fails to notice — ignored.
+Binary result (v1): hidden only if the roll beats EVERY observer who could
+notice; otherwise the hide FAILS and nothing happens. All logged. (Per-observer
+partial hiding — hidden from A, seen by B — is a v2.)
+
+### Reveal triggers (SRD)
+Stealth-hidden clears when the hider attacks, casts a spell (verbal), or
+otherwise reveals — hook the actor's own resolveAttack / cast (2024 also ends
+it at the end of your next turn). Attacking FROM hidden gets advantage (unseen
+attacker) on that attack, THEN reveals.
+
+### Out of combat
+Same contest, re-checked over time: on the hidden token's MOVE (moving near an
+enemy risks detection) plus a slow interval tick. Single-writer = the owner's
+client.
+
+### Falls out of the same machinery ("similar actions")
+- **Invisibility / Greater Invisibility** (spells): same per-viewer visibility;
+  regular breaks on attack (like Hide), Greater doesn't.
+- **Search action**: the counter — active Perception vs the hider's (frozen)
+  Stealth; success reveals the hidden token to that searcher.
+- **Unseen attacker/target**: advantage attacking while unseen, disadvantage
+  attacking a target you can't see — reuse the `invisible` condition's combat
+  mods (needs new EFFECTS fields: selfAttackAdvantage, attackersDisadvantage;
+  `invisible` is in the name list today but has NO EFFECTS entry yet).
+
+### Open decisions (need the user)
+1. Does the DM truly lose sight of a hidden PC (strict fog), or keep a faint
+   "ghost / last-known" marker so they can still run the world?
+2. Range-band thresholds (30/60 ft default) + do ALLIES count as observers for
+   the contest, or only enemies (disposition)?
+3. Out-of-combat cadence: on-move only, interval only, or both — and interval
+   length.
