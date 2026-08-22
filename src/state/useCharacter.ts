@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { Character, Condition, InventoryItem, Attack, Feature } from "../types/character";
 import { sampleCharacter } from "../data/sampleCharacter";
 import { supabase, supabaseConfigured } from "../lib/supabase";
@@ -8,6 +8,13 @@ import { useToast } from "./Toast";
 
 export const useCharacter = (id: string | null) => {
   const toast = useToast();
+  // A per-instance suffix for the realtime channel topic. Two useCharacter
+  // hooks can legitimately watch the SAME character at once (App's active
+  // character AND the table's SheetDrawer for that same PC). Supabase reuses a
+  // channel by topic, so a shared "character:{id}" topic makes the second
+  // hook's `.on()` fire after the first's `.subscribe()` — which throws and
+  // blanks the app. A unique topic per instance keeps them independent.
+  const instanceId = useId();
   const [character, setCharacter] = useState<Character>(sampleCharacter);
   const [loading, setLoading] = useState<boolean>(!!id);
   const saveTimer = useRef<number | null>(null);
@@ -103,7 +110,7 @@ export const useCharacter = (id: string | null) => {
   useEffect(() => {
     if (!id || !supabaseConfigured) return;
     const channel = supabase
-      .channel(`character:${id}`)
+      .channel(`character:${id}:${instanceId}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "characters", filter: `id=eq.${id}` },
@@ -119,7 +126,7 @@ export const useCharacter = (id: string | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id]);
+  }, [id, instanceId]);
 
   const update = useCallback((mut: (draft: Character) => Character) => {
     setCharacter((prev) => mut(structuredClone(prev)));
