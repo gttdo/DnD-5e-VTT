@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Audio masters — keep local, ship the compressed mp3
+public/Soundtrack/*.wav

@@ -58,6 +58,7 @@ import { StoryDrawer } from "./StoryDrawer";
 import { JournalDrawer } from "./JournalDrawer";
 import { CoDMDrawer } from "./CoDMDrawer";
 import { AudioSettingsPopover } from "./AudioSettings";
+import { SceneAmbience } from "./SceneAmbience";
 import { audioBus } from "../lib/audioBus";
 import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
@@ -5886,6 +5887,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {storyOpen && !isDM && (
         <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
       )}
+      {/* Loops the staged scene's ambience through the Ambiance channel. */}
+      <SceneAmbience url={activeScene?.ambience_url ?? null} />
       {audioOpen && <AudioSettingsPopover onClose={() => setAudioOpen(false)} />}
       {coDMOpen && isDM && (
         <CoDMDrawer

@@ -42,6 +42,9 @@ export interface Scene {
   /** The canonical prose source for this place — seeds the Scribe's
    *  read-aloud drafts and both image-generator prompts. */
   description?: string;
+  /** Looping ambient track (#0046) — played through the Ambiance channel while
+   *  this scene is staged. A /Soundtrack path today, a storage URL later. */
+  ambience_url?: string | null;
 }
 
 /**
@@ -230,7 +233,7 @@ export const useScenes = (
   // Campaign Editor (#0041): prose + chapter membership. Optimistic like the
   // other scene patches; the realtime echo confirms.
   const updateSceneMeta = useCallback(
-    async (id: string, patch: Partial<Pick<Scene, "description" | "chapter_id" | "name" | "map_id">>) => {
+    async (id: string, patch: Partial<Pick<Scene, "description" | "chapter_id" | "name" | "map_id" | "ambience_url">>) => {
       setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
       const { error } = await supabase.from("scenes").update(patch).eq("id", id);
       return { error: error?.message ?? null };

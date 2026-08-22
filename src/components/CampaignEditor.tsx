@@ -24,6 +24,7 @@ import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../
 import { HandoutDocBody } from "./HandoutEditor";
 import { EMPTY_FIELDS } from "../lib/handouts";
 import { generateNarration } from "../lib/narrate";
+import { AMBIENCE_TRACKS } from "../lib/soundtrack";
 import type { Game } from "../state/useGames";
 import type { MapAsset } from "../state/useMaps";
 import { MapPickerDialog } from "./MapPickerDialog";
@@ -745,7 +746,7 @@ const ScenePage = ({
   scene: Scene;
   chapters: Chapter[];
   docs: CampaignDoc[];
-  updateSceneMeta: (id: string, patch: Partial<Pick<Scene, "description" | "chapter_id" | "name" | "map_id">>) => Promise<{ error: string | null }>;
+  updateSceneMeta: (id: string, patch: Partial<Pick<Scene, "description" | "chapter_id" | "name" | "map_id" | "ambience_url">>) => Promise<{ error: string | null }>;
   setSceneImageUrl: (id: string, url: string | null) => Promise<{ error: string | null }>;
   setSceneCinematicUrl: (id: string, url: string | null) => Promise<{ error: string | null }>;
   createDoc: (init: Partial<Pick<CampaignDoc, "kind" | "title" | "content" | "visibility" | "scene_id">>) => Promise<{ doc: CampaignDoc | null; error: string | null }>;
@@ -862,6 +863,30 @@ const ScenePage = ({
             </div>
           );
         })}
+      </div>
+
+      <div className="camped-sechead">
+        <h5>Ambience</h5>
+        <span style={{ flex: 1 }} />
+        {scene.ambience_url && <span className="camped-scribehint">plays while staged</span>}
+      </div>
+      <div className="camped-ambience">
+        <Icon name="music" size={15} />
+        <select
+          value={scene.ambience_url ?? ""}
+          onChange={(e) => void updateSceneMeta(scene.id, { ambience_url: e.target.value || null })}
+        >
+          <option value="">No ambience</option>
+          {AMBIENCE_TRACKS.map((t) => (
+            <option key={t.key} value={t.url}>
+              {t.name} — {t.hint}
+              {t.ready ? "" : " (no audio yet)"}
+            </option>
+          ))}
+        </select>
+        {scene.ambience_url && (
+          <audio src={scene.ambience_url} controls preload="none" className="camped-ambience-player" />
+        )}
       </div>
 
       <div className="camped-sechead">

@@ -8188,3 +8188,11 @@ button.topbar-stat {
 }
 .camped-voice-btn:hover { background: color-mix(in srgb, var(--candle) 20%, transparent); }
 .camped-voice-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* ---- Scene ambience picker (editor) ---- */
+.camped-ambience { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--text-muted); }
+.camped-ambience select {
+  flex: 1; min-width: 160px; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 7px; color: var(--text); padding: 7px 10px; font-size: 13.5px;
+}
+.camped-ambience-player { height: 32px; max-width: 240px; }
