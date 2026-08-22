@@ -6357,21 +6357,20 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                       <span className="token-menu-note">sleight of hand</span>
                     </button>
                   )}
-                <button
-                  role="menuitem"
-                  onClick={lootFromMenu}
-                  disabled={!isFreeLootable(menuToken)}
-                  title={
-                    isFreeLootable(menuToken)
-                      ? undefined
-                      : lootedClean(menuToken)
-                        ? "Nothing left to loot"
-                        : "Defeat it first — you can't loot a living creature"
-                  }
-                >
-                  <Icon name="package" size={15} /> Loot
-                  {lootedClean(menuToken) && <span className="token-menu-note">looted</span>}
-                </button>
+                {/* Loot only appears once the token is a body to loot — defeated
+                    (0 HP) or a container already carrying loot. A living creature
+                    shows no Loot at all. Once picked clean it stays, disabled. */}
+                {(tokenIsDead(menuToken) || menuToken.loot != null) && (
+                  <button
+                    role="menuitem"
+                    onClick={lootFromMenu}
+                    disabled={!isFreeLootable(menuToken)}
+                    title={lootedClean(menuToken) ? "Nothing left to loot" : undefined}
+                  >
+                    <Icon name="package" size={15} /> Loot
+                    {lootedClean(menuToken) && <span className="token-menu-note">looted</span>}
+                  </button>
+                )}
                 {menuToken.statblock && (
                   <button role="menuitem" onClick={examineFromMenu}>
                     <Icon name="eye" size={15} /> Examine
