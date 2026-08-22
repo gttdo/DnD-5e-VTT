@@ -39,6 +39,9 @@ interface Turn {
 interface Body {
   game_id: string;
   messages: Turn[];
+  /** "dm" (default): the whole campaign + gated actions. "player": a
+   *  spoiler-safe rules/lore helper limited to what the party has been shown. */
+  mode?: "dm" | "player";
 }
 
 const clip = (s: string | null | undefined, n: number): string =>
@@ -70,13 +73,34 @@ Deno.serve(async (req) => {
     return json({ error: "game_id and messages required" }, 400);
   }
 
-  // The DM gate — the Co-DM knows secrets; only the DM may talk to it.
+  const mode: "dm" | "player" = body.mode === "player" ? "player" : "dm";
+
   const { data: game } = await db
     .from("games")
     .select("id, name, description, dm_user_id, level_min, level_max, active_scene_id")
     .eq("id", body.game_id)
     .maybeSingle();
   if (!game) return json({ error: "game not found" }, 404);
+
+  // ---- Player mode: a spoiler-safe Guide, sealed off from DM material -------
+  // A separate, minimal path — not the DM assembly with things hidden, but a
+  // context built ONLY from what the party has been shown. No tools, no secrets.
+  if (mode === "player") {
+    if (game.dm_user_id === user.id) {
+      // The DM asked in player mode — harmless, but they have their own view.
+      return json({ error: "You're the DM — use your own Co-DM." }, 400);
+    }
+    const { data: membership } = await db
+      .from("game_members")
+      .select("user_id")
+      .eq("game_id", body.game_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!membership) return json({ error: "You are not a member of this game" }, 403);
+    return await handlePlayer(db, game, user.id, body.messages);
+  }
+
+  // The DM gate — the Co-DM knows secrets; only the DM may talk to it.
   if (game.dm_user_id !== user.id) return json({ error: "the Co-DM speaks only to the DM" }, 403);
 
   // ---- Context assembly: the whole campaign, from rows -----------------------
@@ -316,6 +340,94 @@ Deno.serve(async (req) => {
   if (!text && proposals.length === 0) return json({ error: "empty response from the model" }, 502);
   return json({ text, proposals });
 });
+
+// ---- Player mode: the Guide ------------------------------------------------
+// Context is an explicit ALLOW-LIST — only documents the party (or this player)
+// has actually been shown. Nothing else is fetched, so DM prep, drafts, secrets,
+// unshared docs, and campaign memory can't leak even if RLS were loose. No tools.
+async function handlePlayer(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+  game: { id: string; name: string; description: string | null; level_min: number | null; level_max: number | null },
+  userId: string,
+  messages: Turn[]
+): Promise<Response> {
+  const gid = game.id;
+
+  // What has this player seen? Party shares + shares aimed at them personally.
+  const { data: shares } = await db
+    .from("document_shares")
+    .select("document_id, audience, recipient_id")
+    .eq("game_id", gid);
+  const visibleIds = new Set<string>();
+  for (const s of shares ?? []) {
+    if (s.audience === "party" || s.recipient_id === userId) visibleIds.add(s.document_id);
+  }
+
+  const seen: Array<{ kind: string; title: string; content: string; meta: unknown }> = [];
+  if (visibleIds.size > 0) {
+    const { data: docs } = await db
+      .from("campaign_documents")
+      .select("id, kind, title, content, meta")
+      .eq("game_id", gid)
+      .in("id", [...visibleIds]);
+    for (const d of docs ?? []) {
+      seen.push({ kind: d.kind, title: d.title, content: d.content, meta: d.meta });
+    }
+  }
+
+  const lines: string[] = [];
+  lines.push(`CAMPAIGN: ${game.name}${game.level_min != null && game.level_max != null ? ` (levels ${game.level_min}–${game.level_max})` : ""}.`);
+  if (seen.length === 0) {
+    lines.push("\nThe party hasn't been shown any documents yet.");
+  } else {
+    lines.push("\nWHAT THE PARTY HAS BEEN SHOWN (the only campaign facts you may use):");
+    for (const d of seen) {
+      const body =
+        d.kind === "handout" || d.kind === "quest"
+          ? clip(JSON.stringify((d.meta as Record<string, unknown>) ?? {}), 500)
+          : clip(d.content, 900);
+      lines.push(`- [${d.kind}] "${clip(d.title, 60) || "untitled"}": ${body}`);
+    }
+  }
+
+  const system = [
+    "You are the Guide — a friendly helper for a PLAYER in a D&D 5e game (not the Dungeon Master).",
+    "You can help with two things only:",
+    "1. The RULES of D&D 5e — reason from standard 5e practice; be clear and concise, and say when you're unsure.",
+    "2. What the PARTY HAS ALREADY BEEN SHOWN — recapping readings, handouts, quests, and story the DM has shared (listed below).",
+    "Hard limits:",
+    "- You do NOT know the DM's plans, secrets, unrevealed NPCs, or anything not in the list below. If asked, say cheerfully that they haven't discovered that yet — never guess, hint, or invent plot.",
+    "- Never spoil. Never reveal what might happen next. You are not the storyteller.",
+    "- Be brief and warm: 2–5 sentences unless asked for more.",
+    "",
+    "WHAT YOU KNOW:",
+    ...lines,
+  ].join("\n");
+
+  const turns = messages.slice(-MAX_TURNS).map((m) => ({
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: clip(m.content, 4000),
+  }));
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ model: MODEL, max_tokens: 800, system, messages: turns }),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => "");
+    return json({ error: `anthropic ${resp.status}: ${clip(detail, 300)}` }, 502);
+  }
+  const data = (await resp.json()) as { content?: Array<{ type: string; text?: string }> };
+  const text = (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  if (!text) return json({ error: "empty response from the model" }, 502);
+  return json({ text, proposals: [] });
+}
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {

@@ -6013,6 +6013,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           }}
         />
       )}
+      {/* Players get the same companion in a spoiler-safe Guide mode (#7):
+          rules help + what the party has been shown, no secrets, no actions. */}
+      {!isDM && (
+        <CoDMCompanion
+          gameId={game.id}
+          role="player"
+          label="Guide"
+          intro="Hi! I can help with the D&D rules, or remind you what your party has learned so far. Ask away — I won't spoil anything."
+          starters={[
+            "How does advantage work?",
+            "What have we learned so far?",
+            "What can I do on my turn?",
+          ]}
+        />
+      )}
 
       {/* Present overlay (#0041 slice 1e) — the DM's boxed text on every
           screen: the table reads along while the DM reads aloud. */}
