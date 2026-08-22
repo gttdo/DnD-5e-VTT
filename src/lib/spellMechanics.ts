@@ -107,7 +107,7 @@ const MECH: Record<string, SpellMech> = {
   "fireball": { kind: "save", damage: "8d6", damageType: "fire", save: "DEX", area: { shape: "sphere", size: 20 } },
   "lightning bolt": { kind: "save", damage: "8d6", damageType: "lightning", save: "DEX", area: { shape: "line", size: 100 } },
   "shatter": { kind: "save", damage: "3d8", damageType: "thunder", save: "CON", area: { shape: "sphere", size: 10 } },
-  "cone of cold": { kind: "save", damage: "8d8", damageType: "cold", save: "CON", vfx: "cone-of-cold", burst: true },
+  "cone of cold": { kind: "save", damage: "8d8", damageType: "cold", save: "CON", vfx: "cone-of-cold", burst: true, area: { shape: "cone", size: 60 } },
 
   // ---- Condition (save or be afflicted) ----
   "hold person": { kind: "condition", save: "WIS", condition: "paralyzed", onlyType: "humanoid" },

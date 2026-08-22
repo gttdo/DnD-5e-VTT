@@ -669,9 +669,10 @@ export const TableHud = ({
         autoHit: mech.autoHit,
         vfx: mech.vfx,
       });
-    } else if (mech?.kind === "save" && mech.damage && mech.burst) {
-      // Aimed area/cone (Cone of Cold): go through targeting so the caster picks
-      // a direction; the resolver plays the anchored burst and announces the save.
+    } else if (mech?.kind === "save" && mech.damage && (mech.burst || mech.area)) {
+      // Aimed AoE (Cone of Cold, Fireball, Lightning Bolt…): targeting shows
+      // the TRUE footprint; on commit the resolver computes who's caught and
+      // each caught creature rolls its own save (slice B).
       enterTargeting({
         label: `${name}${upTxt}`,
         attackBonus: 0,
@@ -679,11 +680,13 @@ export const TableHud = ({
         damageType: mech.damageType,
         save: mech.save,
         dc: spellDc ?? undefined,
+        onSave: level === 0 ? "none" : "half",
         vfx: mech.vfx,
         burst: true,
+        burstShape: mech.area ? { shape: mech.area.shape, size: mech.area.size } : undefined,
         range,
       });
-    } else if (mech?.kind === "save" && mech.damage && !mech.area) {
+    } else if (mech?.kind === "save" && mech.damage) {
       // Single-target save-for-damage (Sacred Flame, Poison Spray, Toll the
       // Dead): TARGET it — the defender rolls the save on their own client
       // (slice A). Cantrips deal nothing on a save; leveled spells take half.
@@ -698,14 +701,6 @@ export const TableHud = ({
         vfx: mech.vfx,
         range,
       });
-    } else if (mech?.kind === "save" && mech.damage) {
-      // Instant AoE (Fireball, Lightning Bolt…) — announced for the DM to
-      // adjudicate until slice B gives these an aim flow like Cone of Cold.
-      const dmg = scale(mech.damage);
-      const dcTxt = spellDc != null ? ` DC ${spellDc}` : "";
-      const roll = damageRoll(`${name}${upTxt} — ${mech.damageType} (${mech.save} save${dcTxt})`, dmg);
-      onRoll([roll], { label: String(roll.result.total) });
-      onNote(`${c.name} casts ${name}${upTxt} — ${mech.save} save${dcTxt}; ${roll.result.total} ${mech.damageType} on a failed save.`);
     } else if (mech?.kind === "heal" && mech.heal) {
       const scaled = scale(mech.heal);
       const expr = spellHealMod !== 0 ? `${scaled}${spellHealMod > 0 ? "+" : ""}${spellHealMod}` : scaled;
@@ -1551,7 +1546,8 @@ export const MonsterHud = ({
         autoHit: mech.autoHit,
         vfx: mech.vfx,
       });
-    } else if (mech?.kind === "save" && mech.damage && mech.burst) {
+    } else if (mech?.kind === "save" && mech.damage && (mech.burst || mech.area)) {
+      // Aimed AoE — true footprint + per-caught saves (slice B).
       enterTargeting({
         label: spellName,
         attackBonus: 0,
@@ -1559,11 +1555,13 @@ export const MonsterHud = ({
         damageType: mech.damageType,
         save: mech.save,
         dc: dc ?? undefined,
+        onSave: level === 0 ? "none" : "half",
         vfx: mech.vfx,
         burst: true,
+        burstShape: mech.area ? { shape: mech.area.shape, size: mech.area.size } : undefined,
         range,
       });
-    } else if (mech?.kind === "save" && mech.damage && !mech.area) {
+    } else if (mech?.kind === "save" && mech.damage) {
       // Single-target save-for-damage (slice A) — same relay as the player HUD:
       // the defender rolls on their client. Cantrips: nothing on save.
       enterTargeting({
@@ -1577,13 +1575,6 @@ export const MonsterHud = ({
         vfx: mech.vfx,
         range,
       });
-    } else if (mech?.kind === "save" && mech.damage) {
-      // Instant AoE — announced until slice B aims these.
-      const dmg = mech.scales ? scaleCantrip(mech.damage, lvl) : mech.damage;
-      const dcTxt = dc != null ? ` DC ${dc}` : "";
-      const roll = damageRoll(`${spellName} — ${mech.damageType} (${mech.save} save${dcTxt})`, dmg);
-      onRoll([roll], { label: String(roll.result.total) });
-      onNote(`${name} casts ${spellName} — ${mech.save} save${dcTxt}; ${roll.result.total} ${mech.damageType} on a failed save.`);
     } else if (mech?.kind === "heal" && mech.heal) {
       enterTargeting({ label: spellName, attackBonus: 0, heal: mech.heal, range });
     } else if (mech?.kind === "cleanse") {

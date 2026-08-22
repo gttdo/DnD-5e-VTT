@@ -2449,10 +2449,16 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         if (g) g.setAttribute("transform", `translate(${p.x} ${p.y})`);
         return;
       }
-      // Aimed area spell (Cone of Cold): the preview is the cone footprint,
-      // anchored at the caster and rotated to point at the cursor — direction
-      // only (a cone's length is fixed), so no distance readout.
+      // Aimed area spell: a sphere-style blast follows the cursor to its drop
+      // point; cone/line/cube footprints anchor at the caster and rotate to
+      // point at the cursor — direction only (their length is fixed).
       if (pa.spec.burst) {
+        const s = pa.spec.burstShape?.shape;
+        if (s === "sphere" || s === "cylinder" || s === "emanation") {
+          const g = aimAreaRef.current;
+          if (g) g.setAttribute("transform", `translate(${p.x} ${p.y})`);
+          return;
+        }
         const angle = (Math.atan2(p.y - origin.y, p.x - origin.x) * 180) / Math.PI;
         const cone = aimConeRef.current;
         if (cone) cone.setAttribute("transform", `translate(${origin.x} ${origin.y}) rotate(${angle})`);
@@ -3054,13 +3060,38 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     }
     if (!spec.damage) return;
     const dir = Math.atan2(aimY - apex.y, aimX - apex.x);
-    // Every non-caster combatant whose center falls in the cone — indiscriminate.
+    // Who's caught, by the spell's TRUE shape (slice B). Cone/line/cube aim
+    // FROM the caster toward the click; a sphere is centered ON the click.
+    // Centers-in-area, matching the aim preview — indiscriminate (a Fireball
+    // doesn't care whose side you're on; a sphere can even catch the caster).
+    const shape = spec.burstShape?.shape ?? "cone";
+    const lenU = ((spec.burstShape?.size ?? (CONE_LEN / CELL) * FT_PER_CELL) / FT_PER_CELL) * CELL;
+    const ux = Math.cos(dir);
+    const uy = Math.sin(dir);
     const caught = tokens.filter((t) => {
-      if (t.id === caster.id || t.hidden || t.kind === "prop" || t.kind === "spell") return false;
+      if (t.hidden || t.kind === "prop" || t.kind === "spell") return false;
+      if (t.id === caster.id && shape !== "sphere") return false; // self-origin shapes never catch the caster
       const c = centerOfToken(t);
-      const dist = Math.hypot(c.x - apex.x, c.y - apex.y);
-      if (dist < 1 || dist > CONE_LEN) return false;
-      const diff = Math.abs(((Math.atan2(c.y - apex.y, c.x - apex.x) - dir + Math.PI) % (2 * Math.PI)) - Math.PI);
+      if (shape === "sphere" || shape === "cylinder" || shape === "emanation") {
+        // Blast centered at the aim point, radius = size.
+        return Math.hypot(c.x - aimX, c.y - aimY) <= lenU;
+      }
+      const relX = c.x - apex.x;
+      const relY = c.y - apex.y;
+      const along = relX * ux + relY * uy; // distance down the aim axis
+      const perp = Math.abs(-relX * uy + relY * ux); // distance off-axis
+      if (shape === "line") {
+        // A 5-ft-wide lance from the caster.
+        return along > 1 && along <= lenU && perp <= CELL / 2;
+      }
+      if (shape === "cube") {
+        // Self-origin cube (Thunderwave): extends `size` out, `size` wide.
+        return along > 1 && along <= lenU && perp <= lenU / 2;
+      }
+      // Cone: RAW width == length → half-angle atan(1/2).
+      const dist = Math.hypot(relX, relY);
+      if (dist < 1 || dist > lenU) return false;
+      const diff = Math.abs(((Math.atan2(relY, relX) - dir + Math.PI) % (2 * Math.PI)) - Math.PI);
       return diff <= CONE_HALF_ANGLE;
     });
     // RAW: one damage roll for the whole area. Each caught creature then makes its
@@ -3090,7 +3121,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           dc: spec.dc,
           sourceLabel: spec.label,
           onFail: "damage",
-          onSave: "half",
+          onSave: spec.onSave ?? "half",
           damage: String(dmgRoll.total),
           damageType: spec.damageType,
         });
@@ -4938,15 +4969,28 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 );
               }
               if (pendingAttack.spec.burst) {
-                const U = CONE_LEN; // shared with the hit test — WYSIWYG
+                // WYSIWYG: the preview footprint is the SAME geometry the hit
+                // test uses. Cone/line/cube anchor at the caster and rotate to
+                // the cursor; a sphere follows the cursor (positioned via
+                // aimAreaRef, like a lingering-area drop preview).
+                const bs = pendingAttack.spec.burstShape;
+                const U = bs ? (bs.size / FT_PER_CELL) * CELL : CONE_LEN;
                 const tint = areaTintFor(pendingAttack.spec.damageType ?? undefined);
+                const stroke = { fill: tint, fillOpacity: 0.2, stroke: tint, strokeOpacity: 0.9, strokeWidth: 2.5, strokeDasharray: "7 5" };
+                if (bs && (bs.shape === "sphere" || bs.shape === "cylinder" || bs.shape === "emanation")) {
+                  return (
+                    <g ref={aimAreaRef} className="aim-area" transform="translate(-9999 -9999)" style={{ pointerEvents: "none" }}>
+                      <circle cx={0} cy={0} r={U} {...stroke} />
+                    </g>
+                  );
+                }
                 return (
                   <g ref={aimConeRef} className="aim-cone" transform={`translate(${o.x} ${o.y})`} style={{ pointerEvents: "none" }}>
-                    <polygon
-                      points={`0,0 ${U},${-U / 2} ${U},${U / 2}`}
-                      fill={tint} fillOpacity={0.2}
-                      stroke={tint} strokeOpacity={0.9} strokeWidth={2.5} strokeDasharray="7 5"
-                    />
+                    {bs?.shape === "line" && <rect x={0} y={-CELL / 2} width={U} height={CELL} {...stroke} />}
+                    {bs?.shape === "cube" && <rect x={0} y={-U / 2} width={U} height={U} {...stroke} />}
+                    {(!bs || bs.shape === "cone") && (
+                      <polygon points={`0,0 ${U},${-U / 2} ${U},${U / 2}`} {...stroke} />
+                    )}
                   </g>
                 );
               }

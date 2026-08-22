@@ -66,10 +66,13 @@ export interface AttackSpec {
   autoHit?: boolean;
   /** Board VFX key — plays this sprite from caster → target on cast (see SpellFx). */
   vfx?: string;
-  /** Aimed area spell (Cone of Cold): the resolver plays an anchored burst from
-   *  the caster toward the target and announces the save damage (no auto-apply —
-   *  a cone catches a wedge of creatures for the DM to adjudicate). */
+  /** Aimed area spell (Cone of Cold, Fireball…): the resolver aims from the
+   *  caster (or drops at the aim point for spheres), computes who's caught by
+   *  the TRUE shape, and sends each caught creature its own save request. */
   burst?: boolean;
+  /** The burst's real footprint (slice B): cone/line/cube aim FROM the caster;
+   *  a sphere centers ON the aim point. size in feet. Absent → legacy 60-ft cone. */
+  burstShape?: { shape: SpellAreaShape; size: number };
   /** A LINGERING area spell (Web, Wall of Fire…): instead of a one-shot burst,
    *  the resolver drops a persistent area token at the aimed point. `movable`
    *  marks the rare relocatable areas (Moonbeam). */
