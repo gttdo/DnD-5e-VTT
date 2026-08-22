@@ -872,6 +872,7 @@ const ScenePage = ({
       </div>
       <div className="camped-ambience">
         <Icon name="music" size={15} />
+        <label className="camped-ambience-label">Base</label>
         <select
           value={scene.ambience_url ?? ""}
           onChange={(e) => void updateSceneMeta(scene.id, { ambience_url: e.target.value || null })}
@@ -886,6 +887,25 @@ const ScenePage = ({
         </select>
         {scene.ambience_url && (
           <audio src={scene.ambience_url} controls preload="none" className="camped-ambience-player" />
+        )}
+      </div>
+      <div className="camped-ambience">
+        <Icon name="swords" size={15} />
+        <label className="camped-ambience-label">Combat</label>
+        <select
+          value={scene.combat_ambience_url ?? ""}
+          onChange={(e) => void updateSceneMeta(scene.id, { combat_ambience_url: e.target.value || null })}
+        >
+          <option value="">Default battle cue (Blades Drawn)</option>
+          {AMBIENCE_TRACKS.map((t) => (
+            <option key={t.key} value={t.url}>
+              {t.name} — {t.hint}
+              {t.ready ? "" : " (no audio yet)"}
+            </option>
+          ))}
+        </select>
+        {scene.combat_ambience_url && (
+          <audio src={scene.combat_ambience_url} controls preload="none" className="camped-ambience-player" />
         )}
       </div>
 

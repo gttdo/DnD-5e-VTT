@@ -59,6 +59,7 @@ import { JournalDrawer } from "./JournalDrawer";
 import { CoDMDrawer } from "./CoDMDrawer";
 import { AudioSettingsPopover } from "./AudioSettings";
 import { SceneAmbience } from "./SceneAmbience";
+import { effectiveAmbience } from "../lib/soundtrack";
 import { audioBus } from "../lib/audioBus";
 import { HandoutView } from "./HandoutView";
 import { draftRecap } from "../lib/scribe";
@@ -5887,8 +5888,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       {storyOpen && !isDM && (
         <JournalDrawer docs={storyDocs} shares={docShares} onClose={() => setStoryOpen(false)} />
       )}
-      {/* Loops the staged scene's ambience through the Ambiance channel. */}
-      <SceneAmbience url={activeScene?.ambience_url ?? null} />
+      {/* Loops the staged scene's ambience through the Ambiance channel —
+          swapping to the combat cue while the scene is in_combat (#0047). */}
+      <SceneAmbience
+        url={effectiveAmbience(activeScene?.ambience_url, activeScene?.combat_ambience_url, Boolean(activeScene?.in_combat))}
+      />
       {audioOpen && <AudioSettingsPopover onClose={() => setAudioOpen(false)} />}
       {coDMOpen && isDM && (
         <CoDMDrawer

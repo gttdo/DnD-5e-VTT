@@ -35,3 +35,21 @@ export const AMBIENCE_TRACKS: AmbienceTrack[] = [
 
 export const trackByUrl = (url: string | null | undefined): AmbienceTrack | null =>
   url ? AMBIENCE_TRACKS.find((t) => t.url === url) ?? null : null;
+
+/** The default cue any scene swaps to when combat begins, unless it sets its
+ *  own combat_ambience_url override. */
+export const DEFAULT_BATTLE_URL = "/Soundtrack/Blades Drawn.m4a";
+
+/**
+ * Which track should actually play, given a scene's base + combat slots and
+ * whether it's in combat. Combat wins while the fight is on (its override, or
+ * the global battle cue); otherwise the base loop. Null → silence.
+ */
+export const effectiveAmbience = (
+  base: string | null | undefined,
+  combat: string | null | undefined,
+  inCombat: boolean
+): string | null => {
+  if (inCombat) return combat || DEFAULT_BATTLE_URL;
+  return base ?? null;
+};
