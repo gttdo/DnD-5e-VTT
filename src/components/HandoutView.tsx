@@ -8,8 +8,27 @@ import { readHandoutMeta, splitLine, type HandoutMeta } from "../lib/handouts";
  */
 
 export const HandoutView = ({ meta, compact = false }: { meta: unknown; compact?: boolean }) => {
-  const { template, fields }: HandoutMeta = readHandoutMeta(meta);
+  const { template, fields, image }: HandoutMeta = readHandoutMeta(meta);
   const rows = fields.lines.map(splitLine).filter((r) => r.item);
+
+  // Art: a framed illustration, not paper — the picture is the artifact.
+  if (template === "art") {
+    return (
+      <figure className={`handout handout--art ${compact ? "is-compact" : ""}`}>
+        {image ? (
+          <img className="handout-art-img" src={image} alt={fields.title || "Revealed art"} />
+        ) : (
+          <div className="handout-art-empty">No image yet</div>
+        )}
+        {(fields.title || fields.body) && (
+          <figcaption className="handout-art-cap">
+            {fields.title && <span className="handout-art-title">{fields.title}</span>}
+            {fields.body && <span className="handout-art-note">{fields.body}</span>}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
 
   return (
     <div className={`handout handout--${template} ${compact ? "is-compact" : ""}`}>

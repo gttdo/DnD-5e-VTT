@@ -16,7 +16,7 @@
  * Templates interpret the same fields differently; empty fields don't render.
  */
 
-export type HandoutTemplate = "letter" | "notice" | "menu" | "price_sheet" | "services";
+export type HandoutTemplate = "letter" | "notice" | "menu" | "price_sheet" | "services" | "art";
 
 export interface HandoutFields {
   title: string;
@@ -29,7 +29,12 @@ export interface HandoutFields {
 export interface HandoutMeta {
   template: HandoutTemplate;
   fields: HandoutFields;
+  /** Art template only: the illustration's public URL. */
+  image?: string;
 }
+
+/** The "art" template shows a picture, not typeset paper (see HandoutView). */
+export const isArt = (t: HandoutTemplate): boolean => t === "art";
 
 export const EMPTY_FIELDS: HandoutFields = { title: "", subtitle: "", body: "", lines: [], footer: "" };
 
@@ -106,6 +111,19 @@ export const HANDOUT_TEMPLATES: Array<{
       footer: "The Dawn turns no honest traveler away.",
     },
   },
+  {
+    key: "art",
+    label: "Art / reveal",
+    hint: "A full illustration to reveal to the party — an NPC's face, a location, an item. Upload, generate, or paste a URL.",
+    labels: { title: "Caption", body: "Note (optional)" },
+    sample: {
+      title: "The one who waits at the ford",
+      subtitle: "",
+      body: "",
+      lines: [],
+      footer: "",
+    },
+  },
 ];
 
 export const templateDef = (key: HandoutTemplate) =>
@@ -123,6 +141,7 @@ export const readHandoutMeta = (meta: unknown): HandoutMeta => {
   const f = (m.fields ?? {}) as Partial<HandoutFields>;
   return {
     template: (m.template as HandoutTemplate) ?? "letter",
+    image: typeof m.image === "string" ? m.image : undefined,
     fields: {
       title: f.title ?? "",
       subtitle: f.subtitle ?? "",

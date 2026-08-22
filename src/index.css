@@ -7876,6 +7876,52 @@ button.topbar-stat {
 .handout-script { font-size: 15.5px; font-style: italic; white-space: pre-wrap; }
 .handout-signature { margin-top: 16px; text-align: right; font-size: 15px; font-style: italic; }
 
+/* Art / reveal: the picture is the artifact — a framed plate, not paper. */
+.handout--art {
+  background: #0d0b09;
+  border: 1px solid color-mix(in srgb, var(--candle) 30%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  padding: 10px;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--cream, #eee);
+}
+.handout--art.is-compact { padding: 8px; }
+.handout-art-img {
+  display: block; width: 100%; height: auto; max-height: 60vh;
+  object-fit: contain; border-radius: 3px;
+}
+.handout-art-empty {
+  aspect-ratio: 3 / 4; display: grid; place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--cream) 25%, transparent);
+  border-radius: 3px; color: var(--text-muted);
+  font-family: var(--font-display); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.handout-art-cap { display: flex; flex-direction: column; gap: 3px; text-align: center; padding: 2px 6px 4px; }
+.handout-art-title {
+  font-family: var(--font-display); font-size: 15px; letter-spacing: 0.06em;
+  color: var(--candle-bright, #f0d9a8); text-wrap: balance;
+}
+.handout-art-note { font-size: 12.5px; font-style: italic; color: var(--text-muted); }
+
+/* Art editor controls */
+.handout-artctl { display: flex; gap: 6px; align-items: center; }
+.handout-artctl > input[type="text"], .handout-artctl > input:not([type]) { flex: 1; min-width: 0; }
+.handout-artbtn {
+  background: var(--surface-1); border: 1px solid color-mix(in srgb, var(--candle) 40%, transparent);
+  border-radius: 6px; cursor: pointer; padding: 6px 12px; color: var(--candle-bright);
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.handout-artbtn:hover:not(:disabled) { border-color: var(--candle); }
+.handout-artbtn:disabled { opacity: 0.5; cursor: default; }
+.handout-artbtn.is-ghost { border-style: dashed; color: var(--text-muted); }
+.handout-aspect { padding: 5px 8px; }
+
 /* Editor: fields left, living preview right */
 .handout-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 @media (max-width: 1100px) { .handout-editor { grid-template-columns: 1fr; } }
@@ -7898,6 +7944,8 @@ button.topbar-stat {
 .present-card.is-handout { background: none; border: 0; box-shadow: none; padding: 0; text-align: center; }
 .present-card.is-handout .present-kicker { margin-bottom: 12px; }
 .present-card.is-handout .handout { margin: 0 auto; text-align: left; }
+.present-card.is-handout .handout--art { max-width: min(880px, 92vw); }
+.present-card.is-handout .handout--art .handout-art-img { max-height: 78vh; }
 .present-card.is-handout .present-close { border-color: color-mix(in srgb, var(--cream) 35%, transparent); color: var(--cream); }
 
 /* ---- Handout stock fill (#0042 follow-up) ---- */
