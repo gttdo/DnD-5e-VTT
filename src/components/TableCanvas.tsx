@@ -351,11 +351,39 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     else void shellRef.current?.requestFullscreen();
   };
   // Currently-selected token (click to select). Delete/Backspace removes it.
+  // `selectedId` is the PRIMARY selection (drives the HUD/menus); `selectedIds`
+  // is the full multi-selection (marquee drag, shift-click) used for the
+  // selection rings and group move/delete. The primary is always a member.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedIdsRef = useRef<Set<string>>(selectedIds);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  // Select exactly one token (or none), collapsing any multi-selection.
+  const selectOnly = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setSelectedIds(id ? new Set([id]) : new Set());
+  }, []);
+  // Shift/⌘-click: add or remove a token from the multi-selection.
+  const toggleSelect = useCallback((id: string) => {
+    const next = new Set(selectedIdsRef.current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+    setSelectedId(next.has(id) ? id : (next.values().next().value ?? null));
+  }, []);
+  // Replace the whole selection at once (marquee result).
+  const setSelection = useCallback((ids: string[]) => {
+    setSelectedIds(new Set(ids));
+    setSelectedId(ids[0] ?? null);
+  }, []);
+  // Marquee (rubber-band) drag-select — a rectangle in SVG-user coords. The ref
+  // drives the live math; the state drives the on-board rectangle.
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number; moved: boolean } | null>(null);
   // Latest tokens, read by the keyboard handler without re-subscribing.
   const tokensRef = useRef(tokens);
   useEffect(() => {
@@ -1052,6 +1080,25 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     const span = t ? findSize(t.size).cells : 1;
     let snappedX = Math.max(0, Math.min(cols - span, Math.round(g.x)));
     let snappedY = Math.max(0, Math.min(rows - span, Math.round(g.y)));
+
+    // Group move: if the dragged token is part of a multi-selection, shift the
+    // whole group by the same delta (only the tokens the user may move; no
+    // per-token budget/OA — this is a utility reposition, not a combat step).
+    const groupIds = selectedIdsRef.current;
+    if (t && groupIds.size > 1 && groupIds.has(drag.id)) {
+      const dx = snappedX - t.x;
+      const dy = snappedY - t.y;
+      if (dx === 0 && dy === 0) return;
+      for (const id of groupIds) {
+        const m = tokens.find((tt) => tt.id === id);
+        if (!m || !canMoveToken(m)) continue;
+        const ms = findSize(m.size).cells;
+        const nx = Math.max(0, Math.min(cols - ms, m.x + dx));
+        const ny = Math.max(0, Math.min(rows - ms, m.y + dy));
+        if (nx !== m.x || ny !== m.y) void moveToken(id, nx, ny);
+      }
+      return;
+    }
     // Movement enforcement (cumulative): a step measured from the token's CURRENT
     // cell can't exceed what's left of its speed. Over-budget clamps to the
     // furthest reachable cell; with nothing left, the move is refused.
@@ -1123,19 +1170,32 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   );
 
   const deleteSelected = useCallback(() => {
-    const id = selectedIdRef.current;
-    if (!id) return;
-    const t = tokensRef.current.find((tt) => tt.id === id);
-    if (t && !canDeleteToken(t)) {
-      toast.info("Only the DM can remove this token.");
+    // The full selection (multi via marquee/shift, or a single primary).
+    const ids = selectedIdsRef.current.size
+      ? [...selectedIdsRef.current]
+      : selectedIdRef.current
+        ? [selectedIdRef.current]
+        : [];
+    if (ids.length === 0) return;
+    const targets = ids
+      .map((id) => tokensRef.current.find((tt) => tt.id === id))
+      .filter((t): t is Token => Boolean(t));
+    // A player can only remove tokens they own; the DM removes anything.
+    const removable = targets.filter((t) => canDeleteToken(t));
+    if (removable.length === 0) {
+      toast.info("You can only remove your own tokens.");
       return;
     }
-    setSelectedId(null);
-    void deleteToken(id).then(({ error }) => {
-      if (error) toast.error(error);
-      else toast.success(`${t?.label ?? "Token"} removed`);
+    selectOnly(null);
+    void Promise.all(removable.map((t) => deleteToken(t.id))).then((results) => {
+      const failed = results.filter((r) => r.error).length;
+      if (failed) toast.error(`Couldn't remove ${failed} token${failed === 1 ? "" : "s"}.`);
+      else
+        toast.success(
+          removable.length === 1 ? `${removable[0].label ?? "Token"} removed` : `${removable.length} tokens removed`
+        );
     });
-  }, [deleteToken, toast, canDeleteToken]);
+  }, [deleteToken, toast, canDeleteToken, selectOnly]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1143,13 +1203,61 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       const el = e.target as HTMLElement | null;
       // Never hijack the key while typing (labels, prompts, etc.).
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
-      if (!selectedIdRef.current) return;
+      if (!selectedIdRef.current && selectedIdsRef.current.size === 0) return;
       e.preventDefault();
       deleteSelected();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [deleteSelected]);
+
+  // ---- Marquee drag-select (mouse) ----------------------------------------
+  // Begun from the empty-ground rect (below). Move/up live on the window so the
+  // rectangle keeps tracking even if the pointer leaves the board. On release it
+  // selects every token whose footprint the rectangle touches — filtered to the
+  // ones the user may manage (the DM: any; a player: only their own).
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const m = marqueeRef.current;
+      if (!m) return;
+      const p = clientToSvg(e.clientX, e.clientY);
+      if (!p) return;
+      // A few SVG-units of travel counts as a real drag (not a click).
+      if (Math.abs(p.x - m.x0) > 3 || Math.abs(p.y - m.y0) > 3) m.moved = true;
+      m.x1 = p.x;
+      m.y1 = p.y;
+      setMarquee({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1 });
+    };
+    const onUp = () => {
+      const m = marqueeRef.current;
+      if (!m) return;
+      marqueeRef.current = null;
+      setMarquee(null);
+      // A press with no real drag → clear the selection (the old deselect).
+      if (!m.moved) {
+        selectOnly(null);
+        return;
+      }
+      const minX = Math.min(m.x0, m.x1), maxX = Math.max(m.x0, m.x1);
+      const minY = Math.min(m.y0, m.y1), maxY = Math.max(m.y0, m.y1);
+      const hits = tokensRef.current.filter((t) => {
+        if (!canDeleteToken(t)) return false; // only manageable tokens
+        const span = findSize(t.size).cells;
+        const tx0 = t.x * CELL, ty0 = t.y * CELL;
+        const tx1 = tx0 + span * CELL, ty1 = ty0 + span * CELL;
+        return tx0 < maxX && tx1 > minX && ty0 < maxY && ty1 > minY; // rect overlap
+      });
+      setSelection(hits.map((t) => t.id));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [canDeleteToken, setSelection, selectOnly]);
 
   const startTokenDrag = (e: React.PointerEvent, t: Token) => {
     if (e.button !== 0) return;
@@ -1262,7 +1370,12 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       return;
     }
     e.preventDefault();
-    setSelectedId(t.id);
+    // Shift/⌘-click builds a multi-selection — but only across tokens the user
+    // is allowed to manage (the DM: anything; a player: only their own). A plain
+    // click still selects any single token (to view its HUD).
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    if (additive && canDeleteToken(t)) toggleSelect(t.id);
+    else selectOnly(t.id);
     // Movement permission: the DM moves anything; a player moves only their own
     // character token or a prop/scenery token (no statblock, no owner). Creatures
     // and other players' PCs stay put. Selection is still allowed — just no drag.
@@ -4357,7 +4470,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   if (pa.spec.burst && p) resolveBurst(pa.by, pa.spec, pa.attackerId, p.x, p.y);
                   return;
                 }
-                setSelectedId(null);
                 // Touch: one finger on empty canvas pans, without having to
                 // switch to the Pan tool (there's no space bar on a phone).
                 // Tokens sit above this rect, so dragging one never lands here.
@@ -4369,8 +4481,27 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   toolRef.current !== "fog" &&
                   toolRef.current !== "draw"
                 ) {
+                  setSelectedId(null);
                   beginPan(e.clientX, e.clientY);
+                  return;
                 }
+                // Mouse, Select tool, not panning → start a marquee. It selects
+                // on release; a press with no drag just clears the selection.
+                if (
+                  e.pointerType !== "touch" &&
+                  e.button === 0 &&
+                  !spaceHeldRef.current &&
+                  toolRef.current === "select"
+                ) {
+                  const p = clientToSvg(e.clientX, e.clientY);
+                  if (p) {
+                    marqueeRef.current = { x0: p.x, y0: p.y, x1: p.x, y1: p.y, moved: false };
+                    setMarquee({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+                    return;
+                  }
+                }
+                // Any other empty-ground press (e.g. pan tool) just deselects.
+                setSelectedId(null);
               }}
             />
             {activeScene?.image_url && (
@@ -4460,7 +4591,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               if (t.kind === "spell" && t.area?.shape) {
                 const tint = areaTintFor(t.area?.damageType ?? undefined);
                 const geom = spellAreaGeom(cx, cy, t.area?.shape, t.area?.size ?? 20);
-                const selected = selectedId === t.id;
+                const selected = selectedIds.has(t.id);
                 // Aim: rotate directional shapes (cone/line) about the origin.
                 // Live angle wins while dragging the handle; else the saved facing.
                 const facing = rotating?.id === t.id ? rotating.facing : t.area?.facing ?? 0;
@@ -4649,7 +4780,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                       hidden
                     </text>
                   )}
-                  {selectedId === t.id && (
+                  {selectedIds.has(t.id) && (
                     <circle
                       cx={cx}
                       cy={cy}
@@ -4730,6 +4861,23 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 </g>
               );
             })}
+
+            {/* Marquee drag-select rectangle (#user ask) — SVG-user coords. */}
+            {marquee && (
+              <rect
+                x={Math.min(marquee.x0, marquee.x1)}
+                y={Math.min(marquee.y0, marquee.y1)}
+                width={Math.abs(marquee.x1 - marquee.x0)}
+                height={Math.abs(marquee.y1 - marquee.y0)}
+                fill="var(--candle)"
+                fillOpacity={0.1}
+                stroke="var(--candle)"
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+                vectorEffect="non-scaling-stroke"
+                style={{ pointerEvents: "none" }}
+              />
+            )}
 
             {/* Misty Step teleport bursts now render through the shared spell-VFX
                 layer below (a "burst" kind), so they broadcast to all clients. */}
