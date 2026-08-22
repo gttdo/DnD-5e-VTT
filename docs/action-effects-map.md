@@ -75,4 +75,23 @@ that any effect can ship in.
 2. **B — AoE saves aim** like Cone of Cold (Fireball sphere, Lightning Bolt line); DM adjudicates who's inside for now.
 3. **C — Monster save actions** use their `saveDc`/`saveAbility` (breath weapons stop toasting).
 4. **D — Riders**: `MonsterAction.condition*` fields + parser ("…or be paralyzed"), damage+condition saves.
-5. Later: who's-inside area detection, forced movement, buff mechanics (Bless d4, Haste action), concentration→effect teardown, timed durations, grapple/shove contests, DM "call for a check" (out-of-combat DC flow).
+5. **E — Thrown weapons**: fix `attackAbility` misreading thrown STR weapons as DEX
+   (javelin); weapons with the thrown property get split Melee (5 ft) / Throw
+   (20/60) tiles; a throw CONSUMES the item — removed from inventory (its tile
+   vanishes, since tiles derive from inventory), lands at the target's cell hit
+   or miss as a ground-pickup loot token; walking adjacent + Loot returns it
+   (qty stacks decrement; anyone — including enemies — can grab it). Ammo
+   weapons exempt; a generic "Improvised throw" (1d4, 20/60) later.
+6. **F — Dodge + the first buff-mechanics hooks** (pilot for mechanical buffs):
+   a Dodge action tile spends the Action and applies the `Dodging` buff; while
+   the buff is live the tile wears a SPINNING BORDER (`is-active-effect` hotbar
+   state, driven by token.buffs so it survives reloads and stops exactly when
+   the buff clears at the start of your next turn; reduced-motion → steady
+   glow). Mechanics: incoming attacks vs a Dodging target roll at disadvantage
+   (unless target incapacitated / speed 0); DEX SaveRequests pre-select
+   advantage on the defender's dialog. These two hooks are the same rails
+   Bless/Bane/Blur/Shield of Faith plug into later.
+7. Later: who's-inside area detection, forced movement, buff mechanics for the
+   rest of the catalog (Bless d4, Haste extra action), concentration→effect
+   teardown, timed durations, grapple/shove contests, DM "call for a check"
+   (out-of-combat DC flow).
