@@ -3503,6 +3503,35 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         reactionTimers.current[rid] = window.setTimeout(() => reactions.clear(rid), 7000);
       }
     }
+    // Condition rider (slice D): a hit that carries one (ghoul claw → paralyze,
+    // chain → grapple). A rider WITH a save demands it on the defender's client
+    // (fail → the condition, encoded with its end-of-turn shake-off save). A
+    // save-less rider (grapple) applies straight away — its escape is a later
+    // action, not an end-of-turn save. Immunity/already-held are guarded.
+    if (isHit && spec.rider) {
+      const r = spec.rider;
+      const immune = (target.statblock?.conditionImmunities ?? []).some(
+        (ci) => conditionName(ci).toLowerCase() === r.condition.toLowerCase()
+      );
+      if (!immune) {
+        if (r.save) {
+          saves.request({
+            id: `sr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            by,
+            targetTokenId: target.id,
+            targetLabel: target.label,
+            ability: r.save,
+            dc: r.dc,
+            sourceLabel: spec.label,
+            onFail: "condition",
+            condition: r.condition,
+            onSave: "none",
+          });
+        } else {
+          applyConditionEncoded(target, r.condition);
+        }
+      }
+    }
     broadcastRoll(by, entries, bloomSeedFor(target, tone, bloomText));
   };
 

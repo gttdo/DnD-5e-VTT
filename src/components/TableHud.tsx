@@ -15,7 +15,7 @@ import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
 import { CreatureSheet } from "./CreatureSheet";
 import { parseMonsterSpellcasting } from "../lib/monsterSpells";
-import { parseSaveAction } from "../lib/monsterActions";
+import { parseSaveAction, parseHitRider } from "../lib/monsterActions";
 import { Icon, type IconName } from "./ui/Icon";
 import { GameGlyph } from "./ui/GameGlyph";
 
@@ -1496,7 +1496,10 @@ export const MonsterHud = ({
 
   const runAction = (a: NonNullable<MonsterStatblock["actions"]>[number]) => {
     if (a.attackBonus != null) {
-      enterTargeting({ label: a.name, attackBonus: a.attackBonus, damage: a.damage, damageType: a.damageType, range: a.reach });
+      // Condition rider (slice D): a claw that paralyzes, a bite that poisons,
+      // a chain that grapples — applied by the resolver when the hit lands.
+      const rider = parseHitRider(a) ?? undefined;
+      enterTargeting({ label: a.name, attackBonus: a.attackBonus, damage: a.damage, damageType: a.damageType, range: a.reach, rider });
       return;
     }
     // Save-based action (slice C): breath weapons, gaze attacks, poison saves.
@@ -1625,8 +1628,12 @@ export const MonsterHud = ({
       // Save actions (breath weapons) advertise their DC + damage on the tile,
       // like an attack shows its to-hit (slice C).
       const sm = a.attackBonus == null ? parseSaveAction(a) : null;
+      // Attacks show their to-hit; a condition rider adds "· poisons" so the DM
+      // sees the bite bites (slice D).
+      const rider = a.attackBonus != null ? parseHitRider(a) : null;
+      const riderSub = rider ? ` · ${rider.condition === "grappled" ? "grapples" : rider.condition}` : "";
       const baseSub = a.attackBonus != null
-        ? `${formatMod(a.attackBonus)}${a.damage ? ` · ${a.damage}` : ""}`
+        ? `${formatMod(a.attackBonus)}${a.damage ? ` · ${a.damage}` : ""}${riderSub}`
         : sm && sm.damage
           ? `${sm.save} DC ${sm.dc} · ${sm.damage}`
           : "action";

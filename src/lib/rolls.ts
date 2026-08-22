@@ -54,6 +54,10 @@ export interface AttackSpec {
   /** Creature-type restriction (e.g. Hold Person → "humanoid"); the save never
    *  fires against a target whose statblock type doesn't match. */
   restrictType?: string;
+  /** A condition an attack inflicts ON A HIT (slice D): after damage lands, the
+   *  target rolls `save` vs `dc` or gains `condition` (ghoul claw → paralyzed);
+   *  with no `save` it applies automatically (a grapple, escape DC = `dc`). */
+  rider?: { condition: string; save?: Ability; dc: number };
   /** The weapon/attack's reach or range, verbatim from the source ("5", "5 ft",
    *  "20/60", "range 60/240 ft"). Drives the out-of-range check at target time;
    *  absent → unrestricted (e.g. most spells for now). */

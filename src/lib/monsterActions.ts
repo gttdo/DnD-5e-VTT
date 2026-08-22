@@ -70,3 +70,49 @@ export const parseSaveAction = (a: MonsterAction): SaveActionMech | null => {
     area,
   };
 };
+
+/** A condition an ATTACK inflicts when it hits (slice D) — the ghoul's claw
+ *  paralyzes, the spider's bite poisons, the chain devil grapples. */
+export interface HitRider {
+  condition: string;
+  /** The save the target rolls to AVOID it (and repeats at end of turn to shake
+   *  it off). Absent for auto-applied conditions like a grapple. */
+  save?: Ability;
+  dc: number;
+}
+
+const ABILITY_WORD: Record<string, Ability> = {
+  strength: "STR", dexterity: "DEX", constitution: "CON",
+  intelligence: "INT", wisdom: "WIS", charisma: "CHA",
+};
+
+const RIDER_CONDITIONS = [
+  "poisoned", "paralyzed", "stunned", "restrained", "grappled", "prone",
+  "frightened", "blinded", "charmed", "petrified", "unconscious",
+  "incapacitated", "deafened",
+];
+
+/** Parse a condition rider off an ATTACK's text, or null. Handles the two
+ *  common statblock shapes: "must succeed on a DC 12 Con save or be poisoned"
+ *  (save-to-avoid) and "the target is grappled (escape DC 14)" (auto-apply). */
+export const parseHitRider = (a: MonsterAction): HitRider | null => {
+  if (a.attackBonus == null) return null; // riders live on attacks
+  const text = a.text ?? "";
+
+  // Save-to-avoid: "DC 12 Constitution saving throw or be/become/against being
+  // [magically] <condition>". The condition word may trail a short clause.
+  const save = /DC\s*(\d+)\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+saving throw[^.]*?(?:or be|or become|against being)(?:\s+magically)?\s+(\w+)/i.exec(text);
+  if (save) {
+    const cond = save[3].toLowerCase();
+    if (RIDER_CONDITIONS.includes(cond)) {
+      return { condition: cond, save: ABILITY_WORD[save[2].toLowerCase()], dc: parseInt(save[1], 10) };
+    }
+  }
+
+  // Auto-grapple: "the target is grappled (escape DC 14)". No save on the hit —
+  // the escape DC is the victim's later action, not an end-of-turn save.
+  const grab = /is grappled\s*\(escape DC\s*(\d+)\)/i.exec(text);
+  if (grab) return { condition: "grappled", dc: parseInt(grab[1], 10) };
+
+  return null;
+};
