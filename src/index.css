@@ -8203,3 +8203,22 @@ button.topbar-stat {
   flex: none; font-family: var(--font-display); font-size: 9px; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--text-muted); width: 52px;
 }
+
+/* ---- Per-player share menu (Story/Journal Slice B) ---- */
+.camped-sharewrap { position: relative; flex: none; }
+.camped-sharemenu {
+  position: absolute; top: 100%; right: 0; z-index: 40; min-width: 190px; margin-top: 4px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.5); padding: 5px; display: flex; flex-direction: column;
+}
+.camped-sharemenu button {
+  display: flex; align-items: center; gap: 8px; background: none; border: 0; border-radius: 6px;
+  cursor: pointer; text-align: left; padding: 8px 10px; color: var(--text-dim); font-size: 13px;
+}
+.camped-sharemenu button:hover { background: var(--surface-3); color: var(--text); }
+.camped-sharemenu button.is-on { color: var(--candle-bright); }
+.camped-sharemenu button.is-danger { color: var(--ember); }
+.camped-sharemenu-label {
+  font-family: var(--font-display); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-muted); padding: 8px 10px 4px;
+}

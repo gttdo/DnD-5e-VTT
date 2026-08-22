@@ -11,12 +11,36 @@ import { useChapters, useCampaignDocs, useDocShares, type Chapter, type Campaign
  * actions to share/unshare — provided once and consumed by every DocCard,
  * avoiding prop-drilling through the page components. (Story/Journal.)
  */
+interface SharePlayer {
+  user_id: string;
+  name: string;
+}
 interface SharesApi {
+  /** Any share at all (party or a specific player). */
   isShared: (docId: string) => boolean;
-  share: (docId: string) => void;
+  /** Shared with the whole party specifically. */
+  isPartyShared: (docId: string) => boolean;
+  /** Player user_ids this doc is privately shared with. */
+  playersFor: (docId: string) => string[];
+  /** The campaign's players, to offer in the picker. */
+  players: SharePlayer[];
+  shareParty: (docId: string) => void;
+  sharePlayer: (docId: string, userId: string) => void;
+  /** Remove one audience: party (null) or a specific player. */
+  unshareOne: (docId: string, recipientId: string | null) => void;
+  /** Remove every share on the doc. */
   unshare: (docId: string) => void;
 }
-const SharesContext = createContext<SharesApi>({ isShared: () => false, share: () => {}, unshare: () => {} });
+const SharesContext = createContext<SharesApi>({
+  isShared: () => false,
+  isPartyShared: () => false,
+  playersFor: () => [],
+  players: [],
+  shareParty: () => {},
+  sharePlayer: () => {},
+  unshareOne: () => {},
+  unshare: () => {},
+});
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useCastRoster, type CastMember } from "../state/useCastRoster";
 import { useRegionMaps } from "../state/useRegionNav";
@@ -83,18 +107,39 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
 
   const { chapters, createChapter, updateChapter, moveChapter, deleteChapter } = useChapters(game.id);
   const { docs, createDoc, updateDoc, deleteDoc } = useCampaignDocs(game.id);
-  // Share state (Story/Journal) — sharing a doc files it in players' Journals.
-  const { shares, shareWithParty, unshare: unshareDoc } = useDocShares(game.id);
-  const sharedDocIds = useMemo(() => new Set(shares.map((s) => s.document_id)), [shares]);
+  // Share state (Story/Journal) — sharing a doc files it in players' Journals,
+  // to the whole party or to specific players (Slice B).
+  const { shares, shareWithParty, shareWithPlayer, unshareOne, unshare: unshareDoc } = useDocShares(game.id);
+  const cast = useCastRoster(game.id);
+  const sharePlayers = useMemo<SharePlayer[]>(
+    () => cast.members.filter((m) => m.role === "player").map((m) => ({ user_id: m.user_id, name: m.name })),
+    [cast.members]
+  );
   const sharesApi = useMemo<SharesApi>(
     () => ({
-      isShared: (id) => sharedDocIds.has(id),
-      share: (id) => {
-        void shareWithParty(id).then(({ error }) => (error ? toast.error(error) : toast.success("Shared with the party — it's in their journal.")));
+      isShared: (id) => shares.some((s) => s.document_id === id),
+      isPartyShared: (id) => shares.some((s) => s.document_id === id && s.audience === "party"),
+      playersFor: (id) => shares.filter((s) => s.document_id === id && s.audience === "player").map((s) => s.recipient_id!).filter(Boolean),
+      players: sharePlayers,
+      shareParty: (id) => {
+        // Party share supersedes individual ones — clear players, then share all.
+        void unshareDoc(id).then(() =>
+          shareWithParty(id).then(({ error }) => (error ? toast.error(error) : toast.success("Shared with the party — it's in every journal.")))
+        );
       },
+      sharePlayer: (id, uid) => {
+        // A targeted share is private — drop any party share so it's not public.
+        void unshareOne(id, null).then(() =>
+          shareWithPlayer(id, uid).then(({ error }) => {
+            if (error) toast.error(error);
+            else toast.success(`Shared privately with ${sharePlayers.find((p) => p.user_id === uid)?.name ?? "the player"}.`);
+          })
+        );
+      },
+      unshareOne: (id, rid) => void unshareOne(id, rid),
       unshare: (id) => void unshareDoc(id),
     }),
-    [sharedDocIds, shareWithParty, unshareDoc, toast]
+    [shares, sharePlayers, shareWithParty, shareWithPlayer, unshareOne, unshareDoc, toast]
   );
   const {
     scenes,
@@ -110,8 +155,8 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
   // Table-time (#0041 §5): sessions for the Timeline tab. canManage lets a
   // stale forgotten session auto-close from the editor too.
   const { sessions } = useSessions(game.id, { canManage: true });
-  // The Cast — the campaign's people. Instance state, never pack-exported.
-  const cast = useCastRoster(game.id);
+  // (The Cast roster — `cast` — is declared above; it feeds both the Cast tab
+  // and the per-player share picker.)
 
   const [tab, setTab] = useState<"story" | "timeline" | "cast">("story");
   const [selection, setSelection] = useState<Selection>({ type: "overview" });
@@ -1295,6 +1340,17 @@ const DocCard = ({
   const content = useAutosave(doc.content, (v) => void updateDoc(doc.id, { content: v }));
   const isRA = doc.kind === "read_aloud";
   const shared = shares.isShared(doc.id);
+  const partyShared = shares.isPartyShared(doc.id);
+  const sharedPlayers = shares.playersFor(doc.id);
+  const [shareMenu, setShareMenu] = useState(false);
+  // A compact label for the current share state.
+  const shareLabel = !shared
+    ? "＋ Share"
+    : partyShared
+      ? "◉ Party"
+      : sharedPlayers.length === 1
+        ? `◉ ${shares.players.find((p) => p.user_id === sharedPlayers[0])?.name ?? "1 player"}`
+        : `◉ ${sharedPlayers.length} players`;
   // Notes are the DM's private working material — no point sharing them.
   const shareable = doc.kind !== "note";
   // Narration (the Narrator channel): read-alouds and recaps can carry a
@@ -1332,15 +1388,52 @@ const DocCard = ({
           onBlur={title.flush}
         />
         {shareable ? (
-          shared ? (
-            <button className="camped-sharebtn is-shared" title="In the party's journal — click to withdraw" onClick={() => shares.unshare(doc.id)}>
-              ◉ Shared with party
+          <div className="camped-sharewrap">
+            <button
+              className={`camped-sharebtn ${shared ? "is-shared" : ""}`}
+              title="Choose who sees this"
+              onClick={() => setShareMenu((v) => !v)}
+            >
+              {shareLabel} ▾
             </button>
-          ) : (
-            <button className="camped-sharebtn" title="Put this in every player's journal" onClick={() => shares.share(doc.id)}>
-              ＋ Share with party
-            </button>
-          )
+            {shareMenu && (
+              <>
+                <div className="camped-menuveil" onClick={() => setShareMenu(false)} />
+                <div className="camped-sharemenu">
+                  <button
+                    className={partyShared ? "is-on" : ""}
+                    onClick={() => {
+                      shares.shareParty(doc.id);
+                      setShareMenu(false);
+                    }}
+                  >
+                    <span>◉ Whole party</span>
+                  </button>
+                  {shares.players.length > 0 && <div className="camped-sharemenu-label">Just one player</div>}
+                  {shares.players.map((p) => {
+                    const on = sharedPlayers.includes(p.user_id);
+                    return (
+                      <button
+                        key={p.user_id}
+                        className={on ? "is-on" : ""}
+                        onClick={() => (on ? shares.unshareOne(doc.id, p.user_id) : shares.sharePlayer(doc.id, p.user_id))}
+                      >
+                        <span>{on ? "✓ " : ""}{p.name}</span>
+                      </button>
+                    );
+                  })}
+                  {shared && (
+                    <>
+                      <div className="camped-menusep" />
+                      <button className="is-danger" onClick={() => { shares.unshare(doc.id); setShareMenu(false); }}>
+                        Stop sharing
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         ) : (
           <span className="camped-private" title="Your private note — never shared">🔒 Private</span>
         )}

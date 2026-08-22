@@ -354,6 +354,38 @@ export const useDocShares = (gameId: string | null) => {
     [gameId]
   );
 
+  /** Share a doc PRIVATELY with one player (Slice B). Sharing to a player
+   *  while it's already party-shared is allowed but redundant; the UI keeps
+   *  the two audiences mutually exclusive. */
+  const shareWithPlayer = useCallback(
+    async (documentId: string, recipientId: string, sessionId?: string | null): Promise<{ error: string | null }> => {
+      if (!gameId) return { error: "No game" };
+      const { data, error } = await supabase
+        .from("document_shares")
+        .upsert(
+          { document_id: documentId, game_id: gameId, audience: "player", recipient_id: recipientId, session_id: sessionId ?? null },
+          { onConflict: "document_id,audience,recipient_id" }
+        )
+        .select()
+        .single();
+      if (error) return { error: error.message };
+      const row = data as DocShare;
+      setShares((prev) => (prev.some((x) => x.id === row.id) ? prev : [row, ...prev]));
+      return { error: null };
+    },
+    [gameId]
+  );
+
+  /** Remove one share row — the party share (recipientId null) or a specific
+   *  player's — leaving the doc's other shares intact. */
+  const unshareOne = useCallback(async (documentId: string, recipientId: string | null): Promise<{ error: string | null }> => {
+    setShares((prev) => prev.filter((s) => !(s.document_id === documentId && (s.recipient_id ?? null) === recipientId)));
+    let q = supabase.from("document_shares").delete().eq("document_id", documentId);
+    q = recipientId === null ? q.is("recipient_id", null) : q.eq("recipient_id", recipientId);
+    const { error } = await q;
+    return { error: error?.message ?? null };
+  }, []);
+
   /** Un-share a doc entirely (removes all its share rows). */
   const unshare = useCallback(async (documentId: string): Promise<{ error: string | null }> => {
     setShares((prev) => prev.filter((s) => s.document_id !== documentId));
@@ -361,7 +393,7 @@ export const useDocShares = (gameId: string | null) => {
     return { error: error?.message ?? null };
   }, []);
 
-  return { shares, shareWithParty, unshare };
+  return { shares, shareWithParty, shareWithPlayer, unshareOne, unshare };
 };
 
 export const useDraftSceneIds = (gameId: string | null) => {
