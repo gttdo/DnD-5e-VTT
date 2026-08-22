@@ -777,6 +777,29 @@ const useAutosave = (initial: string, save: (value: string) => void, delay = 900
 };
 
 // ============================================================================
+// Ambience <option>s: each track (its key → a random take, for variety) plus,
+// for multi-take tracks, one indented option per take. A take stores the exact
+// file path, which resolveAmbience plays as-is — so the DM can pin a specific
+// take instead of leaving it to chance.
+const renderAmbienceOptions = () =>
+  AMBIENCE_TRACKS.flatMap((t) => {
+    const base = (
+      <option key={t.key} value={t.key}>
+        {t.name} — {t.hint}
+        {t.variants.length > 1 ? ` (random of ${t.variants.length} takes)` : ""}
+      </option>
+    );
+    if (t.variants.length <= 1) return [base];
+    return [
+      base,
+      ...t.variants.map((v, i) => (
+        <option key={v} value={v}>
+          {`  ↳ ${t.name} · take ${i + 1}`}
+        </option>
+      )),
+    ];
+  });
+
 const ScenePage = ({
   scene,
   chapters,
@@ -923,15 +946,10 @@ const ScenePage = ({
           onChange={(e) => void updateSceneMeta(scene.id, { ambience_url: e.target.value || null })}
         >
           <option value="">No ambience</option>
-          {AMBIENCE_TRACKS.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.name} — {t.hint}
-              {t.variants.length > 1 ? ` (${t.variants.length} takes)` : ""}
-            </option>
-          ))}
+          {renderAmbienceOptions()}
         </select>
-        {resolveAmbience(scene.ambience_url) && (
-          <audio src={resolveAmbience(scene.ambience_url)!} controls preload="none" className="camped-ambience-player" />
+        {resolveAmbience(scene.ambience_url, 0) && (
+          <audio src={resolveAmbience(scene.ambience_url, 0)!} controls preload="none" className="camped-ambience-player" />
         )}
       </div>
       <div className="camped-ambience">
@@ -942,15 +960,10 @@ const ScenePage = ({
           onChange={(e) => void updateSceneMeta(scene.id, { combat_ambience_url: e.target.value || null })}
         >
           <option value="">Default battle cue (Blades Drawn)</option>
-          {AMBIENCE_TRACKS.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.name} — {t.hint}
-              {t.variants.length > 1 ? ` (${t.variants.length} takes)` : ""}
-            </option>
-          ))}
+          {renderAmbienceOptions()}
         </select>
-        {resolveAmbience(scene.combat_ambience_url) && (
-          <audio src={resolveAmbience(scene.combat_ambience_url)!} controls preload="none" className="camped-ambience-player" />
+        {resolveAmbience(scene.combat_ambience_url, 0) && (
+          <audio src={resolveAmbience(scene.combat_ambience_url, 0)!} controls preload="none" className="camped-ambience-player" />
         )}
       </div>
 
