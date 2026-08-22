@@ -209,9 +209,12 @@ client.
   and reveal-on-attack + unseen-attacker advantage. Verified DM-seat; owner
   translucent view + true multi-client hiding still to confirm from a player
   seat. The DM's ghost is selectable (a last-known marker) but not targetable.
-- P4 (next) — Out of combat: recheck on move + ~6s interval, owner's client
-  writes; a now-spotted hider is revealed and logged.
-- P5 (later) — Search + Invisibility spells reuse the visibility layer.
+- ~~P4~~ ✅ DONE (79129d7). Out-of-combat recheck: on the hider's move + a ~6s
+  interval (off during combat), owner's client re-tests the FROZEN Stealth and
+  reveals a now-spotted hider. Verified live.
+- P5 (later) — Search (active Perception vs the frozen Stealth) + Invisibility
+  spells reuse the visibility layer. Also later: refuse the DM's own targeting
+  of a hidden creature (today the DM's ghost is targetable by the DM).
 
 Original phase notes kept below.
 - P1 — Visibility foundation: per-token `viewLevel(t) → none|ghost|dim|full`
