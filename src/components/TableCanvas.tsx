@@ -4096,19 +4096,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               <Icon name="grid" size={18} />
             </button>
           )}
-          {isDM && (
-            <button
-              className={`rail-tool ${tool === "hotspot" ? "active" : ""}`}
-              onClick={() => {
-                setTool((t) => (t === "hotspot" ? "select" : "hotspot"));
-                setPartyOpen(false);
-              }}
-              title="Hotspots — click the map to drop a travel pin, then link it to a scene"
-              aria-label="Hotspot tool"
-            >
-              <Icon name="map" size={18} />
-            </button>
-          )}
+          {/* Scene-backdrop hotspot authoring retired from the rail (#user ask) —
+              travel pins are prep, set up in the Campaign editor's regional map,
+              not dropped at the table. Existing pins still display and navigate. */}
 
           <div className="rail-divider" />
           <div className="rail-group-label">Actors</div>
