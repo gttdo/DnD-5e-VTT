@@ -1967,8 +1967,26 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       ...e,
       [activeTokenId]: { action: 0, bonus: false, reaction: false, dashed: false, moveUsedFt: 0 },
     }));
+    // Dodge expires at the START of the dodger's next turn (slice F): the turn
+    // arriving back at the token strips the buff — the tile's spinning ring
+    // stops in the same moment. Single-writer: only the controlling client.
+    const t = tokensRef.current.find((x) => x.id === activeTokenId);
+    if (t && (t.buffs ?? []).includes("Dodging") && iControlToken(t)) {
+      void updateToken(t.id, { buffs: (t.buffs ?? []).filter((b) => b !== "Dodging") });
+      broadcastRoll(t.label, [{ label: `${t.label} stops dodging (turn starts)`, result: roll("1d1") }]);
+    }
     // Re-fires each new turn (activeToken changes) and each round (for solo combats).
   }, [activeTokenId, init.round]);
+
+  // Take the Dodge action (slice F): spend nothing here — the HUD's economy
+  // wiring spends the Action — just put the Dodging buff on the token and log.
+  const takeDodge = (t: Token) => {
+    if ((t.buffs ?? []).includes("Dodging")) return;
+    void updateToken(t.id, { buffs: [...(t.buffs ?? []), "Dodging"] });
+    broadcastRoll(t.label, [
+      { label: `${t.label} takes the Dodge action — attacks against it have disadvantage; DEX saves at advantage (until its next turn)`, result: roll("1d1") },
+    ]);
+  };
 
   // Add feet to this turn's spent movement (called when a drag commits).
   const addMovement = (id: string | null, ft: number) => {
@@ -3432,7 +3450,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     const attacker = attackerId ? tokens.find((t) => t.id === attackerId) : undefined;
     const atkAgg = aggregateConditions(attacker?.conditions ?? []);
     const adv = tgtAgg.attackersAdvantage;
-    const dis = atkAgg.selfAttackDisadvantage;
+    // Dodging (slice F): attacks against the dodger roll at disadvantage —
+    // unless a condition negates the stance (incapacitated / speed 0, RAW).
+    const tgtDodging =
+      (target.buffs ?? []).includes("Dodging") && !tgtAgg.incapacitated && !tgtAgg.speed0;
+    const dis = atkAgg.selfAttackDisadvantage || tgtDodging;
     const mode: RollMode = adv && dis ? "normal" : adv ? "adv" : dis ? "dis" : "normal";
     const hit = rollD20(spec.attackBonus, mode);
     const nat = naturalD20(hit);
@@ -5743,6 +5765,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 selectedToken ? counterspellCheck(selectedToken, boundCharacter.name, name, level) : Promise.resolve(false)
               }
               onDash={() => selectedToken && markDash(selectedToken.id)}
+              onDodge={() => selectedToken && takeDodge(selectedToken)}
               economy={economyView}
               onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}
@@ -6770,6 +6793,15 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                 optionalBonuses={optionalBonusesFor("save")}
                 autoFail={autoFailsSave(target.conditions ?? [], active.ability)}
                 onBehalf={!controlled.includes(active)}
+                // Dodging grants ADVANTAGE on DEX saves (slice F) — pre-select
+                // it; the roller can still override.
+                initialMode={
+                  active.ability === "DEX" &&
+                  (target.buffs ?? []).includes("Dodging") &&
+                  !aggregateConditions(target.conditions ?? []).incapacitated
+                    ? "adv"
+                    : undefined
+                }
                 performRoll={(mode) => rollD20(saveBonusOfToken(target, active.ability), mode)}
                 onComplete={(res) => {
                   setDmPickId(null);

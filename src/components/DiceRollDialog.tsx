@@ -52,6 +52,9 @@ interface Props {
   optionalBonuses?: OptionalBonus[];
   autoFail?: boolean;
   onBehalf?: boolean;
+  /** Pre-selected roll mode — e.g. a Dodging defender's DEX save opens on
+   *  Advantage (slice F). The roller can still override. */
+  initialMode?: RollMode;
   /** Pure — roll a d20 with this mode and return the result (no side effects). */
   performRoll: (mode: RollMode) => RollResult;
   /** Called after the reveal; the caller applies + logs the outcome. */
@@ -73,11 +76,12 @@ export const DiceRollDialog = ({
   optionalBonuses,
   autoFail,
   onBehalf,
+  initialMode,
   performRoll,
   onComplete,
   onAutoFail,
 }: Props) => {
-  const [mode, setMode] = useState<RollMode>("normal");
+  const [mode, setMode] = useState<RollMode>(initialMode ?? "normal");
   const [phase, setPhase] = useState<Phase>("ready");
   const [result, setResult] = useState<RollResult | null>(null);
   // Which optional bonuses (Guidance, Bless…) the roller has toggled on, and

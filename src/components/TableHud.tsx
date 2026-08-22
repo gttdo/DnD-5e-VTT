@@ -369,6 +369,9 @@ interface Props {
   onCounterspellCheck?: (spellName: string, level: number) => Promise<boolean>;
   /** Dash — doubles this turn's movement budget. */
   onDash?: () => void;
+  /** Dodge (slice F) — applies the Dodging buff to the token until the start
+   *  of its next turn: incoming attacks at disadvantage, DEX saves at adv. */
+  onDodge?: () => void;
   /** Per-turn action economy (shown only in combat); null hides the strip. */
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
@@ -401,6 +404,7 @@ export const TableHud = ({
   onMove,
   onCounterspellCheck,
   onDash,
+  onDodge,
   economy,
   onSpend,
   onEndTurn,
@@ -412,6 +416,10 @@ export const TableHud = ({
   onUpdate,
 }: Props) => {
   const incap = aggregateConditions(conditions ?? []).incapacitated;
+  // The Dodge stance is LIVE while the token carries the buff (slice F) —
+  // drives the tile's spinning ring, and stops exactly when it's stripped at
+  // the start of this creature's next turn.
+  const dodging = (buffs ?? []).includes("Dodging");
   const [min, setMin] = useState(false);
   const [hpOpen, setHpOpen] = useState(false);
   // HUD popouts — skills / the sheet drawer. ONE at a time: opening any closes
@@ -735,6 +743,9 @@ export const TableHud = ({
     disabled?: boolean;
     /** Economy this item spends when used (drives consume + disable). */
     econ?: "action" | "bonus" | "reaction";
+    /** A duration effect this tile started is LIVE (Dodge until your next
+     *  turn) — the tile wears the spinning active-effect ring (slice F). */
+    activeFx?: boolean;
   }
   // Players get one main action, plus any granted by a feature this turn
   // (Action Surge → +1). Extra mains only count in combat, where the economy
@@ -812,7 +823,16 @@ export const TableHud = ({
     })),
     { id: "hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: "Stealth", kind: "common", run: doHide, econ: "action" as const },
     { id: "dash", icon: "right", glyph: glyphSrc("action_dash"), name: "Dash", sub: "action", kind: "common", run: () => { onNote("Dash — movement doubled this turn."); onDash?.(); }, econ: "action" as const },
-    { id: "dodge", icon: "shield", glyph: glyphSrc("action_dodge"), name: "Dodge", sub: "action", kind: "common", run: () => onNote("Dodge — attacks against you have disadvantage"), econ: "action" as const },
+    {
+      id: "dodge", icon: "shield", glyph: glyphSrc("action_dodge"), name: "Dodge",
+      sub: dodging ? "dodging" : "action", kind: "common",
+      // Real mechanics (slice F): applies the Dodging buff to the token —
+      // incoming attacks at disadvantage, DEX saves at advantage — until the
+      // start of your next turn. The tile wears a spinning ring while live.
+      run: () => { if (!dodging) onDodge?.(); },
+      econ: "action" as const,
+      activeFx: dodging,
+    },
   ];
   // BONUS-action tab: non-spell bonus actions. Sparse until #90/#93 add
   // class-feature detection (Cunning Action, off-hand attack, Rage…).
@@ -1245,7 +1265,7 @@ export const TableHud = ({
         {tabItems.map((s, i) => (
           <button
             key={s.id}
-            className={`thud-act is-glyph is-${s.kind}`}
+            className={`thud-act is-glyph is-${s.kind}${s.activeFx ? " is-active-effect" : ""}`}
             onClick={() => runItem(s)}
             disabled={itemDisabled(s)}
             aria-label={s.name}
