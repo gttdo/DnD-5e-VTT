@@ -325,9 +325,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // personal characters tray above (IA). They share screen space, so opening
   // one closes the other.
   const [partyPanelOpen, setPartyPanelOpen] = useState(false);
-  // The combat rail shows by default (a pill out of combat for the DM, the turn
-  // rail in combat); the tool-rail hourglass hides it when it's in the way.
-  const [railHidden, setRailHidden] = useState(false);
+  // The combat rail is OFF by default (#user ask) — no pill cluttering the
+  // table out of combat. It auto-appears when a fight starts and auto-hides when
+  // it ends (the effect below); the tool-rail hourglass overrides either way.
+  const [railHidden, setRailHidden] = useState(true);
   // Dice roller (input popover) + Game Log (record drawer) live on the tool
   // rail now (#132), not as floating FABs. The log button badges unseen rolls.
   const [rollerOpen, setRollerOpen] = useState(false);
@@ -564,6 +565,13 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       return () => window.clearTimeout(t);
     }
     if (!init.inCombat) wasInCombat.current = false;
+  }, [init.inCombat]);
+
+  // Combat tracker follows the fight: show it when combat begins, hide it when
+  // it ends (#user ask — off by default). The hourglass still overrides in
+  // between; the next combat transition re-syncs.
+  useEffect(() => {
+    setRailHidden(!init.inCombat);
   }, [init.inCombat]);
 
   // Oculus nudges (#7 slice 5): raise a signal on the table moments worth a
