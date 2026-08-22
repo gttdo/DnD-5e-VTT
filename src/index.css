@@ -1829,10 +1829,27 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 .examine-holds-v { font-family: var(--font-story); font-size: 14px; color: var(--cream); line-height: 1.4; }
 
-/* DM status picker on the Examine card — toggle conditions/buffs on a token */
-.tstatus { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
-.tstatus-sec { display: flex; flex-direction: column; gap: 6px; }
+/* DM status editor on the Examine card — active statuses + an Add picker */
+.tstatus { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; }
+.tstatus-head { display: flex; align-items: center; justify-content: space-between; }
 .tstatus-l { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+.tstatus-addbtn {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  background: none; border: 1px solid var(--border); border-radius: 7px; padding: 3px 9px;
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim);
+}
+.tstatus-addbtn:hover { color: var(--candle); border-color: color-mix(in srgb, var(--candle) 45%, transparent); }
+.tstatus-addbtn.is-open { color: var(--candle-bright); border-color: var(--candle); }
+.tstatus-active { display: flex; flex-wrap: wrap; gap: 5px; }
+.tstatus-empty { font-size: 12.5px; color: var(--text-muted); font-style: italic; }
+.tstatus-picker { display: flex; flex-direction: column; gap: 8px; border: 1px dashed var(--border); border-radius: 9px; padding: 9px; }
+.tstatus-tabs { display: flex; gap: 4px; }
+.tstatus-tabs button {
+  background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; padding: 3px 8px 5px;
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted);
+}
+.tstatus-tabs button:hover { color: var(--candle); }
+.tstatus-tabs button.is-on { color: var(--candle-bright); border-bottom-color: var(--candle); }
 .tstatus-grid { display: flex; flex-wrap: wrap; gap: 5px; }
 .tstatus-chip {
   display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 7px;
@@ -6348,16 +6365,22 @@ button.topbar-stat {
 .thud-rs-res.is-used .thud-rs-res-n { background: rgba(255, 255, 255, 0.16); box-shadow: none; color: var(--text-muted); }
 .thud-rs-res:disabled { cursor: default; }
 
-/* Status strip in the HUD (#user ask) — condition (red) + buff (gold) icon
-   chips, sat left of the resource glyphs. Hover a chip for its label. */
+/* Status strip (#user ask) — condition (red) + buff (gold) icon chips that
+   float just above the HUD's top-left corner, over the portrait (BG3-style).
+   Absolute within the .thud dock (which is positioned). Hover for a label. */
 .thud-statuses {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 5px;
-  align-self: center; max-width: 190px;
+  position: absolute;
+  left: 12px;
+  bottom: calc(100% - 8px); /* sit just above the top edge, slight overlap */
+  display: flex; align-items: center; gap: 5px;
+  max-width: calc(100% - 24px); flex-wrap: wrap;
+  z-index: 2;
 }
 .thud-status {
   width: 30px; height: 30px; flex: none; display: grid; place-items: center;
-  border-radius: 8px; background: rgba(24, 16, 12, 0.55); border: 1px solid var(--border);
+  border-radius: 8px; background: rgba(24, 16, 12, 0.92); border: 1px solid var(--border);
   color: var(--text-dim); cursor: default;
+  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.7);
 }
 .thud-status.is-cond { border-color: #e0864f; background: color-mix(in srgb, #c0392b 16%, transparent); color: #ffd9b8; }
 .thud-status.is-buff { border-color: var(--candle); background: color-mix(in srgb, var(--candle) 14%, transparent); color: var(--candle-bright); }
