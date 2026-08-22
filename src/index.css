@@ -7575,6 +7575,30 @@ button.topbar-stat {
   font-style: italic; font-size: 14px; color: var(--text);
   border-radius: 0 7px 7px 0;
 }
+/* Documents tabs — group scene docs by kind */
+.camped-doctabs {
+  display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.camped-doctab {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; cursor: pointer;
+  padding: 7px 12px 8px; margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-display); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.camped-doctab:hover { color: var(--candle); }
+.camped-doctab.is-active {
+  color: var(--candle-bright); border-bottom-color: var(--candle);
+}
+.camped-doctab-count {
+  font-family: var(--font-body, Georgia), serif; font-size: 10.5px;
+  letter-spacing: 0; min-width: 16px; height: 16px; padding: 0 4px;
+  display: inline-grid; place-items: center; border-radius: 8px;
+  background: color-mix(in srgb, var(--candle) 18%, transparent);
+  color: var(--candle-bright);
+}
 .camped-adddocs { display: flex; gap: 8px; margin-top: 2px; }
 .camped-adddocs button {
   background: none; cursor: pointer; padding: 6px 12px;
