@@ -1376,6 +1376,19 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   inherits: false;
 }
 @keyframes fx-ring-spin { to { --fx-angle: 360deg; } }
+
+/* ---- Cooldown (out-of-combat retry gate) -------------------------------
+   A tile on cooldown dims, shows the remaining seconds, and can't be clicked
+   until the timer elapses (anti-spam for retryable checks like Hide/Search). */
+.thud-act.is-cooldown {
+  opacity: 0.5; cursor: not-allowed; filter: grayscale(0.4);
+}
+.thud-act.is-cooldown .thud-act-cd {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 20px; font-weight: 700;
+  color: var(--candle-bright); text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
 /* Reduced motion: a steady glow instead of rotation. */
 @media (prefers-reduced-motion: reduce) {
   .thud-act.is-active-effect::before { animation: none; }

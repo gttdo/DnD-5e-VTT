@@ -139,6 +139,10 @@ const ANIMATED_CURSOR = true;
 const CELL = 40;
 // One grid cell = 5 ft, so a spell area's feet convert to SVG units directly.
 const FT_PER_CELL = 5;
+// Out-of-combat retry cooldowns (seconds) — the situation must change before
+// re-attempting. In combat the action economy gates these instead.
+const HIDE_COOLDOWN_SEC = 6;
+const SEARCH_COOLDOWN_SEC = 6;
 // Aimed-cone geometry, shared by the aim preview and the hit test so what you
 // see is exactly what's caught. Cone of Cold is a 60-ft cone → 12 cells. A D&D
 // cone is as wide as it is long, i.e. a half-angle of atan(0.5) (the base spans
@@ -395,6 +399,33 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // Latest recheckHidden, for callers defined earlier than it (the move-commit
   // handler and the out-of-combat interval — slice H P4).
   const recheckHiddenRef = useRef<(t: Token) => void>(() => {});
+
+  // Action cooldowns — a reusable, client-side anti-spam gate. Keyed
+  // `${tokenId}:${action}` → expiry epoch ms. IN COMBAT the action economy
+  // already prevents a retry (Hide spends your Action), so cooldowns only run
+  // OUT OF COMBAT, where nothing else stops a player from re-clicking a failed
+  // check. Client-side + ephemeral (a reload clears them) — enough to stop
+  // spam without persisting transient timers.
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
+  // A ref mirror so a burst of rapid clicks reads the just-set expiry
+  // synchronously — the state closure lags a render behind and would let the
+  // first few spam clicks through.
+  const cooldownsRef = useRef<Record<string, number>>({});
+  const onCooldown = (tokenId: string, action: string) =>
+    (cooldownsRef.current[`${tokenId}:${action}`] ?? 0) > Date.now();
+  const startCooldown = (tokenId: string, action: string, seconds: number) => {
+    const key = `${tokenId}:${action}`;
+    const exp = Date.now() + seconds * 1000;
+    cooldownsRef.current = { ...cooldownsRef.current, [key]: exp };
+    setCooldowns((c) => ({ ...c, [key]: exp }));
+  };
+  // While any cooldown is live, tick so the tiles' countdowns update.
+  const [cooldownTick, setCooldownTick] = useState(0);
+  useEffect(() => {
+    if (!Object.values(cooldowns).some((e) => e > Date.now())) return;
+    const id = window.setInterval(() => setCooldownTick((t) => t + 1), 500);
+    return () => window.clearInterval(id);
+  }, [cooldowns]);
   // Active canvas tool. "select" moves tokens, "pan" drags the view,
   // "ping" pulses a point for every player, "ruler" measures distance.
   // (Space-held still pans regardless of tool, as a quick modifier.)
@@ -2069,6 +2100,10 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
 
   const attemptHide = (t: Token) => {
     if (isStealthHidden(t.buffs)) return;
+    // Out of combat, a FAILED hide starts a cooldown (below) so the player
+    // can't just re-click until it works; block the attempt while it's cooling.
+    // In combat the Action economy gates retries instead.
+    if (!init.inCombat && onCooldown(t.id, "hide")) return;
     const stealth = roll(`1d20${stealthBonusOfToken(t) >= 0 ? "+" : ""}${stealthBonusOfToken(t)}`);
     const stealthTotal = stealth.total;
     const spotters = spottersOf(t, stealthTotal);
@@ -2084,6 +2119,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       bloomSeedFor(t, hid ? "normal" : "fumble", hid ? "hidden" : "seen")
     );
     if (hid) void updateToken(t.id, { buffs: [...(t.buffs ?? []), encodeHidden(stealthTotal)] });
+    else if (!init.inCombat) startCooldown(t.id, "hide", HIDE_COOLDOWN_SEC); // spotted → wait before retrying
   };
 
   // Search (slice H P5) — the counter to Hide. The searcher rolls ACTIVE
@@ -2091,6 +2127,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // whose FROZEN Stealth it meets-or-beats is found (Hidden cleared). Reveals
   // globally — matching the binary visibility model.
   const attemptSearch = (searcher: Token) => {
+    // Block a re-search while cooling down (out of combat); a fruitless search
+    // starts the cooldown below.
+    if (!init.inCombat && onCooldown(searcher.id, "search")) return;
     const bonus = passivePerceptionOfToken(searcher) - 10; // active = passive − 10 (the flat 10)
     const rollRes = roll(`1d20${bonus >= 0 ? "+" : ""}${bonus}`);
     const total = rollRes.total;
@@ -2117,6 +2156,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       }],
       bloomSeedFor(searcher, found.length ? "crit" : "normal", found.length ? "found!" : "—")
     );
+    // A fruitless search can't be spammed — wait before looking again (OOC).
+    if (found.length === 0 && !init.inCombat) startCooldown(searcher.id, "search", SEARCH_COOLDOWN_SEC);
   };
 
   // Out-of-combat recheck (slice H P4): re-run the contest for an already-
@@ -2200,6 +2241,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       return cur[which] ? e : { ...e, [id]: { ...cur, [which]: true } };
     });
   };
+
+  // Cooldown expiries for the selected token, as { action: expiryMs } — the HUD
+  // tiles read these to show a countdown and disable while live. (forceCooldownTick
+  // is a dep so the memo re-evaluates each 500ms tick.)
+  const cooldownView = useMemo(() => {
+    if (!selectedToken) return undefined;
+    const out: Record<string, number> = {};
+    for (const [key, exp] of Object.entries(cooldowns)) {
+      const [tid, action] = key.split(":");
+      if (tid === selectedToken.id && exp > Date.now()) out[action] = exp;
+    }
+    return out;
+  }, [selectedToken, cooldowns, cooldownTick]);
 
   const economyView = useMemo(() => {
     if (!init.inCombat || !selectedToken) return null;
@@ -5933,6 +5987,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onCounterspellCheck={(name, level) => counterspellCheck(selectedToken, selectedToken.label, name, level)}
               onHide={() => attemptHide(selectedToken)}
               onSearch={() => attemptSearch(selectedToken)}
+              cooldowns={cooldownView}
               economy={economyView}
               onSpend={(w) => markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}
@@ -6009,6 +6064,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               onReleaseReady={(entry) => selectedToken && releaseReady(selectedToken, entry)}
               onHide={() => selectedToken && attemptHide(selectedToken)}
               onSearch={() => selectedToken && attemptSearch(selectedToken)}
+              cooldowns={cooldownView}
               economy={economyView}
               onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}

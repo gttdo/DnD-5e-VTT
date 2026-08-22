@@ -450,6 +450,10 @@ interface Props {
   /** Search (slice H) — the canvas rolls active Perception vs nearby hidden
    *  foes' frozen Stealth and reveals the ones it beats. */
   onSearch?: () => void;
+  /** Out-of-combat action cooldowns for this token: { action: expiryMs }. A
+   *  tile whose cooldownKey is present + in the future shows a countdown and
+   *  is disabled (anti-spam for retryable checks like Hide/Search). */
+  cooldowns?: Record<string, number>;
   /** Per-turn action economy (shown only in combat); null hides the strip. */
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
@@ -487,6 +491,7 @@ export const TableHud = ({
   onReleaseReady,
   onHide,
   onSearch,
+  cooldowns,
   economy,
   onSpend,
   onEndTurn,
@@ -852,6 +857,9 @@ export const TableHud = ({
     /** A duration effect this tile started is LIVE (Dodge until your next
      *  turn) — the tile wears the spinning active-effect ring (slice F). */
     activeFx?: boolean;
+    /** Action key into the cooldowns map — while on cooldown the tile shows a
+     *  countdown and is disabled (out-of-combat anti-spam). */
+    cooldownKey?: string;
   }
   // Players get one main action, plus any granted by a feature this turn
   // (Action Surge → +1). Extra mains only count in combat, where the economy
@@ -927,7 +935,7 @@ export const TableHud = ({
       run: () => doAttack(atk),
       econ: "action" as const,
     })),
-    { id: "hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: hidden ? "hidden" : "Stealth", kind: "common", run: () => { if (!hidden) doHide(); }, econ: "action" as const, activeFx: hidden },
+    { id: "hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: hidden ? "hidden" : "Stealth", kind: "common", run: () => { if (!hidden) doHide(); }, econ: "action" as const, activeFx: hidden, cooldownKey: "hide" },
     { id: "dash", icon: "right", glyph: glyphSrc("action_dash"), name: "Dash", sub: "action", kind: "common", run: () => { onNote("Dash — movement doubled this turn."); onDash?.(); }, econ: "action" as const },
     {
       id: "dodge", icon: "shield", glyph: glyphSrc("action_dodge"), name: "Dodge",
@@ -955,7 +963,7 @@ export const TableHud = ({
       sub: "Perception", kind: "common",
       // Search (slice H) — the counter to Hide: active Perception vs nearby
       // hidden foes' frozen Stealth; the canvas reveals the ones it beats.
-      run: doSearch, econ: "action" as const,
+      run: doSearch, econ: "action" as const, cooldownKey: "search",
     },
   ];
   // BONUS-action tab: non-spell bonus actions. Sparse until #90/#93 add
@@ -1405,20 +1413,26 @@ export const TableHud = ({
       )}
 
       <div className="thud-acts">
-        {tabItems.map((s, i) => (
+        {tabItems.map((s, i) => {
+          const cdExp = s.cooldownKey ? cooldowns?.[s.cooldownKey] : undefined;
+          const cdLeft = cdExp ? Math.max(0, cdExp - Date.now()) : 0;
+          const onCd = cdLeft > 0;
+          return (
           <button
             key={s.id}
-            className={`thud-act is-glyph is-${s.kind}${s.activeFx ? " is-active-effect" : ""}`}
+            className={`thud-act is-glyph is-${s.kind}${s.activeFx ? " is-active-effect" : ""}${onCd ? " is-cooldown" : ""}`}
             onClick={() => runItem(s)}
-            disabled={itemDisabled(s)}
+            disabled={itemDisabled(s) || onCd}
             aria-label={s.name}
-            title={incap ? "Incapacitated — can't act" : `${s.name} — ${s.sub}`}
+            title={incap ? "Incapacitated — can't act" : onCd ? `${s.name} — ready in ${Math.ceil(cdLeft / 1000)}s` : `${s.name} — ${s.sub}`}
           >
             {i < 9 && <span className="thud-act-key" aria-hidden="true">{i + 1}</span>}
             {s.glyph ? <GameGlyph src={s.glyph} size={24} /> : <Icon name={s.icon} size={18} />}
-            <span className="thud-act-s">{tileCaption(s.name, s.sub)}</span>
+            <span className="thud-act-s">{onCd ? `${Math.ceil(cdLeft / 1000)}s` : tileCaption(s.name, s.sub)}</span>
+            {onCd && <span className="thud-act-cd" aria-hidden="true">{Math.ceil(cdLeft / 1000)}</span>}
           </button>
-        ))}
+          );
+        })}
         {tabItems.length === 0 && (
           <span className="thud-empty">
             {actionTab === "main"
@@ -1565,6 +1579,7 @@ export const MonsterHud = ({
   onCounterspellCheck,
   onHide,
   onSearch,
+  cooldowns,
   economy,
   onSpend,
   onEndTurn,
@@ -1586,6 +1601,7 @@ export const MonsterHud = ({
   onCounterspellCheck?: (spellName: string, level: number) => Promise<boolean>;
   onHide?: () => void;
   onSearch?: () => void;
+  cooldowns?: Record<string, number>;
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
   onEndTurn?: () => void;
@@ -1784,7 +1800,7 @@ export const MonsterHud = ({
     }
   };
 
-  interface MSlot { id: string; icon: IconName; glyph?: string; name: string; sub: string; kind: "attack" | "common"; run: () => void; disabled?: boolean; econ?: "action" | "bonus" | "reaction"; recharge?: number; expended?: boolean; activeFx?: boolean; }
+  interface MSlot { id: string; icon: IconName; glyph?: string; name: string; sub: string; kind: "attack" | "common"; run: () => void; disabled?: boolean; econ?: "action" | "bonus" | "reaction"; recharge?: number; expended?: boolean; activeFx?: boolean; cooldownKey?: string; }
   // Multiattack isn't a button — it becomes the Main-action COUNT (two attacks
   // to spend). The casting trait lives in the spell tabs.
   const mainMax = multiattackCount(m.actions);
@@ -1829,8 +1845,8 @@ export const MonsterHud = ({
   // PC's. `mHidden` = this creature is currently hidden.
   const mHidden = isStealthHidden(buffs);
   mainActions.push(
-    { id: "m-hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: mHidden ? "hidden" : "Stealth", kind: "common", run: () => { if (!mHidden) onHide?.(); }, econ: "action" as const, activeFx: mHidden },
-    { id: "m-search", icon: "search", glyph: glyphSrc("action_search"), name: "Search", sub: "Perception", kind: "common", run: () => onSearch?.(), econ: "action" as const },
+    { id: "m-hide", icon: "eye-off", glyph: glyphSrc("action_hide"), name: "Hide", sub: mHidden ? "hidden" : "Stealth", kind: "common", run: () => { if (!mHidden) onHide?.(); }, econ: "action" as const, activeFx: mHidden, cooldownKey: "hide" },
+    { id: "m-search", icon: "search", glyph: glyphSrc("action_search"), name: "Search", sub: "Perception", kind: "common", run: () => onSearch?.(), econ: "action" as const, cooldownKey: "search" },
   );
   const bonusActions: MSlot[] = (m.bonusActions ?? []).map((b) => ({
     id: b.name,
@@ -1972,33 +1988,41 @@ export const MonsterHud = ({
       <StatusStrip conditions={conditions ?? []} buffs={buffs ?? []} />
 
       <div className="thud-acts">
-        {tabItems.map((s, i) => (
+        {tabItems.map((s, i) => {
+          const cdExp = s.cooldownKey ? cooldowns?.[s.cooldownKey] : undefined;
+          const cdLeft = cdExp ? Math.max(0, cdExp - Date.now()) : 0;
+          const onCd = cdLeft > 0;
+          return (
           <button
             key={s.id}
-            className={`thud-act is-glyph is-${s.kind} ${s.recharge != null ? "is-recharge" : ""} ${s.expended ? "is-expended" : ""}${s.activeFx ? " is-active-effect" : ""}`}
+            className={`thud-act is-glyph is-${s.kind} ${s.recharge != null ? "is-recharge" : ""} ${s.expended ? "is-expended" : ""}${s.activeFx ? " is-active-effect" : ""}${onCd ? " is-cooldown" : ""}`}
             onClick={() => runItem(s)}
-            disabled={itemDisabled(s)}
+            disabled={itemDisabled(s) || onCd}
             aria-label={s.name}
             title={
               incap
                 ? "Incapacitated — can't act"
-                : s.recharge != null
-                  ? s.expended
-                    ? `${s.name} is spent — rolls to recharge (${rechargeLabel(s.recharge)}) at the start of each turn`
-                    : `${s.name} — usable, then recharges on a ${rechargeLabel(s.recharge)}`
-                  : `${s.name} — ${s.sub}`
+                : onCd
+                  ? `${s.name} — ready in ${Math.ceil(cdLeft / 1000)}s`
+                  : s.recharge != null
+                    ? s.expended
+                      ? `${s.name} is spent — rolls to recharge (${rechargeLabel(s.recharge)}) at the start of each turn`
+                      : `${s.name} — usable, then recharges on a ${rechargeLabel(s.recharge)}`
+                    : `${s.name} — ${s.sub}`
             }
           >
             {i < 9 && <span className="thud-act-key" aria-hidden="true">{i + 1}</span>}
             {s.glyph ? <GameGlyph src={s.glyph} size={24} /> : <Icon name={s.icon} size={18} />}
-            <span className="thud-act-s">{tileCaption(s.name, s.sub)}</span>
-            {s.recharge != null && (
+            <span className="thud-act-s">{onCd ? `${Math.ceil(cdLeft / 1000)}s` : tileCaption(s.name, s.sub)}</span>
+            {onCd && <span className="thud-act-cd" aria-hidden="true">{Math.ceil(cdLeft / 1000)}</span>}
+            {s.recharge != null && !onCd && (
               <span className="thud-act-rc" aria-hidden="true">
                 <Icon name="reset" size={11} />
               </span>
             )}
           </button>
-        ))}
+          );
+        })}
         {tabItems.length === 0 && (
           <span className="thud-empty">
             {actionTab === "main" ? "No actions on this statblock." : actionTab === "bonus" ? "No bonus actions." : actionTab === "reaction" ? "No reactions." : "No spells at this level."}
