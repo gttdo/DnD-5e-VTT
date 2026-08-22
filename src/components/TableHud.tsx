@@ -15,6 +15,7 @@ import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
 import { CreatureSheet } from "./CreatureSheet";
 import { parseMonsterSpellcasting } from "../lib/monsterSpells";
+import { parseSaveAction } from "../lib/monsterActions";
 import { Icon, type IconName } from "./ui/Icon";
 import { GameGlyph } from "./ui/GameGlyph";
 
@@ -1496,9 +1497,31 @@ export const MonsterHud = ({
   const runAction = (a: NonNullable<MonsterStatblock["actions"]>[number]) => {
     if (a.attackBonus != null) {
       enterTargeting({ label: a.name, attackBonus: a.attackBonus, damage: a.damage, damageType: a.damageType, range: a.reach });
-    } else {
-      onNote(a.text ? `${a.name} — ${a.text}` : a.name);
+      return;
     }
+    // Save-based action (slice C): breath weapons, gaze attacks, poison saves.
+    // Route through the SAME aim/save flow as spells — an area breath aims its
+    // true footprint and each caught creature rolls; a single-target save
+    // demands one save. Damage-less saves (Weakening Breath) still announce
+    // until slice D handles condition riders.
+    const sm = parseSaveAction(a);
+    if (sm && sm.damage) {
+      enterTargeting({
+        label: a.name,
+        attackBonus: 0,
+        damage: sm.damage,
+        damageType: sm.damageType,
+        save: sm.save,
+        dc: sm.dc,
+        onSave: sm.onSave,
+        range: a.reach,
+        ...(sm.area
+          ? { burst: true, burstShape: { shape: sm.area.shape, size: sm.area.size } }
+          : {}),
+      });
+      return;
+    }
+    onNote(a.text ? `${a.name} — ${a.text}` : a.name);
   };
 
   // Cast a monster spell from a spell tab — routes like the player HUD, spends
@@ -1599,7 +1622,14 @@ export const MonsterHud = ({
       // start-of-turn d6. The threshold is parsed from the name suffix.
       const thr = rechargeThreshold(a.name);
       const expended = thr != null && !!rechargeExpended[a.name];
-      const baseSub = a.attackBonus != null ? `${formatMod(a.attackBonus)}${a.damage ? ` · ${a.damage}` : ""}` : "action";
+      // Save actions (breath weapons) advertise their DC + damage on the tile,
+      // like an attack shows its to-hit (slice C).
+      const sm = a.attackBonus == null ? parseSaveAction(a) : null;
+      const baseSub = a.attackBonus != null
+        ? `${formatMod(a.attackBonus)}${a.damage ? ` · ${a.damage}` : ""}`
+        : sm && sm.damage
+          ? `${sm.save} DC ${sm.dc} · ${sm.damage}`
+          : "action";
       return {
         id: a.name,
         icon: a.attackBonus != null ? ("swords" as IconName) : ("dice" as IconName),
