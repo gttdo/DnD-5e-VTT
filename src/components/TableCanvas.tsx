@@ -19,6 +19,7 @@ import { useTableRolls } from "../state/useTableRolls";
 import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
 import type { SkillName } from "../types/character";
 import { aggregateConditions, autoFailsSave, conditionName, parseCondition } from "../lib/conditions";
+import { isReadying, parseBuff } from "../lib/buffs";
 import { TokenStatusEditor } from "./TokenStatusEditor";
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
@@ -1967,13 +1968,19 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
       ...e,
       [activeTokenId]: { action: 0, bonus: false, reaction: false, dashed: false, moveUsedFt: 0 },
     }));
-    // Dodge expires at the START of the dodger's next turn (slice F): the turn
-    // arriving back at the token strips the buff — the tile's spinning ring
-    // stops in the same moment. Single-writer: only the controlling client.
+    // Turn-start cleanup (slices F & G), single-writer on the controlling
+    // client: Dodge expires, and an UNRELEASED readied action dissipates — RAW,
+    // a ready lasts only until the start of your next turn. Both stop the tile's
+    // spinning ring in the same moment.
     const t = tokensRef.current.find((x) => x.id === activeTokenId);
-    if (t && (t.buffs ?? []).includes("Dodging") && iControlToken(t)) {
-      void updateToken(t.id, { buffs: (t.buffs ?? []).filter((b) => b !== "Dodging") });
-      broadcastRoll(t.label, [{ label: `${t.label} stops dodging (turn starts)`, result: roll("1d1") }]);
+    if (t && iControlToken(t)) {
+      const buffs = t.buffs ?? [];
+      const stale = buffs.filter((b) => b === "Dodging" || isReadying(b));
+      if (stale.length) {
+        void updateToken(t.id, { buffs: buffs.filter((b) => !stale.includes(b)) });
+        if (stale.includes("Dodging")) broadcastRoll(t.label, [{ label: `${t.label} stops dodging (turn starts)`, result: roll("1d1") }]);
+        if (stale.some(isReadying)) broadcastRoll(t.label, [{ label: `${t.label}'s readied action dissipates (turn starts)`, result: roll("1d1") }]);
+      }
     }
     // Re-fires each new turn (activeToken changes) and each round (for solo combats).
   }, [activeTokenId, init.round]);
@@ -1985,6 +1992,30 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     void updateToken(t.id, { buffs: [...(t.buffs ?? []), "Dodging"] });
     broadcastRoll(t.label, [
       { label: `${t.label} takes the Dodge action — attacks against it have disadvantage; DEX saves at advantage (until its next turn)`, result: roll("1d1") },
+    ]);
+  };
+
+  // Ready an action (slice G): store the encoded Readying buff (trigger + held
+  // response) on the token and announce the declaration. The HUD spent the
+  // Action via econ; the Reaction is spent on RELEASE.
+  const takeReady = (t: Token, buffEntry: string) => {
+    if ((t.buffs ?? []).some(isReadying)) return;
+    void updateToken(t.id, { buffs: [...(t.buffs ?? []), buffEntry] });
+    const [attackName, trigger] = parseBuff(buffEntry).parts;
+    broadcastRoll(t.label, [
+      { label: `${t.label} readies ${attackName || "an action"}${trigger ? ` — trigger: "${trigger}"` : ""}`, result: roll("1d1") },
+    ]);
+  };
+
+  // Release a readied action (slice G): the tap on the chip is the trigger
+  // call. Strip the buff, spend the Reaction, log — the HUD then launches the
+  // held attack's targeting off-turn.
+  const releaseReady = (t: Token, buffEntry: string) => {
+    void updateToken(t.id, { buffs: (t.buffs ?? []).filter((b) => b !== buffEntry) });
+    markEconomy(t.id, "reaction");
+    const [attackName] = parseBuff(buffEntry).parts;
+    broadcastRoll(t.label, [
+      { label: `${t.label} releases the readied ${attackName || "action"} (reaction)`, result: roll("1d1") },
     ]);
   };
 
@@ -5766,6 +5797,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
               }
               onDash={() => selectedToken && markDash(selectedToken.id)}
               onDodge={() => selectedToken && takeDodge(selectedToken)}
+              onReady={(entry) => selectedToken && takeReady(selectedToken, entry)}
+              onReleaseReady={(entry) => selectedToken && releaseReady(selectedToken, entry)}
               economy={economyView}
               onSpend={(w) => selectedToken && markEconomy(selectedToken.id, w)}
               onEndTurn={() => void init.next()}

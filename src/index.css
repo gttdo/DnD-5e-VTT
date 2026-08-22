@@ -6417,6 +6417,42 @@ button.topbar-stat {
 .thud-status.is-cond { border-color: #e0864f; background: color-mix(in srgb, #c0392b 16%, transparent); color: #ffd9b8; }
 .thud-status.is-buff { border-color: var(--candle); background: color-mix(in srgb, var(--candle) 14%, transparent); color: var(--candle-bright); }
 .thud-status-txt { font-size: 9px; font-weight: 700; letter-spacing: 0.02em; }
+/* A tappable status chip — the Readying chip you click to release (slice G).
+   Pulses so it reads as "actionable", with a padding reset (it's a <button>). */
+.thud-status.is-tappable {
+  cursor: pointer; padding: 0; -webkit-appearance: none; appearance: none;
+  animation: ready-pulse 1.6s ease-in-out infinite;
+}
+.thud-status.is-tappable:hover { transform: translateY(-1px); border-color: var(--candle-bright); }
+@keyframes ready-pulse {
+  0%, 100% { box-shadow: 0 6px 14px -6px rgba(0,0,0,0.7), 0 0 0 0 color-mix(in srgb, var(--candle) 55%, transparent); }
+  50% { box-shadow: 0 6px 14px -6px rgba(0,0,0,0.7), 0 0 0 4px color-mix(in srgb, var(--candle) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .thud-status.is-tappable { animation: none; } }
+
+/* ---- Ready declaration card (slice G) --------------------------------- */
+.ready-prompt {
+  position: absolute; left: 12px; bottom: calc(100% + 8px); z-index: 5;
+  width: 260px; padding: 12px; border-radius: 12px;
+  background: rgba(24, 16, 12, 0.98); border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.ready-prompt-h {
+  font-family: var(--font-display, serif); font-size: 14px; color: var(--candle-bright);
+  letter-spacing: 0.02em;
+}
+.ready-prompt-l {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+}
+.ready-prompt-in, .ready-prompt-sel {
+  font-size: 13px; padding: 7px 9px; border-radius: 8px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  text-transform: none; letter-spacing: normal;
+}
+.ready-prompt-in:focus, .ready-prompt-sel:focus { outline: none; border-color: var(--candle); }
+.ready-prompt-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
 
 /* Active-condition banner in the HUD — greys the actions when incapacitating */
 .thud-conds {

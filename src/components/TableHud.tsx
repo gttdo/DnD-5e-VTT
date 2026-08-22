@@ -9,7 +9,7 @@ import { attackBonus, damageBonus, formatMod, abilityModFor, proficiencyBonus } 
 import { applyDamage, applyHeal } from "../lib/hp";
 import { casterClass, slotsFor, spellAttackBonus, spellSaveDC, castingAbility, sorceryPoints, QUICKEN_COST } from "../lib/spellcasting";
 import { aggregateConditions, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
-import { buffGlyph, buffNote, buffIsGood } from "../lib/buffs";
+import { buffGlyph, buffNote, buffIsGood, buffName, isReadying, encodeReadying, parseBuff, READYING } from "../lib/buffs";
 import type { MonsterStatblock } from "../types/content";
 import { useRules } from "../state/Rules";
 import { SheetDrawer } from "./SheetDrawer";
@@ -51,14 +51,29 @@ type EconKey = "action" | "bonus" | "reaction";
 // The token's statuses as a compact icon strip (#user ask — HUD, not on the
 // token). Conditions (red) + buffs (gold) as glyph chips with a hover label.
 // Rendered in every HUD so clicking any token shows what's on it.
-const StatusStrip = ({ conditions = [], buffs = [] }: { conditions?: string[]; buffs?: string[] }) => {
+const StatusStrip = ({
+  conditions = [],
+  buffs = [],
+  onReleaseReady,
+}: {
+  conditions?: string[];
+  buffs?: string[];
+  /** Slice G: makes THIS strip's Readying chip tappable — the human trigger
+   *  call that releases the held action. Only the owner's HUD passes it. */
+  onReleaseReady?: (entry: string) => void;
+}) => {
   if (conditions.length === 0 && buffs.length === 0) return null;
   const incap = aggregateConditions(conditions).incapacitated;
-  const chip = (key: string, glyph: string | null, label: string, good: boolean, tip: string) => (
-    <span key={key} className={`thud-status ${good ? "is-buff" : "is-cond"}`} title={tip}>
-      {glyph ? <GameGlyph src={glyph} size={16} className="thud-status-ico" /> : <span className="thud-status-txt">{label.slice(0, 3)}</span>}
-    </span>
-  );
+  const chip = (key: string, glyph: string | null, label: string, good: boolean, tip: string, onClick?: () => void) =>
+    onClick ? (
+      <button key={key} className="thud-status is-buff is-tappable" title={tip} onClick={onClick} aria-label={tip}>
+        {glyph ? <GameGlyph src={glyph} size={16} className="thud-status-ico" /> : <span className="thud-status-txt">{label.slice(0, 3)}</span>}
+      </button>
+    ) : (
+      <span key={key} className={`thud-status ${good ? "is-buff" : "is-cond"}`} title={tip}>
+        {glyph ? <GameGlyph src={glyph} size={16} className="thud-status-ico" /> : <span className="thud-status-txt">{label.slice(0, 3)}</span>}
+      </span>
+    );
   return (
     <div className={`thud-statuses ${incap ? "is-incap" : ""}`} aria-label="Statuses">
       {conditions.map((c) => {
@@ -66,7 +81,58 @@ const StatusStrip = ({ conditions = [], buffs = [] }: { conditions?: string[]; b
         const tip = pc.save && pc.dc != null ? `${pc.name} · ${pc.save} save DC ${pc.dc}` : pc.name;
         return chip(`c:${c}`, conditionGlyph(pc.name), pc.name, false, tip);
       })}
-      {buffs.map((b) => chip(`b:${b}`, buffGlyph(b), b, buffIsGood(b), buffNote(b) ? `${b} — ${buffNote(b)}` : b))}
+      {buffs.map((b) => {
+        const nm = buffName(b);
+        const tip = buffNote(b) ? `${nm} — ${buffNote(b)}` : nm;
+        const release = onReleaseReady && isReadying(b) && !incap ? () => onReleaseReady(b) : undefined;
+        return chip(`b:${b}`, buffGlyph(b), nm, buffIsGood(b), tip, release);
+      })}
+    </div>
+  );
+};
+
+/**
+ * Ready declaration (slice G): type the trigger and pick the held response.
+ * The trigger is narrative (no engine can detect "when the goblin steps out"),
+ * so it's free text; the response is one of your attack tiles (or Move). Tiny
+ * inline card over the HUD.
+ */
+const ReadyPrompt = ({
+  attacks,
+  onCancel,
+  onConfirm,
+}: {
+  attacks: { id: string; name: string }[];
+  onCancel: () => void;
+  onConfirm: (attackId: string, trigger: string) => void;
+}) => {
+  const [trigger, setTrigger] = useState("");
+  const [attackId, setAttackId] = useState(attacks[0]?.id ?? "");
+  return (
+    <div className="ready-prompt" role="dialog" aria-label="Ready an action">
+      <div className="ready-prompt-h">Ready an action</div>
+      <label className="ready-prompt-l">
+        When…
+        <input
+          className="ready-prompt-in"
+          autoFocus
+          placeholder="the goblin steps out from cover"
+          value={trigger}
+          onChange={(e) => setTrigger(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && attackId) onConfirm(attackId, trigger.trim()); }}
+        />
+      </label>
+      <label className="ready-prompt-l">
+        …I will
+        <select className="ready-prompt-sel" value={attackId} onChange={(e) => setAttackId(e.target.value)}>
+          {attacks.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          {attacks.length === 0 && <option value="">(no attack ready)</option>}
+        </select>
+      </label>
+      <div className="ready-prompt-btns">
+        <button className="ghost" onClick={onCancel}>Cancel</button>
+        <button className="primary" disabled={!attackId} onClick={() => onConfirm(attackId, trigger.trim())}>Ready</button>
+      </div>
     </div>
   );
 };
@@ -372,6 +438,12 @@ interface Props {
   /** Dodge (slice F) — applies the Dodging buff to the token until the start
    *  of its next turn: incoming attacks at disadvantage, DEX saves at adv. */
   onDodge?: () => void;
+  /** Ready (slice G) — put the encoded Readying buff on the token (trigger +
+   *  held response); the canvas writes it and logs the declaration. */
+  onReady?: (buffEntry: string) => void;
+  /** Ready release (slice G) — the canvas strips the buff, spends the
+   *  Reaction, and logs; the HUD then launches the held attack's targeting. */
+  onReleaseReady?: (buffEntry: string) => void;
   /** Per-turn action economy (shown only in combat); null hides the strip. */
   economy?: EconomyView | null;
   onSpend?: (which: EconKey) => void;
@@ -405,6 +477,8 @@ export const TableHud = ({
   onCounterspellCheck,
   onDash,
   onDodge,
+  onReady,
+  onReleaseReady,
   economy,
   onSpend,
   onEndTurn,
@@ -420,6 +494,9 @@ export const TableHud = ({
   // drives the tile's spinning ring, and stops exactly when it's stripped at
   // the start of this creature's next turn.
   const dodging = (buffs ?? []).includes("Dodging");
+  // Ready (slice G): the held-action stance, and the picker that declares it.
+  const readyEntry = (buffs ?? []).find(isReadying);
+  const [readyOpen, setReadyOpen] = useState(false);
   const [min, setMin] = useState(false);
   const [hpOpen, setHpOpen] = useState(false);
   // HUD popouts — skills / the sheet drawer. ONE at a time: opening any closes
@@ -575,6 +652,22 @@ export const TableHud = ({
     // the sheet and drops it at the target's cell, hit or miss.
     const thrownItem = atk.thrown && atk.itemId ? { characterId: c.id, itemId: atk.itemId } : undefined;
     enterTargeting({ label: atk.name, attackBonus: attackBonus(c, atk), damage: dmgExpr, damageType: atk.damageType, range: atk.range, thrownItem });
+  };
+
+  // Release a readied action (slice G): the tap on the chip IS the human
+  // trigger call. The canvas strips the buff + spends the Reaction + logs;
+  // then we launch the held attack's targeting off-turn. If the held response
+  // was "move" (or the attack is gone), the canvas just clears it.
+  const releaseReady = (entry: string) => {
+    const [attackName] = parseBuff(entry).parts;
+    onReleaseReady?.(entry);
+    const atk = attacks.find((a) => a.name === attackName);
+    if (atk) {
+      // The canvas already spent the Reaction in onReleaseReady, so the launch
+      // itself carries no economy cost.
+      pendingEcon.current = undefined;
+      doAttack(atk);
+    }
   };
 
   const doHide = () => {
@@ -832,6 +925,15 @@ export const TableHud = ({
       run: () => { if (!dodging) onDodge?.(); },
       econ: "action" as const,
       activeFx: dodging,
+    },
+    {
+      id: "ready", icon: "star", glyph: glyphSrc("action_ready"), name: "Ready",
+      sub: readyEntry ? "readying" : "action", kind: "common",
+      // Ready (slice G): open the declare picker (trigger + held response).
+      // While readied the tile spins; releasing happens by tapping the chip.
+      run: () => { if (!readyEntry) setReadyOpen(true); },
+      econ: "action" as const,
+      activeFx: Boolean(readyEntry),
     },
   ];
   // BONUS-action tab: non-spell bonus actions. Sparse until #90/#93 add
@@ -1204,7 +1306,23 @@ export const TableHud = ({
 
       <div className="thud-rule" />
 
-      <StatusStrip conditions={conditions ?? []} buffs={buffs ?? []} />
+      <StatusStrip
+        conditions={conditions ?? []}
+        buffs={buffs ?? []}
+        onReleaseReady={(entry) => releaseReady(entry)}
+      />
+
+      {readyOpen && (
+        <ReadyPrompt
+          attacks={mainActions.filter((s) => s.kind === "attack")}
+          onCancel={() => setReadyOpen(false)}
+          onConfirm={(attackId, trigger) => {
+            setReadyOpen(false);
+            const atk = mainActions.find((s) => s.id === attackId);
+            onReady?.(encodeReadying(atk?.name ?? "an action", trigger));
+          }}
+        />
+      )}
 
       {concentratingOn && (
         <div className="thud-conc" role="group" aria-label="Concentration">

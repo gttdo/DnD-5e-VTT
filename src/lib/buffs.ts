@@ -41,7 +41,43 @@ export const BUFF_CATALOG: BuffDef[] = [
 const GENERIC = G("game_state/game_inspiration");
 const find = (name: string) => BUFF_CATALOG.find((b) => b.name.toLowerCase() === name.toLowerCase());
 
-export const buffGlyph = (name: string): string => find(name)?.glyph ?? GENERIC;
-export const buffNote = (name: string): string | undefined => find(name)?.note;
+/**
+ * A buff entry may carry structured detail after the name, "::"-separated —
+ * the Ready action stores its response and trigger this way:
+ *   "Readying::<attack name>::<trigger text>"
+ * Plain catalog buffs ("Bless") parse to just their name.
+ */
+export interface ParsedBuff {
+  name: string;
+  /** Encoded parts after the name (Readying: [attackName, trigger]). */
+  parts: string[];
+}
+
+export const parseBuff = (entry: string): ParsedBuff => {
+  const [name, ...parts] = entry.split("::");
+  return { name, parts };
+};
+
+/** The Ready stance (slice G): held action + trigger, released by a tap. */
+export const READYING = "Readying";
+export const encodeReadying = (attackName: string, trigger: string): string =>
+  `${READYING}::${attackName}::${trigger.replace(/::/g, ":")}`;
+export const isReadying = (entry: string): boolean => parseBuff(entry).name === READYING;
+
+export const buffGlyph = (entry: string): string => {
+  const { name } = parseBuff(entry);
+  if (name === READYING) return G("actions/action_ready");
+  return find(name)?.glyph ?? GENERIC;
+};
+export const buffNote = (entry: string): string | undefined => {
+  const { name, parts } = parseBuff(entry);
+  if (name === READYING) {
+    const [attack, trigger] = parts;
+    return `Held: ${attack || "an action"}${trigger ? ` — "${trigger}"` : ""}. Tap to release (uses the Reaction).`;
+  }
+  return find(name)?.note;
+};
 /** Good (gold) unless the catalog marks it harmful; unknown/custom → good. */
-export const buffIsGood = (name: string): boolean => find(name)?.good ?? true;
+export const buffIsGood = (entry: string): boolean => find(parseBuff(entry).name)?.good ?? true;
+/** Display name for a buff entry (strips any encoded detail). */
+export const buffName = (entry: string): string => parseBuff(entry).name;
