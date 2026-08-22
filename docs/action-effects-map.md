@@ -83,7 +83,9 @@ that any effect can ship in.
    NOTE: damage+condition combos where a hit ALSO carries a secondary DAMAGE
    save (Giant Spider bite, Bone Devil sting) are not yet modelled — the main
    damage + the condition rider fire, but the extra poison-damage save doesn't.
-5. **E — Thrown weapons**: fix `attackAbility` misreading thrown STR weapons as DEX
+5. ~~**E — Thrown weapons**~~ ✅ DONE (9a5a4d1) and ~~**F — Dodge**~~ ✅ DONE
+   (44b6e5c) — details below kept for the record.
+   **E**: fix `attackAbility` misreading thrown STR weapons as DEX
    (javelin); weapons with the thrown property get split Melee (5 ft) / Throw
    (20/60) tiles; a throw CONSUMES the item — removed from inventory (its tile
    vanishes, since tiles derive from inventory), lands at the target's cell hit
