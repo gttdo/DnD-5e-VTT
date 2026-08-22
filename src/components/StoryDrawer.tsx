@@ -1,6 +1,7 @@
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
 import { HandoutView } from "./HandoutView";
+import { QuestView } from "./QuestView";
 import type { CampaignDoc } from "../state/useCampaign";
 
 /**
@@ -27,7 +28,7 @@ const DocRow = ({
   isShared: boolean;
   onShare: (d: CampaignDoc) => void;
 }) => {
-  const shareable = doc.kind !== "note" && (doc.kind === "handout" || Boolean(doc.content.trim()));
+  const shareable = doc.kind !== "note" && (doc.kind === "handout" || doc.kind === "quest" || Boolean(doc.content.trim()));
   return (
     <div className={`story-doc ${doc.kind === "read_aloud" ? "is-readaloud" : ""}`}>
       <div className="story-dochead">
@@ -49,7 +50,10 @@ const DocRow = ({
       {doc.kind === "handout" ? (
         <HandoutView meta={doc.meta} compact />
       ) : (
-        doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>
+        <>
+          {doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>}
+          {doc.kind === "quest" && <QuestView meta={doc.meta} />}
+        </>
       )}
     </div>
   );

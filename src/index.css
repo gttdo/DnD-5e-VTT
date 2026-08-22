@@ -7959,6 +7959,66 @@ button.topbar-stat {
 .handout-artbtn.is-ghost { border-style: dashed; color: var(--text-muted); }
 .handout-aspect { padding: 5px 8px; }
 
+/* ---- Quests (#user ask): structured objectives + status ---- */
+/* Read-only view (Story drawer, player Journal) */
+.quest { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.quest-status {
+  align-self: flex-start;
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; padding: 2px 8px; border-radius: 10px;
+  border: 1px solid currentColor;
+}
+.quest-status.is-active { color: var(--candle-bright); }
+.quest-status.is-completed { color: #7fc98a; }
+.quest-status.is-failed { color: #d98a8a; }
+.quest-objectives { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.quest-objectives li { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+.quest-objectives li.is-done { color: var(--text-muted); text-decoration: line-through; }
+.quest-check { flex: none; font-size: 12px; color: var(--candle); width: 14px; }
+.quest-objectives li.is-done .quest-check { color: #7fc98a; }
+.quest-obj-text { min-width: 0; }
+.quest-reward {
+  display: flex; gap: 8px; align-items: baseline; font-size: 13.5px;
+  border-top: 1px solid var(--border); padding-top: 8px;
+}
+.quest-reward-label {
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+
+/* Quest editor */
+.quest-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.quest-statusrow { display: flex; gap: 4px; }
+.quest-statusbtn {
+  background: none; cursor: pointer; padding: 4px 12px; border-radius: 7px;
+  border: 1px solid var(--border); color: var(--text-muted);
+  font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.quest-statusbtn.is-active.is-active { border-color: var(--candle); color: var(--candle-bright); }
+.quest-statusbtn.is-completed.is-active { border-color: #7fc98a; color: #7fc98a; }
+.quest-statusbtn.is-failed.is-active { border-color: #d98a8a; color: #d98a8a; }
+.quest-objedit { display: flex; flex-direction: column; gap: 6px; }
+.quest-objrow { display: flex; gap: 6px; align-items: center; }
+.quest-objrow input { flex: 1; min-width: 0; }
+.quest-objrow input.is-done { color: var(--text-muted); text-decoration: line-through; }
+.quest-objcheck {
+  flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+  border-radius: 6px; border: 1px solid var(--border); background: none;
+  cursor: pointer; color: #7fc98a; font-size: 12px;
+}
+.quest-objcheck.is-done { border-color: #7fc98a; background: color-mix(in srgb, #7fc98a 16%, transparent); }
+.quest-objdel {
+  flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+  background: none; border: 0; cursor: pointer; color: var(--text-muted); border-radius: 6px;
+}
+.quest-objdel:hover { color: #d98a8a; }
+.quest-objadd {
+  align-self: flex-start; background: none; cursor: pointer; padding: 5px 11px;
+  border: 1px dashed var(--border); border-radius: 7px; color: var(--text-muted);
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.quest-objadd:hover { color: var(--candle); border-color: color-mix(in srgb, var(--candle) 45%, transparent); }
+
 /* Editor: fields left, living preview right */
 .handout-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 @media (max-width: 1100px) { .handout-editor { grid-template-columns: 1fr; } }

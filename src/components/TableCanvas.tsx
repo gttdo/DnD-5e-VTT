@@ -62,6 +62,7 @@ import { SceneAmbience } from "./SceneAmbience";
 import { effectiveAmbienceKey } from "../lib/soundtrack";
 import { audioBus } from "../lib/audioBus";
 import { HandoutView } from "./HandoutView";
+import { QuestView } from "./QuestView";
 import { draftRecap } from "../lib/scribe";
 import { RotateHint } from "./RotateHint";
 import { initiative as initiativeMod, saveBonus, abilityMod, abilityModFor, skillBonus, skillCheckChips, attackBonus, damageBonus } from "../lib/calc";
@@ -6023,14 +6024,21 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         <div className="present-veil">
           <div className={`present-card ${presented.kind === "handout" ? "is-handout" : ""}`}>
             <div className="present-kicker">
-              {presented.kind === "handout" ? "The DM hands you…" : presented.kind === "recap" ? "Previously on…" : "The DM reads…"}
+              {presented.kind === "handout"
+                ? "The DM hands you…"
+                : presented.kind === "recap"
+                  ? "Previously on…"
+                  : presented.kind === "quest"
+                    ? "A new quest…"
+                    : "The DM reads…"}
             </div>
             {presented.kind === "handout" ? (
               <HandoutView meta={presented.meta} />
             ) : (
               <>
                 {presented.title && <div className="present-title">{presented.title}</div>}
-                <div className="present-text">{presented.content}</div>
+                {presented.content && <div className="present-text">{presented.content}</div>}
+                {presented.kind === "quest" && <QuestView meta={presented.meta} />}
               </>
             )}
             <button

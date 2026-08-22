@@ -46,6 +46,7 @@ import { useCastRoster, type CastMember } from "../state/useCastRoster";
 import { RegionNavigator } from "./RegionNavigator";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
 import { HandoutDocBody } from "./HandoutEditor";
+import { QuestDocBody } from "./QuestEditor";
 import { EMPTY_FIELDS } from "../lib/handouts";
 import { generateNarration } from "../lib/narrate";
 import { AMBIENCE_TRACKS, resolveAmbience } from "../lib/soundtrack";
@@ -1537,20 +1538,25 @@ const DocCard = ({
       {doc.kind === "handout" ? (
         <HandoutDocBody doc={doc} updateDoc={updateDoc as (id: string, patch: { meta: Record<string, unknown> }) => Promise<{ error: string | null }>} />
       ) : (
-        <textarea
-          className={isRA ? "camped-ra" : "camped-body"}
-          placeholder={
-            isRA
-              ? "The words you'll read aloud — mist on the water, a bell that rings with no hand on the rope…"
-              : doc.kind === "quest"
-                ? "Hook → steps → reward."
-                : "DM notes — what's really going on here."
-          }
-          value={content.value}
-          onChange={(e) => content.set(e.target.value)}
-          onBlur={content.flush}
-          rows={isRA ? 3 : 4}
-        />
+        <>
+          <textarea
+            className={isRA ? "camped-ra" : "camped-body"}
+            placeholder={
+              isRA
+                ? "The words you'll read aloud — mist on the water, a bell that rings with no hand on the rope…"
+                : doc.kind === "quest"
+                  ? "The hook — why the party cares, and what's really at stake."
+                  : "DM notes — what's really going on here."
+            }
+            value={content.value}
+            onChange={(e) => content.set(e.target.value)}
+            onBlur={content.flush}
+            rows={isRA ? 3 : 4}
+          />
+          {doc.kind === "quest" && (
+            <QuestDocBody doc={doc} updateDoc={updateDoc as (id: string, patch: { meta: Record<string, unknown> }) => Promise<{ error: string | null }>} />
+          )}
+        </>
       )}
       {narratable && (
         <div className="camped-voice">

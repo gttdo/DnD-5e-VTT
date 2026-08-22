@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
 import { HandoutView } from "./HandoutView";
+import { QuestView } from "./QuestView";
 import { readHandoutMeta } from "../lib/handouts";
 import { audioBus } from "../lib/audioBus";
 import type { CampaignDoc, DocShare } from "../state/useCampaign";
@@ -26,7 +27,7 @@ const KIND_LABEL: Record<CampaignDoc["kind"], string> = {
   handout: "Handout",
 };
 
-type Filter = "all" | "read_aloud" | "handout" | "recap";
+type Filter = "all" | "read_aloud" | "handout" | "quest" | "recap";
 type View = "latest" | "session";
 
 const relativeDate = (iso: string): string => {
@@ -110,7 +111,10 @@ const JournalDoc = ({ doc, date }: { doc: CampaignDoc; date: string }) => {
       {doc.kind === "handout" ? (
         <HandoutView meta={doc.meta} compact />
       ) : (
-        doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>
+        <>
+          {doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>}
+          {doc.kind === "quest" && <QuestView meta={doc.meta} />}
+        </>
       )}
     </div>
   );
@@ -203,6 +207,7 @@ export const JournalDrawer = ({
                 [
                   ["all", "All"],
                   ["read_aloud", "Readings"],
+                  ["quest", "Quests"],
                   ["handout", "Handouts"],
                   ["recap", "Recaps"],
                 ] as [Filter, string][]
