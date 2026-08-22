@@ -5142,9 +5142,11 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     // for the DM (slice H).
                     opacity: isGhost ? 0.22 : vl === "dim" ? 0.42 : dead ? 0.5 : dragging ? 0.9 : 1,
                     filter: dead ? "grayscale(0.85)" : isGhost ? "grayscale(0.6)" : undefined,
-                    // The DM's ghost stays selectable — a last-known marker they
-                    // can inspect, move, or manually reveal — it just can't be
-                    // targeted by attacks (enforced at target-commit, slice H).
+                    // The DM's ghost stays interactive — a last-known marker the
+                    // DM can inspect, move, or manually reveal (slice H). Players
+                    // can't see it at all (filtered from their visibleTokens), so
+                    // only the DM can act on it; refusing the DM's own targeting
+                    // of a hidden creature is a later refinement.
                   }}
                 >
                   {/* Always-present hit target for the whole disc. `fill="transparent"`
