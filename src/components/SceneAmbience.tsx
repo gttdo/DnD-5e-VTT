@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { audioBus } from "../lib/audioBus";
+import { resolveAmbience } from "../lib/soundtrack";
 
 /**
  * The ambience player (#0046) — loops the staged scene's track through the
@@ -15,7 +16,10 @@ import { audioBus } from "../lib/audioBus";
 const FADE_MS = 1200;
 const STEP_MS = 60;
 
-export const SceneAmbience = ({ url }: { url: string | null | undefined }) => {
+export const SceneAmbience = ({ trackKey }: { trackKey: string | null | undefined }) => {
+  // Resolve the track key to a concrete file, re-picking a random variant only
+  // when the key changes (a new scene or a combat swap) — not on every render.
+  const url = useMemo(() => resolveAmbience(trackKey), [trackKey]);
   const elRef = useRef<HTMLAudioElement | null>(null);
   const fadeRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const targetRef = useRef(0); // the channel level this track is fading toward

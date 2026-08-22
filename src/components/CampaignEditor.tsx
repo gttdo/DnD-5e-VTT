@@ -48,7 +48,7 @@ import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../
 import { HandoutDocBody } from "./HandoutEditor";
 import { EMPTY_FIELDS } from "../lib/handouts";
 import { generateNarration } from "../lib/narrate";
-import { AMBIENCE_TRACKS } from "../lib/soundtrack";
+import { AMBIENCE_TRACKS, resolveAmbience } from "../lib/soundtrack";
 import type { Game } from "../state/useGames";
 import type { MapAsset } from "../state/useMaps";
 import { MapPickerDialog } from "./MapPickerDialog";
@@ -924,14 +924,14 @@ const ScenePage = ({
         >
           <option value="">No ambience</option>
           {AMBIENCE_TRACKS.map((t) => (
-            <option key={t.key} value={t.url}>
+            <option key={t.key} value={t.key}>
               {t.name} — {t.hint}
-              {t.ready ? "" : " (no audio yet)"}
+              {t.variants.length > 1 ? ` (${t.variants.length} takes)` : ""}
             </option>
           ))}
         </select>
-        {scene.ambience_url && (
-          <audio src={scene.ambience_url} controls preload="none" className="camped-ambience-player" />
+        {resolveAmbience(scene.ambience_url) && (
+          <audio src={resolveAmbience(scene.ambience_url)!} controls preload="none" className="camped-ambience-player" />
         )}
       </div>
       <div className="camped-ambience">
@@ -943,14 +943,14 @@ const ScenePage = ({
         >
           <option value="">Default battle cue (Blades Drawn)</option>
           {AMBIENCE_TRACKS.map((t) => (
-            <option key={t.key} value={t.url}>
+            <option key={t.key} value={t.key}>
               {t.name} — {t.hint}
-              {t.ready ? "" : " (no audio yet)"}
+              {t.variants.length > 1 ? ` (${t.variants.length} takes)` : ""}
             </option>
           ))}
         </select>
-        {scene.combat_ambience_url && (
-          <audio src={scene.combat_ambience_url} controls preload="none" className="camped-ambience-player" />
+        {resolveAmbience(scene.combat_ambience_url) && (
+          <audio src={resolveAmbience(scene.combat_ambience_url)!} controls preload="none" className="camped-ambience-player" />
         )}
       </div>
 
