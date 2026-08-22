@@ -8229,7 +8229,7 @@ button.topbar-stat {
 /* ---- Co-DM companion (#7): floating buddy + chat panel ---- */
 .cdm-companion { position: fixed; right: 20px; bottom: 20px; z-index: 60; }
 .cdm-fab {
-  width: 66px; height: 66px; padding: 0; cursor: pointer;
+  width: 92px; height: 92px; padding: 0; cursor: pointer;
   display: grid; place-items: center; border: 0; background: none;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
   transition: transform 0.15s ease, filter 0.15s ease;
