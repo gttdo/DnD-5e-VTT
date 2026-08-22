@@ -189,7 +189,7 @@ export const CoDMCompanion = ({
         title={open ? `Close ${label}` : `Ask the ${label}`}
         aria-label={label}
       >
-        <CompanionSprite state={open ? spriteState : "idle"} art={art} size={54} />
+        <CompanionSprite state={open ? spriteState : "idle"} art={art} size={64} />
       </button>
     </div>
   );
