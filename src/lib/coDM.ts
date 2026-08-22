@@ -18,17 +18,21 @@ export interface CoDMProposal {
   input: Record<string, unknown>;
 }
 
-export const askCoDM = async (
-  gameId: string,
-  messages: CoDMTurn[],
-  /** "dm" gets the whole campaign + gated actions; "player" gets a
-   *  spoiler-safe rules/lore helper with no tools (edge fn honors it in a
-   *  later slice — harmlessly ignored until then). */
-  mode: "dm" | "player" = "dm"
-): Promise<{ text: string | null; proposals: CoDMProposal[]; error: string | null }> => {
-  const { data, error } = await supabase.functions.invoke("co-dm", {
-    body: { game_id: gameId, messages, mode },
-  });
+export const askCoDM = async (opts: {
+  /** Present for campaign modes; omit for "general". */
+  gameId?: string | null;
+  messages: CoDMTurn[];
+  /** "dm": whole campaign + gated actions. "player": spoiler-safe helper.
+   *  "general": no campaign — rules/app/character helper anywhere. */
+  mode?: "dm" | "player" | "general";
+  /** general mode only: a summary of the character the user is looking at. */
+  characterContext?: string;
+}): Promise<{ text: string | null; proposals: CoDMProposal[]; error: string | null }> => {
+  const { gameId = null, messages, mode = "dm", characterContext } = opts;
+  const payloadBody: Record<string, unknown> = { messages, mode };
+  if (gameId) payloadBody.game_id = gameId;
+  if (characterContext) payloadBody.characterContext = characterContext;
+  const { data, error } = await supabase.functions.invoke("co-dm", { body: payloadBody });
   if (error) return { text: null, proposals: [], error: await readFnError(error) };
   const payload = data as { text?: string; proposals?: CoDMProposal[]; error?: string };
   if (payload.error) return { text: null, proposals: [], error: payload.error };

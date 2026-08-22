@@ -37,11 +37,16 @@ interface Turn {
   content: string;
 }
 interface Body {
-  game_id: string;
+  game_id?: string;
   messages: Turn[];
   /** "dm" (default): the whole campaign + gated actions. "player": a
-   *  spoiler-safe rules/lore helper limited to what the party has been shown. */
-  mode?: "dm" | "player";
+   *  spoiler-safe rules/lore helper limited to what the party has been shown.
+   *  "general": no campaign at all — a rules/app/character helper anywhere in
+   *  the app (no game_id needed, no tools). */
+  mode?: "dm" | "player" | "general";
+  /** general mode only: a compact summary of the character the user is
+   *  looking at, so Oculus can help with that specific build. */
+  characterContext?: string;
 }
 
 const clip = (s: string | null | undefined, n: number): string =>
@@ -69,16 +74,25 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: "invalid json" }, 400);
   }
-  if (!body.game_id || !Array.isArray(body.messages) || body.messages.length === 0) {
-    return json({ error: "game_id and messages required" }, 400);
+  if (!Array.isArray(body.messages) || body.messages.length === 0) {
+    return json({ error: "messages required" }, 400);
   }
 
-  const mode: "dm" | "player" = body.mode === "player" ? "player" : "dm";
+  const mode: "dm" | "player" | "general" =
+    body.mode === "player" ? "player" : body.mode === "general" ? "general" : "dm";
+
+  // ---- General mode: Oculus anywhere in the app, no campaign attached -------
+  if (mode === "general") {
+    return await handleGeneral(body.messages, body.characterContext ?? null);
+  }
+
+  if (!body.game_id) return json({ error: "game_id required" }, 400);
+  const gid = body.game_id;
 
   const { data: game } = await db
     .from("games")
     .select("id, name, description, dm_user_id, level_min, level_max, active_scene_id")
-    .eq("id", body.game_id)
+    .eq("id", gid)
     .maybeSingle();
   if (!game) return json({ error: "game not found" }, 404);
 
@@ -93,7 +107,7 @@ Deno.serve(async (req) => {
     const { data: membership } = await db
       .from("game_members")
       .select("user_id")
-      .eq("game_id", body.game_id)
+      .eq("game_id", gid)
       .eq("user_id", user.id)
       .maybeSingle();
     if (!membership) return json({ error: "You are not a member of this game" }, 403);
@@ -104,7 +118,6 @@ Deno.serve(async (req) => {
   if (game.dm_user_id !== user.id) return json({ error: "the Co-DM speaks only to the DM" }, 403);
 
   // ---- Context assembly: the whole campaign, from rows -----------------------
-  const gid = body.game_id;
   const [
     { data: chapters },
     { data: scenes },
@@ -340,6 +353,47 @@ Deno.serve(async (req) => {
   if (!text && proposals.length === 0) return json({ error: "empty response from the model" }, 502);
   return json({ text, proposals });
 });
+
+// ---- General mode: Oculus anywhere in the app ------------------------------
+// No campaign, no DB reads, no tools — just Oculus's knowledge. Optionally
+// grounded on the character the user is currently looking at.
+async function handleGeneral(messages: Turn[], characterContext: string | null): Promise<Response> {
+  const system = [
+    "You are Oculus — a friendly, sharp beholder who is the mascot and helper of The Table, a virtual tabletop for D&D 5e.",
+    "You're not in a specific campaign right now, so you have no DM's notes or secrets — just your own knowledge. Help the user with:",
+    "- D&D 5e RULES — reason from standard 5e practice; be clear, and say when you're unsure.",
+    "- BUILDING CHARACTERS — classes, species, backgrounds, feats, spells, tactics, and flavor.",
+    "- CAMPAIGN & ADVENTURE ideas — hooks, NPCs, encounters, names, twists.",
+    "- USING THE APP — The Table has: Characters (a roster, character sheets, and a builder), Maps, Resources (tokens & monsters), Campaigns (a Campaign editor for chapters, scenes, notes, read-alouds, handouts, and quests — plus a VTT table to run them), and a Marketplace of ready-made adventure packs. Point people to the right place when they ask how to do something.",
+    "Be warm and concise — a few sentences unless asked for more. If asked your name, you're Oculus.",
+    ...(characterContext
+      ? ["", "THE CHARACTER THE USER IS LOOKING AT (help with THIS build when relevant):", clip(characterContext, 1500)]
+      : []),
+  ].join("\n");
+
+  const turns = messages.slice(-MAX_TURNS).map((m) => ({
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: clip(m.content, 4000),
+  }));
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ model: MODEL, max_tokens: 900, system, messages: turns }),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => "");
+    return json({ error: `anthropic ${resp.status}: ${clip(detail, 300)}` }, 502);
+  }
+  const data = (await resp.json()) as { content?: Array<{ type: string; text?: string }> };
+  const text = (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+  if (!text) return json({ error: "empty response from the model" }, 502);
+  return json({ text, proposals: [] });
+}
 
 // ---- Player mode: the Guide ------------------------------------------------
 // Context is an explicit ALLOW-LIST — only documents the party (or this player)

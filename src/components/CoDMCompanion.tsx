@@ -33,13 +33,15 @@ export const CoDMCompanion = ({
   proposalLabel,
   nudgeSignal = null,
   nudgesToggleable = false,
+  characterContext = undefined,
 }: {
-  gameId: string;
-  role?: "dm" | "player";
+  gameId?: string;
+  role?: "dm" | "player" | "general";
   label?: string;
   intro?: string;
   starters?: string[];
   art?: CompanionArt;
+  characterContext?: string;
   sceneName?: string | null;
   onSaveToScene?: (kind: DocKind, content: string) => void;
   onProposal?: (p: CoDMProposal) => Promise<{ ok: boolean; message: string }>;
@@ -83,7 +85,7 @@ export const CoDMCompanion = ({
     lastNudgeKey.current = nudgeSignal.key;
     let cancelled = false;
     void (async () => {
-      const { text, proposals, error } = await askCoDM(gameId, [{ role: "user", content: nudgeSignal.prompt }], role);
+      const { text, proposals, error } = await askCoDM({ gameId, messages: [{ role: "user", content: nudgeSignal.prompt }], mode: role });
       if (cancelled || error) return;
       const say = (text ?? "").trim();
       // "NONE" (or an empty answer with no action) means nothing worth a nudge.
@@ -104,11 +106,12 @@ export const CoDMCompanion = ({
     setMsgs(next);
     setDraft("");
     setThinking(true);
-    const { text: answer, proposals, error } = await askCoDM(
+    const { text: answer, proposals, error } = await askCoDM({
       gameId,
-      next.map((m) => ({ role: m.role, content: m.content })),
-      role
-    );
+      messages: next.map((m) => ({ role: m.role, content: m.content })),
+      mode: role,
+      characterContext,
+    });
     setThinking(false);
     setMsgs((prev) => [
       ...prev,

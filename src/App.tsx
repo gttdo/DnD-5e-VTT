@@ -7,6 +7,8 @@ import { CharacterImport } from "./components/CharacterImport";
 import { CharacterQuickBuild } from "./components/CharacterQuickBuild";
 import { GamesScreen } from "./components/GamesScreen";
 import { MarketplaceScreen } from "./components/MarketplaceScreen";
+import { CoDMCompanion } from "./components/CoDMCompanion";
+import { characterSummary } from "./lib/characterSummary";
 import { JoinLobby } from "./components/JoinLobby";
 import { MapLibraryScreen } from "./components/MapLibraryScreen";
 import { TokenLibraryScreen } from "./components/TokenLibraryScreen";
@@ -465,6 +467,28 @@ function App() {
               />
             )}
           </>
+        )}
+
+        {/* App-wide Oculus (#7): one companion on every non-game screen — a
+            general 5e / app / character helper. Game screens (campaign, table)
+            mount their own campaign-aware Oculus, so we skip those here to
+            avoid two. On a character sheet he can see the open build. */}
+        {!showLanding && screen !== "campaign" && screen !== "table" && (
+          <CoDMCompanion
+            role="general"
+            label="Oculus"
+            characterContext={screen === "sheet" && api.character ? characterSummary(api.character) : undefined}
+            intro={
+              screen === "sheet" && api.character
+                ? "I'm Oculus — I can see the character you've got open. Ask me about this build, the 5e rules, or how to use The Table."
+                : "I'm Oculus, your table companion. Ask me about the D&D 5e rules, building a character, adventure ideas, or how to use The Table."
+            }
+            starters={
+              screen === "sheet" && api.character
+                ? ["Any gaps or weak spots in this build?", "What should I take at my next level?", "Suggest tactics for this character."]
+                : ["How does concentration work?", "Help me theme a rogue.", "How do I start a campaign here?"]
+            }
+          />
         )}
       </AppShell>
     </DiceLogProvider>
