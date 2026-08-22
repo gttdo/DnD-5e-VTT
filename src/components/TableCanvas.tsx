@@ -19,6 +19,8 @@ import { useTableRolls } from "../state/useTableRolls";
 import { naturalD20, optionalBonusesFor, type RollEntry, type RollTone, type AttackSpec, type RollMode } from "../lib/rolls";
 import type { SkillName } from "../types/character";
 import { aggregateConditions, autoFailsSave, conditionName, conditionGlyph, parseCondition } from "../lib/conditions";
+import { buffGlyph, buffNote, buffIsGood } from "../lib/buffs";
+import { TokenStatusEditor } from "./TokenStatusEditor";
 import { useSaveRequests } from "../state/useSaveRequests";
 import { type SaveRequest, encodeCondition } from "../lib/saves";
 import { useReactions } from "../state/useReactions";
@@ -2804,6 +2806,18 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
     const name = conditionName(cond).toLowerCase();
     void updateToken(id, { conditions: (t.conditions ?? []).filter((c) => conditionName(c).toLowerCase() !== name) });
   };
+  // Status picker (#conditions Phase 2): the DM toggles a condition/buff on a
+  // token from its Examine card. Conditions applied here carry no save (a manual
+  // DM call); buffs are plain names in token.buffs.
+  const toggleCondition = (t: Token, name: string) => {
+    if ((t.conditions ?? []).some((c) => conditionName(c).toLowerCase() === name.toLowerCase())) clearCondition(t.id, name);
+    else applyConditionEncoded(t, name);
+  };
+  const toggleBuff = (t: Token, name: string) => {
+    const cur = t.buffs ?? [];
+    const has = cur.some((b) => b.toLowerCase() === name.toLowerCase());
+    void updateToken(t.id, { buffs: has ? cur.filter((b) => b.toLowerCase() !== name.toLowerCase()) : [...cur, name] });
+  };
 
   // Ask the token's controller to roll the save that ends a save-removable
   // condition. Fired by clicking its badge (or automatically at end of turn).
@@ -4837,57 +4851,74 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     {t.label}
                   </text>
 
-                  {/* Condition icons — a BG3-style strip of glyph chips above the
-                      token (#user ask). Shows up to 4, then "+N". Everyone at the
-                      table sees them; tap a chip to roll its shake-off save. */}
-                  {(t.conditions ?? []).length > 0 && (() => {
-                    const conds = t.conditions ?? [];
-                    const MAX = 4;
-                    const shown = conds.slice(0, MAX);
-                    const extra = conds.length - shown.length;
+                  {/* Status strip — a BG3-style row of glyph chips above the token
+                      (#user ask): conditions (red) + buffs (gold), up to 5 then
+                      "+N". Display-only; managed from the HUD status picker.
+                      Everyone at the table sees them on visible tokens. */}
+                  {((t.conditions?.length ?? 0) + (t.buffs?.length ?? 0)) > 0 && (() => {
+                    const items = [
+                      ...(t.conditions ?? []).map((c) => {
+                        const pc = parseCondition(c);
+                        return {
+                          key: `c:${c}`,
+                          glyph: conditionGlyph(pc.name),
+                          label: pc.name,
+                          good: false,
+                          tip: pc.save && pc.dc != null ? `${pc.name} (${pc.save} save DC ${pc.dc})` : pc.name,
+                        };
+                      }),
+                      ...(t.buffs ?? []).map((b) => ({
+                        key: `b:${b}`,
+                        glyph: buffGlyph(b) as string | null,
+                        label: b,
+                        good: buffIsGood(b),
+                        tip: buffNote(b) ? `${b} — ${buffNote(b)}` : b,
+                      })),
+                    ];
+                    const MAX = 5;
+                    const shown = items.slice(0, MAX);
+                    const extra = items.length - shown.length;
                     const chip = 18;
                     const gap = 3;
                     const slots = shown.length + (extra > 0 ? 1 : 0);
                     const total = slots * chip + (slots - 1) * gap;
                     const by = cy - r - chip - 6;
-                    const tile = (bx: number, key: string, extraContent: React.ReactNode, onClick?: (e: React.MouseEvent) => void, tip?: string) => (
-                      <g key={key} onClick={onClick} style={{ cursor: onClick ? "pointer" : "default" }}>
-                        {tip && <title>{tip}</title>}
-                        <rect x={bx} y={by} width={chip} height={chip} rx={4} fill="rgba(24,16,12,0.92)" stroke="#e0864f" strokeWidth={1.2} />
-                        {extraContent}
-                      </g>
-                    );
                     return (
                       <g>
-                        {shown.map((cond, ci) => {
-                          const bx = cx - total / 2 + ci * (chip + gap);
-                          const pc = parseCondition(cond);
-                          const glyph = conditionGlyph(pc.name);
-                          const tip = pc.save && pc.dc != null
-                            ? `${pc.name} — tap to roll a ${pc.save} save (DC ${pc.dc})`
-                            : `${pc.name} — needs a spell or item to remove`;
-                          const content = glyph ? (
-                            <foreignObject x={bx + 2} y={by + 2} width={chip - 4} height={chip - 4} style={{ pointerEvents: "none" }}>
-                              <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#ffd9b8" }}>
-                                <GameGlyph src={glyph} size={chip - 4} />
-                              </div>
-                            </foreignObject>
-                          ) : (
-                            <text x={bx + chip / 2} y={by + chip / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
-                              {pc.name.slice(0, 3).toUpperCase()}
-                            </text>
+                        {shown.map((it, i) => {
+                          const bx = cx - total / 2 + i * (chip + gap);
+                          const border = it.good ? "#d9a441" : "#e0864f";
+                          const ink = it.good ? "#ffe6b0" : "#ffd9b8";
+                          return (
+                            <g key={it.key}>
+                              <title>{it.tip}</title>
+                              <rect x={bx} y={by} width={chip} height={chip} rx={4} fill="rgba(24,16,12,0.92)" stroke={border} strokeWidth={1.2} />
+                              {it.glyph ? (
+                                <foreignObject x={bx + 2} y={by + 2} width={chip - 4} height={chip - 4} style={{ pointerEvents: "none" }}>
+                                  <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: ink }}>
+                                    <GameGlyph src={it.glyph} size={chip - 4} />
+                                  </div>
+                                </foreignObject>
+                              ) : (
+                                <text x={bx + chip / 2} y={by + chip / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={700} fill={ink} style={{ pointerEvents: "none" }}>
+                                  {it.label.slice(0, 3).toUpperCase()}
+                                </text>
+                              )}
+                            </g>
                           );
-                          return tile(bx, cond, content, (e) => { e.stopPropagation(); onConditionBadge(t, cond); }, tip);
                         })}
-                        {extra > 0 && tile(
-                          cx - total / 2 + shown.length * (chip + gap),
-                          "+more",
-                          <text x={cx - total / 2 + shown.length * (chip + gap) + chip / 2} y={by + chip / 2 + 3.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
-                            +{extra}
-                          </text>,
-                          undefined,
-                          `${extra} more: ${conds.slice(MAX).map((c) => conditionName(c)).join(", ")}`
-                        )}
+                        {extra > 0 && (() => {
+                          const bx = cx - total / 2 + shown.length * (chip + gap);
+                          return (
+                            <g>
+                              <title>{`${extra} more: ${items.slice(MAX).map((it) => it.label).join(", ")}`}</title>
+                              <rect x={bx} y={by} width={chip} height={chip} rx={4} fill="rgba(24,16,12,0.92)" stroke="#8a6a3a" strokeWidth={1.2} />
+                              <text x={bx + chip / 2} y={by + chip / 2 + 3.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#ffeede" style={{ pointerEvents: "none" }}>
+                                +{extra}
+                              </text>
+                            </g>
+                          );
+                        })()}
                       </g>
                     );
                   })()}
@@ -6422,8 +6453,9 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           <div className="examine">
             {examineToken.image_url && <img className="examine-pf" src={examineToken.image_url} alt="" />}
             {isDM ? (
-              // DM prep controls: stash loot on this token for the party to find.
-              examineToken.character_id ? (
+              <>
+              {/* DM controls: loot (non-PC) + the status picker (any token). */}
+              {examineToken.character_id ? (
                 <p className="examine-lead">
                   This is a player's character — loot goes on monsters, NPCs, or props.
                 </p>
@@ -6446,7 +6478,14 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                     {examineToken.loot && !lootIsEmpty(examineToken.loot) ? "Edit loot" : "Add loot"}
                   </button>
                 </>
-              )
+              )}
+              <TokenStatusEditor
+                conditions={examineToken.conditions ?? []}
+                buffs={examineToken.buffs ?? []}
+                onToggleCondition={(name) => toggleCondition(examineToken, name)}
+                onToggleBuff={(name) => toggleBuff(examineToken, name)}
+              />
+              </>
             ) : (
               examineToken.statblock && (
                 <>

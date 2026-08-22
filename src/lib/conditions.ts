@@ -21,6 +21,13 @@ export const conditionGlyph = (name: string): string | null => {
   return COND_ICONS.has(slug) ? `/icons/conditions/cond_${slug}.svg` : null;
 };
 
+/** The SRD conditions a DM can toggle on a token, in a sensible display order. */
+export const CONDITION_NAMES: string[] = [
+  "Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated",
+  "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained",
+  "Stunned", "Unconscious", "Exhaustion",
+];
+
 export interface ConditionEffect {
   /** Can't take actions, bonus actions, or reactions. */
   incapacitated?: boolean;

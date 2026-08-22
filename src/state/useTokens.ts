@@ -84,6 +84,9 @@ export interface Token {
   /** Active condition slugs shown as badges on the board (e.g. "paralyzed").
    *  Optional so reads tolerate a pre-migration schema. */
   conditions?: string[] | null;
+  /** Active buffs shown as gold chips on the board (e.g. "Bless", "Haste").
+   *  The positive counterpart to conditions (0049). Optional pre-migration. */
+  buffs?: string[] | null;
   /** Coins + items carried by this token, taken when it's looted. Generated
    *  once (frozen) and stored as jsonb. Optional for a pre-migration schema. */
   loot?: TokenLoot | null;
@@ -255,7 +258,7 @@ export const useTokens = (gameId: string | null, sceneId: string | null) => {
 
   /** Optimistically patch a token (HP edits from the monster HUD). */
   const updateToken = useCallback(
-    async (id: string, patch: Partial<Pick<Token, "hp_current" | "hp_max" | "conditions" | "loot" | "area" | "char_level" | "disposition">>): Promise<{ error: string | null }> => {
+    async (id: string, patch: Partial<Pick<Token, "hp_current" | "hp_max" | "conditions" | "buffs" | "loot" | "area" | "char_level" | "disposition">>): Promise<{ error: string | null }> => {
       setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
       const { error } = await supabase.from("tokens").update(patch).eq("id", id);
       return { error: error?.message ?? null };
