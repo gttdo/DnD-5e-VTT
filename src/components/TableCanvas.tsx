@@ -50,7 +50,6 @@ import { useAuth } from "../state/useAuth";
 import { penPathD, shapeBox, arrowHead, hitsDrawing, DRAW_COLORS } from "../lib/drawing";
 import { PartyTray, DRAG_MIME } from "./PartyTray";
 import { CombatTurnRail } from "./CombatTurnRail";
-import { RulesReference } from "./RulesReference";
 import { DiceRoller } from "./DiceRoller";
 import { GameLog } from "./GameLog";
 import { useGameLogFeed } from "../state/useGameLogFeed";
@@ -329,7 +328,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
   // The combat rail shows by default (a pill out of combat for the DM, the turn
   // rail in combat); the tool-rail hourglass hides it when it's in the way.
   const [railHidden, setRailHidden] = useState(false);
-  const [rulesOpen, setRulesOpen] = useState(false);
   // Dice roller (input popover) + Game Log (record drawer) live on the tool
   // rail now (#132), not as floating FABs. The log button badges unseen rolls.
   const [rollerOpen, setRollerOpen] = useState(false);
@@ -4219,14 +4217,8 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
           >
             <GameGlyph src="/icons/board/compass.svg" size={18} />
           </button>
-          <button
-            className={`rail-tool ${rulesOpen ? "active" : ""}`}
-            onClick={() => setRulesOpen((v) => !v)}
-            title="Rules reference — DCs, cover, conditions, travel"
-            aria-label="Rules reference"
-          >
-            <Icon name="rules" size={18} />
-          </button>
+          {/* Rules reference retired from the rail (#user ask) — the Co-DM /
+              Guide companion answers rules questions for DM and players alike. */}
 
           {/* Contextual: appears once a token is selected. This is the ONLY way
               to remove a token by touch — the other two routes (Delete key,
@@ -5843,7 +5835,6 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
                   : "Drag tokens · Click then Delete (or right-click) to remove · Scroll or pinch to zoom · Hold Space to pan"}
       </div>
 
-      {rulesOpen && <RulesReference onClose={() => setRulesOpen(false)} />}
       {rollerOpen && (
         <DiceRoller
           onClose={() => setRollerOpen(false)}
