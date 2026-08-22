@@ -131,6 +131,21 @@ export const CoDMCompanion = ({
     setMsgs((prev) => prev.map((m, i) => (i === msgIdx ? { ...m, done: { ...(m.done ?? {}), [propIdx]: "Dismissed" } } : m)));
   };
 
+  // Toggling nudges — Oculus says what it means, in his own voice.
+  const toggleNudges = () => {
+    const next = !nudgesOn;
+    setNudgesOn(next);
+    setMsgs((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: next
+          ? "🔔 Nudges on. I'll keep watch and glow when I spot something worth doing — a reading to share, enemies a scene calls for — when you stage a scene or a fight starts. You always get the final say; I never act on my own."
+          : "🔕 Nudges off. I'll stay quiet and only pipe up when you ask me.",
+      },
+    ]);
+  };
+
   return (
     <div className={`cdm-companion ${open ? "is-open" : ""}`}>
       {open && (
@@ -141,7 +156,7 @@ export const CoDMCompanion = ({
             {nudgesToggleable && (
               <button
                 className={`cdm-nudge-toggle ${nudgesOn ? "is-on" : ""}`}
-                onClick={() => setNudgesOn((v) => !v)}
+                onClick={toggleNudges}
                 title={nudgesOn ? "Nudges on — Oculus glows when he spots something worth doing" : "Nudges off — let Oculus suggest things as they come up"}
                 aria-pressed={nudgesOn}
               >

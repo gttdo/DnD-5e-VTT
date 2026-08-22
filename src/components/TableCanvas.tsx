@@ -5908,7 +5908,7 @@ export const TableCanvas = ({ game, onBack, characters, ownedCharacterIds, onUpd
         <CoDMCompanion
           gameId={game.id}
           label="Oculus"
-          intro="I'm Oculus, your second set of eyes — I've read your whole campaign. Ask me anything, or tell me to stage a scene, place tokens, or share a handout; nothing reaches the players without your nod."
+          intro="I'm Oculus, your second set of eyes — I've read your whole campaign. Ask me anything, or tell me to stage a scene, place tokens, or share a handout; nothing reaches the players without your nod. Tap the 🔔 up top and I'll nudge you when I spot something worth doing."
           starters={[
             "What's the party heading toward, and what have I prepped for it?",
             "Remind me of this scene's secret.",
