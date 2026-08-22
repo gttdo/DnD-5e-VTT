@@ -164,6 +164,8 @@ const ART_ASPECTS: Array<{ key: ArtAspect; label: string }> = [
   { key: "square", label: "Square" },
 ];
 
+type ArtSource = "generate" | "upload" | "link";
+
 const ArtForm = ({
   gameId,
   image,
@@ -185,87 +187,114 @@ const ArtForm = ({
 }) => {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // One acquisition method visible at a time — Generate is the primary flow.
+  const [source, setSource] = useState<ArtSource>("generate");
   const [prompt, setPrompt] = useState("");
   const [aspect, setAspect] = useState<ArtAspect>("portrait");
-  const [busy, setBusy] = useState<"upload" | "generate" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
 
   const doUpload = async (file: File) => {
-    setBusy("upload");
+    setBusy(true);
     try {
       onImage(await uploadArt(file, gameId));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
   const doGenerate = async () => {
     if (!prompt.trim()) return;
-    setBusy("generate");
+    setBusy(true);
     try {
       onImage(await generateArt(prompt.trim(), aspect));
     } catch (e) {
       toast.error(e instanceof Error ? `Couldn't generate: ${e.message}` : "Couldn't generate art.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
   return (
     <>
-      <div className="handout-artctl">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void doUpload(f);
-            e.target.value = "";
-          }}
-        />
-        <button type="button" className="handout-artbtn" disabled={busy !== null} onClick={() => fileRef.current?.click()}>
-          {busy === "upload" ? "Uploading…" : "⤒ Upload image"}
-        </button>
+      <div className="handout-artsrc" role="tablist">
+        {(
+          [
+            ["generate", "✦ Generate"],
+            ["upload", "⤒ Upload"],
+            ["link", "🔗 Link"],
+          ] as [ArtSource, string][]
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={source === key}
+            className={`handout-artsrc-btn ${source === key ? "is-active" : ""}`}
+            onClick={() => setSource(key)}
+          >
+            {label}
+          </button>
+        ))}
+        <span style={{ flex: 1 }} />
         {image && (
-          <button type="button" className="handout-artbtn is-ghost" disabled={busy !== null} onClick={() => onImage("")}>
-            Remove
+          <button type="button" className="handout-artbtn is-ghost" disabled={busy} onClick={() => onImage("")}>
+            Remove art
           </button>
         )}
       </div>
 
-      <label className="handout-field">
-        <span>Generate from a prompt</span>
-        <textarea
-          rows={2}
-          value={prompt}
-          placeholder="A weathered ferryman with a lantern, hood up, standing at a foggy river crossing at dusk"
-          onChange={(e) => setPrompt(e.target.value)}
-        />
-      </label>
-      <div className="handout-artctl">
-        <select className="handout-aspect" value={aspect} onChange={(e) => setAspect(e.target.value as ArtAspect)}>
-          {ART_ASPECTS.map((a) => (
-            <option key={a.key} value={a.key}>
-              {a.label}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="handout-artbtn" disabled={busy !== null || !prompt.trim()} onClick={() => void doGenerate()}>
-          {busy === "generate" ? "Painting…" : "✦ Generate"}
-        </button>
-      </div>
+      {source === "generate" && (
+        <>
+          <textarea
+            className="handout-artprompt"
+            rows={2}
+            value={prompt}
+            placeholder="A weathered ferryman with a lantern, hood up, at a foggy river crossing at dusk…"
+            onChange={(e) => setPrompt(e.target.value)}
+          />
+          <div className="handout-artctl">
+            <select className="handout-aspect" value={aspect} onChange={(e) => setAspect(e.target.value as ArtAspect)}>
+              {ART_ASPECTS.map((a) => (
+                <option key={a.key} value={a.key}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="handout-artbtn" disabled={busy || !prompt.trim()} onClick={() => void doGenerate()}>
+              {busy ? "Painting…" : "✦ Generate"}
+            </button>
+          </div>
+        </>
+      )}
 
-      <label className="handout-field">
-        <span>Or paste an image URL</span>
+      {source === "upload" && (
+        <div className="handout-artctl">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void doUpload(f);
+              e.target.value = "";
+            }}
+          />
+          <button type="button" className="handout-artbtn" disabled={busy} onClick={() => fileRef.current?.click()}>
+            {busy ? "Uploading…" : "⤒ Choose an image file"}
+          </button>
+        </div>
+      )}
+
+      {source === "link" && (
         <div className="handout-artctl">
           <input value={urlDraft} placeholder="https://…" onChange={(e) => setUrlDraft(e.target.value)} />
           <button
             type="button"
-            className="handout-artbtn is-ghost"
+            className="handout-artbtn"
             disabled={!urlDraft.trim()}
             onClick={() => {
               onImage(urlDraft.trim());
@@ -275,7 +304,7 @@ const ArtForm = ({
             Use
           </button>
         </div>
-      </label>
+      )}
 
       <label className="handout-field">
         <span>Caption</span>

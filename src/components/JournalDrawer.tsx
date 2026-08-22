@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SheetDrawer } from "./ui/SheetDrawer";
 import { Icon } from "./ui/Icon";
 import { HandoutView } from "./HandoutView";
 import { readHandoutMeta } from "../lib/handouts";
+import { audioBus } from "../lib/audioBus";
 import type { CampaignDoc, DocShare } from "../state/useCampaign";
 import type { GameSession } from "../state/useSessions";
 
@@ -42,21 +43,78 @@ const handoutText = (meta: unknown): string => {
   return [f.title, f.subtitle, f.body, f.footer, ...f.lines].join(" ");
 };
 
-const JournalDoc = ({ doc, date }: { doc: CampaignDoc; date: string }) => (
-  <div className={`story-doc ${doc.kind === "read_aloud" ? "is-readaloud" : ""}`}>
-    <div className="story-dochead">
-      <span className="camped-kind is-players">{KIND_LABEL[doc.kind]}</span>
-      <span className="story-doctitle">{doc.title || "Untitled"}</span>
-      <span style={{ flex: 1 }} />
-      <span className="journal-date" title={new Date(date).toLocaleString()}>{relativeDate(date)}</span>
+/**
+ * Replay a reading's or recap's pre-generated narration (#user ask). Plays
+ * through the per-device Narrator channel, tracks the mixer live, and stops
+ * on unmount so a closed drawer never keeps talking.
+ */
+const NarrationPlay = ({ url }: { url: string }) => {
+  const [playing, setPlaying] = useState(false);
+  const elRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const unsub = audioBus.subscribe(() => {
+      if (elRef.current) elRef.current.volume = audioBus.level("narrator");
+    });
+    return () => {
+      unsub();
+      elRef.current?.pause();
+    };
+  }, []);
+
+  const toggle = () => {
+    if (playing) {
+      elRef.current?.pause();
+      elRef.current = null;
+      setPlaying(false);
+      return;
+    }
+    const el = new Audio(url);
+    el.volume = audioBus.level("narrator");
+    el.onended = () => {
+      setPlaying(false);
+      elRef.current = null;
+    };
+    elRef.current = el;
+    void el.play().catch(() => setPlaying(false));
+    setPlaying(true);
+  };
+
+  return (
+    <button
+      className={`journal-play ${playing ? "is-playing" : ""}`}
+      onClick={toggle}
+      title={playing ? "Stop" : "Hear it read aloud"}
+    >
+      {playing ? "◼" : "▶"}
+    </button>
+  );
+};
+
+const audioUrlOf = (doc: CampaignDoc): string | null =>
+  (doc.kind === "read_aloud" || doc.kind === "recap")
+    ? ((doc.meta as { audio_url?: string } | null)?.audio_url ?? null)
+    : null;
+
+const JournalDoc = ({ doc, date }: { doc: CampaignDoc; date: string }) => {
+  const audioUrl = audioUrlOf(doc);
+  return (
+    <div className={`story-doc ${doc.kind === "read_aloud" ? "is-readaloud" : ""}`}>
+      <div className="story-dochead">
+        <span className="camped-kind is-players">{KIND_LABEL[doc.kind]}</span>
+        <span className="story-doctitle">{doc.title || "Untitled"}</span>
+        <span style={{ flex: 1 }} />
+        {audioUrl && <NarrationPlay url={audioUrl} />}
+        <span className="journal-date" title={new Date(date).toLocaleString()}>{relativeDate(date)}</span>
+      </div>
+      {doc.kind === "handout" ? (
+        <HandoutView meta={doc.meta} compact />
+      ) : (
+        doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>
+      )}
     </div>
-    {doc.kind === "handout" ? (
-      <HandoutView meta={doc.meta} compact />
-    ) : (
-      doc.content.trim() && <div className={doc.kind === "read_aloud" ? "story-ra" : "story-body"}>{doc.content}</div>
-    )}
-  </div>
-);
+  );
+};
 
 export const JournalDrawer = ({
   docs,

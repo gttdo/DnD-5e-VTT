@@ -43,7 +43,7 @@ const SharesContext = createContext<SharesApi>({
 });
 import { useSessions, sessionDuration, type GameSession } from "../state/useSessions";
 import { useCastRoster, type CastMember } from "../state/useCastRoster";
-import { useRegionMaps } from "../state/useRegionNav";
+import { RegionNavigator } from "./RegionNavigator";
 import { draftReadAloud, draftRecap, SCRIBE_GENRES, type ScribeGenre } from "../lib/scribe";
 import { HandoutDocBody } from "./HandoutEditor";
 import { EMPTY_FIELDS } from "../lib/handouts";
@@ -88,6 +88,9 @@ const KIND_LABEL: Record<DocKind, string> = {
 
 /** The scene Documents section groups docs by kind, one tab each. */
 const DOC_TABS: DocKind[] = ["note", "read_aloud", "quest", "handout"];
+
+/** The editor sees everything — no draft-gating (stable identity for props). */
+const EMPTY_ID_SET = new Set<string>();
 
 export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
   const { user } = useAuth();
@@ -153,8 +156,6 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
     setSceneCinematicUrl,
     stageSceneId,
   } = useScenes(game.id, game.active_scene_id ?? null);
-  const { regionMaps } = useRegionMaps(game.id);
-  const rootRegionMap = regionMaps[0] ?? null;
   // Table-time (#0041 §5): sessions for the Timeline tab. canManage lets a
   // stale forgotten session auto-close from the editor too.
   const { sessions } = useSessions(game.id, { canManage: true });
@@ -385,12 +386,12 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
                 className={`camped-toprow ${selection.type === "overview" ? "is-sel" : ""}`}
                 onClick={() => setSelection({ type: "overview" })}
               >
-                <Icon name="sparkles" size={13} />
+                <Icon name="library" size={13} />
                 Campaign overview
               </button>
-              <button className="camped-toprow" onClick={() => setRegionMapOpen(true)} disabled={!rootRegionMap}>
+              <button className="camped-toprow" onClick={() => setRegionMapOpen(true)}>
                 <Icon name="map" size={13} />
-                {rootRegionMap ? `Regional map — ${rootRegionMap.name}` : "No regional map yet"}
+                Regional map &amp; travel
               </button>
               <div className="camped-treesep" />
 
@@ -630,15 +631,22 @@ export const CampaignEditor = ({ game, onOpenTable, onBack }: Props) => {
         />
       )}
 
-      {regionMapOpen && rootRegionMap && (
-        <Dialog
+      {/* Regional map authoring (#user ask): pins are set up HERE, where the
+          DM preps — the table's Region map is read-only for everyone. A pin
+          click in view mode jumps to that scene's editor page. */}
+      {regionMapOpen && (
+        <RegionNavigator
+          gameId={campaign.id}
+          isDM
+          canEdit
+          scenes={scenes.map((s) => ({ id: s.id, name: s.name }))}
+          draftSceneIds={EMPTY_ID_SET}
+          onTravel={(sceneId) => {
+            setTab("story");
+            setSelection({ type: "scene", id: sceneId });
+          }}
           onClose={() => setRegionMapOpen(false)}
-          size="lg"
-          title={rootRegionMap.name}
-          subtitle="The world your players navigate. Pins and travel are edited at the table — open the Region map there."
-        >
-          <img src={rootRegionMap.image_url} alt={rootRegionMap.name} style={{ width: "100%", borderRadius: 8 }} />
-        </Dialog>
+        />
       )}
 
       {moveSceneId && (
@@ -803,51 +811,66 @@ const renderAmbienceOptions = () =>
     ];
   });
 
-// The Documents section, grouped into tabs by kind. Shared by scenes and
-// chapters — the container decides where a new doc is filed via onCreate.
+// The Documents section, grouped into tabs by kind. Shared by every level of
+// the tree; `kinds` names what belongs HERE (#UX: one home per kind — notes
+// everywhere, quests at the chapter, read-alouds/handouts at the scene).
+// A kind outside `kinds` still gets a tab if docs of it exist, so nothing
+// authored under the old everything-everywhere scheme disappears.
 const DocumentsTabs = ({
   docs,
+  kinds,
+  emptyHint,
   updateDoc,
   deleteDoc,
   onCreate,
 }: {
   docs: CampaignDoc[];
+  kinds: DocKind[];
+  /** Flavor line for the primary kind's empty state (defaults to a generic). */
+  emptyHint?: string;
   updateDoc: (id: string, patch: Partial<Pick<CampaignDoc, "title" | "content" | "visibility" | "meta">>) => Promise<{ error: string | null }>;
   deleteDoc: (id: string) => Promise<{ error: string | null }>;
   onCreate: (kind: DocKind) => void;
 }) => {
-  const [docTab, setDocTab] = useState<DocKind>("note");
-  const tabDocs = docs.filter((d) => d.kind === docTab);
+  const [docTab, setDocTab] = useState<DocKind>(kinds[0]);
+  const visible = DOC_TABS.filter((k) => kinds.includes(k) || docs.some((d) => d.kind === k));
+  // A legacy tab can vanish when its last doc is deleted — fall back home.
+  const active = visible.includes(docTab) ? docTab : kinds[0];
+  const tabDocs = docs.filter((d) => d.kind === active);
   return (
     <>
-      <div className="camped-doctabs" role="tablist">
-        {DOC_TABS.map((k) => {
-          const n = docs.filter((d) => d.kind === k).length;
-          return (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={docTab === k}
-              className={`camped-doctab ${docTab === k ? "is-active" : ""}`}
-              onClick={() => setDocTab(k)}
-            >
-              {KIND_LABEL[k]}
-              {n > 0 && <span className="camped-doctab-count">{n}</span>}
-            </button>
-          );
-        })}
-      </div>
+      {visible.length > 1 && (
+        <div className="camped-doctabs" role="tablist">
+          {visible.map((k) => {
+            const n = docs.filter((d) => d.kind === k).length;
+            return (
+              <button
+                key={k}
+                role="tab"
+                aria-selected={active === k}
+                className={`camped-doctab ${active === k ? "is-active" : ""}`}
+                onClick={() => setDocTab(k)}
+              >
+                {KIND_LABEL[k]}
+                {n > 0 && <span className="camped-doctab-count">{n}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {tabDocs.length === 0 && (
         <div className="dim" style={{ fontSize: 13.5, margin: "2px 0 10px" }}>
-          No {KIND_LABEL[docTab].toLowerCase()} documents here yet.
+          {emptyHint && active === kinds[0] ? emptyHint : `No ${KIND_LABEL[active].toLowerCase()} documents here yet.`}
         </div>
       )}
       {tabDocs.map((d) => (
         <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
       ))}
-      <div className="camped-adddocs">
-        <button onClick={() => onCreate(docTab)}>＋ {KIND_LABEL[docTab]}</button>
-      </div>
+      {kinds.includes(active) && (
+        <div className="camped-adddocs">
+          <button onClick={() => onCreate(active)}>＋ {KIND_LABEL[active]}</button>
+        </div>
+      )}
     </>
   );
 };
@@ -1024,6 +1047,8 @@ const ScenePage = ({
       </div>
       <DocumentsTabs
         docs={docs}
+        kinds={["note", "read_aloud", "handout"]}
+        emptyHint="What's really going on here — the DM's private prep for this scene."
         updateDoc={updateDoc}
         deleteDoc={deleteDoc}
         onCreate={(kind) =>
@@ -1163,6 +1188,8 @@ const ChapterPage = ({
       </div>
       <DocumentsTabs
         docs={chapterDocs}
+        kinds={["note", "quest"]}
+        emptyHint="The chapter's own material — how to run it, what ties its scenes together."
         updateDoc={updateDoc}
         deleteDoc={deleteDoc}
         onCreate={(kind) =>
@@ -1347,30 +1374,14 @@ const OverviewPage = ({
         The campaign's evergreen material — premise, factions, NPCs, secrets.
         These documents feed the Scribe's context for everything it drafts.
       </p>
-      {campaignDocs.length === 0 && (
-        <div className="dim" style={{ fontSize: 13.5, marginBottom: 10 }}>
-          Start with the premise: what's really going on in {campaign.name}?
-        </div>
-      )}
-      {campaignDocs.map((d) => (
-        <DocCard key={d.id} doc={d} updateDoc={updateDoc} deleteDoc={deleteDoc} />
-      ))}
-      <div className="camped-adddocs">
-        {(["note", "quest", "handout"] as DocKind[]).map((k) => (
-          <button
-            key={k}
-            onClick={() =>
-              void createDoc({
-                kind: k,
-                title: "",
-                ...(k === "handout" ? { meta: { template: "notice", fields: EMPTY_FIELDS } } : {}),
-              })
-            }
-          >
-            ＋ {KIND_LABEL[k]}
-          </button>
-        ))}
-      </div>
+      <DocumentsTabs
+        docs={campaignDocs}
+        kinds={["note"]}
+        emptyHint={`Start with the premise: what's really going on in ${campaign.name}?`}
+        updateDoc={updateDoc}
+        deleteDoc={deleteDoc}
+        onCreate={(kind) => void createDoc({ kind, title: "" })}
+      />
 
       {memory.length > 0 && (
         <>

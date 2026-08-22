@@ -7933,6 +7933,19 @@ button.topbar-stat {
 .handout-art-note { font-size: 12.5px; font-style: italic; color: var(--text-muted); }
 
 /* Art editor controls */
+.handout-artsrc {
+  display: flex; gap: 2px; align-items: center;
+  border-bottom: 1px solid var(--border); padding-bottom: 0; margin-bottom: 2px;
+}
+.handout-artsrc-btn {
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; cursor: pointer; padding: 5px 10px 6px;
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.handout-artsrc-btn:hover { color: var(--candle); }
+.handout-artsrc-btn.is-active { color: var(--candle-bright); border-bottom-color: var(--candle); }
+.handout-artprompt { width: 100%; }
 .handout-artctl { display: flex; gap: 6px; align-items: center; }
 .handout-artctl > input[type="text"], .handout-artctl > input:not([type]) { flex: 1; min-width: 0; }
 .handout-artbtn {
@@ -8065,6 +8078,15 @@ button.topbar-stat {
   flex: none; font-size: 10.5px; color: var(--text-muted);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+/* Replay a voiced reading/recap through the Narrator channel */
+.journal-play {
+  flex: none; width: 24px; height: 24px; display: grid; place-items: center;
+  background: none; cursor: pointer; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--candle) 45%, transparent);
+  color: var(--candle-bright); font-size: 9px; padding: 0;
+}
+.journal-play:hover { border-color: var(--candle); background: color-mix(in srgb, var(--candle) 12%, transparent); }
+.journal-play.is-playing { background: color-mix(in srgb, var(--candle) 20%, transparent); }
 
 /* ---- Cast (campaign editor) — the campaign's people, as a ledger ---- */
 .cast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
